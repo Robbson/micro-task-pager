@@ -42,10 +42,12 @@ namespace Switchie
             {
                 sldBackgroundOpacity.Value = Math.Max(0.25, Math.Min(1.0, Settings.BackgroundOpacity));
             }
+
             if (txtBackgroundOpacityValue != null && sldBackgroundOpacity != null)
             {
                 txtBackgroundOpacityValue.Text = sldBackgroundOpacity.Value.ToString("0.00", CultureInfo.InvariantCulture);
             }
+
             cmbDesktopBorderStyle.Items.Add("Box");
             cmbDesktopBorderStyle.Items.Add("Underline");
             cmbDesktopBorderStyle.SelectedIndex = (int)Settings.DesktopBorderStyle; //Math.Max(0, Math.Min(1, Settings.DesktopBorderStyle));
@@ -69,7 +71,32 @@ namespace Switchie
 
         public AppSettings Settings { get; private set; }
 
+        #region Generic arsers & utilites
+        private static bool TryParsePositiveInt(string input, int min, out int value)
+        {
+            return int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value >= min;
+        }
 
+        private static bool TryParseInt(string input, out int value)
+        {
+            return int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+        }
+
+        private static bool IsDifferent(string input, int defaultValue)
+        {
+            return !int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed != defaultValue;
+        }
+
+        private static bool IsDifferent(int input, int defaultValue)
+        {
+            return input != defaultValue;
+        }
+
+        private static bool IsDifferent(double input, double defaultValue)
+        {
+            return Math.Abs(input - defaultValue) > 0.0001;
+        }
+        #endregion
 
         private void ResetToDefaults_Click(object sender, RoutedEventArgs e)
         {
@@ -118,7 +145,6 @@ namespace Switchie
         {
             // Because initial (not) set values can trigger previews with invalid values
             if (!IsLoaded) return null;
-         
             if (!TryParsePositiveInt(txtPrimaryDelay.Text, 1, out int primaryDelay))
             {
                 ShowValidationError("Primary Update Delay must be at least 1 ms.");
@@ -207,34 +233,7 @@ namespace Switchie
             btnRevertShowAppInTaskbar.Visibility = (chkShowAppInTaskbar.IsChecked == true) != _settingsBefore.ShowAppInTaskbar ? Visibility.Visible : Visibility.Hidden;
         }
 
-        #region Generic arsers & utilites
-        private static bool TryParsePositiveInt(string input, int min, out int value)
-        {
-            return int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value >= min;
-        }
-
-        private static bool TryParseInt(string input, out int value)
-        {
-            return int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
-        }
-
-        private static bool IsDifferent(string input, int defaultValue)
-        {
-            return !int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed != defaultValue;
-        }
-
-        private static bool IsDifferent(int input, int defaultValue)
-        {
-            return input != defaultValue;
-        }
-
-        private static bool IsDifferent(double input, double defaultValue)
-        {
-            return Math.Abs(input - defaultValue) > 0.0001;
-        }
-        #endregion
-
-        #region Layout Tab Handlers 
+        #region Layout Tab Handlers
         private void DesktopModeDefaultChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateRevertButtons();
@@ -251,13 +250,16 @@ namespace Switchie
         private void PagerHeightChanged(object sender, RoutedPropertyChangedEventArgs<int> e)
         {
             UpdateRevertButtons();
+
             //TODO: Preview Suppoer with those notices from AI help
+            RequestPreview();
         }
 
         private void RevertPagerHeight_Click(object sender, RoutedEventArgs e)
         {
             numericPagerHeight.Value = _settingsBefore.PagerHeight;
             UpdateRevertButtons();
+            RequestPreview();
         }
 
         // For: PaddingSize, IconPaddingX and IconPaddingY
@@ -267,6 +269,7 @@ namespace Switchie
             RequestPreview();
         }
 
+        // Why we don't need a call to RequestPreview() on those 3?
         private void RevertPaddingSize_Click(object sender, RoutedEventArgs e)
         {
             numericPaddingSize.Value = _settingsBefore.PaddingSize;
@@ -294,6 +297,7 @@ namespace Switchie
             {
                 txtBackgroundOpacityValue.Text = sldBackgroundOpacity.Value.ToString("0.00", CultureInfo.InvariantCulture);
             }
+
             UpdateRevertButtons();
             RequestPreview();
         }
@@ -304,7 +308,9 @@ namespace Switchie
             {
                 sldBackgroundOpacity.Value = Math.Max(0.25, Math.Min(1.0, _settingsBefore.BackgroundOpacity));
             }
+
             UpdateRevertButtons();
+            RequestPreview();
         }
 
         private void DesktopBorderStyleChanged(object sender, SelectionChangedEventArgs e)
@@ -317,13 +323,14 @@ namespace Switchie
         {
             cmbDesktopBorderStyle.SelectedIndex = _settingsBefore.DesktopBorderStyle <= 0 ? 0 : 1;
             UpdateRevertButtons();
+            RequestPreview();
         }
 
         private void UpdateColorsTab()
         {
             RefreshColorPreviews();
             UpdateRevertButtons();
-            RequestPreview(); // NEW: Live Preview for colors
+            RequestPreview();
         }
 
         private void ChooseColor(ref DrawingColor color)

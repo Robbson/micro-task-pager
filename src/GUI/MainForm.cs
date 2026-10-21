@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
@@ -13,11 +13,10 @@ namespace Switchie.GUI
     // Pager main application form
     public class MainForm : Form
     {
+#pragma warning disable SA1401 // Fields should be private
+        // Why should this be private? It is used in Virtual Desktop/Screens
         public ConcurrentBag<Window> Windows = new ConcurrentBag<Window>();
-
-        private readonly string version =
-            typeof(MainForm).Assembly.GetName().Version?.ToString(3)
-            ?? Application.ProductVersion;
+#pragma warning restore SA1401 // Fields should be private
 
         // --- Internal Application State ---
         private readonly List<VirtualDesktop> _virtualDesktops = new List<VirtualDesktop>();
@@ -120,7 +119,7 @@ namespace Switchie.GUI
 
         private bool HasDesktopCountChanged() => _currentDesktopCount != WindowsVirtualDesktop.GetInstance().Count;
 
-        private void ResetVirtualDesktop()
+        private void ResetVirtualDesktops()
         {
             // Remove mouse listeners for all existing desktops first before removing them
             _virtualDesktops.ForEach((desktop) =>
@@ -223,7 +222,7 @@ namespace Switchie.GUI
                         {
                             // TODO: Adjust the list length for the individual view settings
 
-                            ResetVirtualDesktop();
+                            ResetVirtualDesktops();
                         }
 
                         // This works only when the pinning is manually done by the user after application has started
@@ -316,21 +315,11 @@ namespace Switchie.GUI
             ToolStripMenuItem buttonRestorePos = new ToolStripMenuItem("Restore", null, (s, ev) =>
             {
                 var storedLocation = RegistryAccess.RestoreLocation();
-                if (storedLocation != null)
-                {
-                    Location = storedLocation.Value;
-                }
+                if (storedLocation != null) Location = storedLocation.Value;
             });
 
-            ToolStripMenuItem buttonSavePos = new ToolStripMenuItem("Save", null, (s, ev) =>
-            {
-                RegistryAccess.SaveLocation(Location);
-            });
-
-            ToolStripMenuItem buttonDefaultPos = new ToolStripMenuItem("Default", null, (s, ev) =>
-            {
-                Location = GetDefaultLocation();
-            });
+            ToolStripMenuItem buttonSavePos = new ToolStripMenuItem("Save", null, (s, ev) => RegistryAccess.SaveLocation(Location));
+            ToolStripMenuItem buttonDefaultPos = new ToolStripMenuItem("Default", null, (s, ev) => Location = GetDefaultLocation());
 
             positionMenu.DropDownItems.AddRange(new ToolStripItem[] { buttonRestorePos, buttonSavePos, buttonDefaultPos });
             menu.Items.Add(positionMenu);
@@ -342,10 +331,7 @@ namespace Switchie.GUI
                     Text = "Settings",
                     Image = Helpers.CreateGlyphBitmap("⚙"),
                 },
-                () =>
-                {
-                    OpenSettingsDialog();
-                });
+                () => OpenSettingsDialog());
 
             Helpers.AddMenuItem(this, menu,
                 new ToolStripMenuItem()
@@ -353,11 +339,7 @@ namespace Switchie.GUI
                     Text = "About",
                     Image = Helpers.CreateGlyphBitmap("ℹ"),
                 },
-                () =>
-                {
-                    OpenAboutDialog();
-                    //_forceAppAlwaysOnTop = true;
-                });
+                () => OpenAboutDialog());
 
             Helpers.AddMenuItem(this, menu,
                 new ToolStripMenuItem()
@@ -365,10 +347,7 @@ namespace Switchie.GUI
                     Text = "Exit",
                     Image = Helpers.CreateGlyphBitmap("✕"),
                 },
-                () =>
-                {
-                    Environment.Exit(1);
-                });
+                () => Environment.Exit(1));
 
             //menu.Opened += (ss, ee) => _forceAppAlwaysOnTop = false;
             menu.Show(this, PointToClient(Cursor.Position));
@@ -395,20 +374,13 @@ namespace Switchie.GUI
             }
         }
 
-        private void PreviewSettings(AppSettings settings)
-        {
-            ApplySettings(settings, false);
-
-            // Apply MainForm propertes
-            ShowInTaskbar = Options.ShowAppInTaskbar;
-            BackColor = Options.DesktopBackgroundColor;
-            Opacity = Math.Max(0.25, Math.Min(1.0, Options.BackgroundOpacity));
-
-            Invalidate();
-        }
+        private void PreviewSettings(AppSettings settings) => ApplySettings(settings, false);
 
         private void ApplySettings(AppSettings settings, bool persist)
         {
+            bool resetDesktops = false;
+            if (settings.PagerHeight != Options.PagerHeight) resetDesktops = true;
+
             Options = settings;
 
             // Apply MainForm propertes
@@ -421,110 +393,18 @@ namespace Switchie.GUI
             if (persist)
             {
                 AppSettingsStore.Save(settings);
-                ResetVirtualDesktop();
+            }
+
+            if (persist || resetDesktops)
+            {
+                ResetVirtualDesktops();
             }
         }
 
-        // TODO: Seperate it from the MainForm
         private void OpenAboutDialog()
         {
-            using (var aboutDialog = new Form())
+            using (var aboutDialog = new AboutDialog())
             {
-                aboutDialog.Text = "About Switchie";
-                aboutDialog.FormBorderStyle = FormBorderStyle.FixedDialog;
-                aboutDialog.StartPosition = FormStartPosition.CenterParent;
-                aboutDialog.MaximizeBox = false;
-                aboutDialog.MinimizeBox = false;
-                aboutDialog.ShowInTaskbar = false;
-                aboutDialog.ClientSize = new Size(420, 340);
-                aboutDialog.BackColor = Color.White;
-
-                var iconBox = new PictureBox
-                {
-                    Size = new Size(96, 96),
-                    SizeMode = PictureBoxSizeMode.Zoom,
-                    Location = new Point((aboutDialog.ClientSize.Width - 96) / 2, 20),
-                };
-
-                try
-                {
-                    using (var iconStream = new MemoryStream(
-                        Helpers.GetResourceFromAssembly(typeof(Program), "Switchie.Resources.icon.png")))
-                    using (var pngImage = Image.FromStream(iconStream))
-                    {
-                        iconBox.Image = new Bitmap(pngImage);
-                    }
-                }
-                catch
-                {
-                    iconBox.Image = Icon?.ToBitmap();
-                }
-
-                var appNameLabel = new Label
-                {
-                    AutoSize = false,
-                    Width = aboutDialog.ClientSize.Width,
-                    Height = 32,
-                    Location = new Point(0, 126),
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Font = new Font("Segoe UI", 16, FontStyle.Bold),
-                    Text = "Switchie",
-                };
-
-                var versionLabel = new Label
-                {
-                    AutoSize = false,
-                    Width = aboutDialog.ClientSize.Width,
-                    Height = 24,
-                    Location = new Point(0, 160),
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Font = new Font("Segoe UI", 10, FontStyle.Regular),
-                    ForeColor = Color.DimGray,
-                    Text = $"Version {version}",
-                };
-
-                var authorLabel = new Label
-                {
-                    AutoSize = false,
-                    Width = aboutDialog.ClientSize.Width - 40,
-                    Height = 24,
-                    Location = new Point(20, 202),
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                    Text = "Main author: darkguy2008",
-                };
-
-                var contributorsLabel = new Label
-                {
-                    AutoSize = false,
-                    Width = aboutDialog.ClientSize.Width - 40,
-                    Height = 70,
-                    Location = new Point(20, 226),
-                    TextAlign = ContentAlignment.TopLeft,
-                    Font = new Font("Segoe UI", 9, FontStyle.Regular),
-                    Text = "Contributors:\n• Robbson" +
-                           "\n• DARKGuy (Alemar)",
-                };
-
-                var closeButton = new Button
-                {
-                    Text = "Close",
-                    Width = 100,
-                    Height = 30,
-                    Location = new Point((aboutDialog.ClientSize.Width - 100) / 2, 298),
-                    DialogResult = DialogResult.OK,
-                };
-
-                aboutDialog.AcceptButton = closeButton;
-                aboutDialog.CancelButton = closeButton;
-
-                aboutDialog.Controls.Add(iconBox);
-                aboutDialog.Controls.Add(appNameLabel);
-                aboutDialog.Controls.Add(versionLabel);
-                aboutDialog.Controls.Add(authorLabel);
-                aboutDialog.Controls.Add(contributorsLabel);
-                aboutDialog.Controls.Add(closeButton);
-
                 aboutDialog.ShowDialog(this);
             }
         }
