@@ -20,7 +20,6 @@ namespace Switchie.GUI
         public ArrayList DesktopModeArray { get; set; } = null;
 
         public int PagerHeight { get; set; } = 40;
-        public int PaddingSize { get; set; } = 1;
         public int IconPaddingX { get; set; } = 0;
         public int IconPaddingY { get; set; } = 0;
 
@@ -46,7 +45,6 @@ namespace Switchie.GUI
             {
                 DesktopModeDefault = source.DesktopModeDefault,
                 PagerHeight = source.PagerHeight,
-                PaddingSize = source.PaddingSize,
                 IconPaddingX = source.IconPaddingX,
                 IconPaddingY = source.IconPaddingY,
 

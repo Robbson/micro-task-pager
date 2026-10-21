@@ -72,24 +72,17 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" 
-                                           ToolTip="Increases the space around all icons of a desktop.">Padding Size</TextBlock>
-                                <local:NumericUpDownControl x:Name="numericPaddingSize" ValueChanged="PaddingInputChanged" Grid.Row="0" Grid.Column="1" Margin="8,2,0,2"/>
-                                <Button x:Name="btnRevertPaddingSize" Grid.Row="0" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertPaddingSize_Click" />
+                                           ToolTip="Negative values are supported as well so less space is taken and the icons look stacked.">Icon Padding X</TextBlock>
+                                <local:NumericUpDownControl x:Name="numericIconPaddingX" ValueChanged="PaddingInputChanged" Grid.Row="0" Grid.Column="1" Margin="8,2,0,2"/>
+                                <Button x:Name="btnRevertIconPaddingX" Grid.Row="0" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertIconPaddingX_Click" />
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" 
-                                           ToolTip="Negative values are supported as well so less space is taken and the icons look stacked.">Icon Padding X</TextBlock>
-                                <local:NumericUpDownControl x:Name="numericIconPaddingX" ValueChanged="PaddingInputChanged" Grid.Row="1" Grid.Column="1" Margin="8,2,0,2"/>
-                                <Button x:Name="btnRevertIconPaddingX" Grid.Row="1" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertIconPaddingX_Click" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" 
                                            ToolTip="Negative values are supported as well in case of a very small pager height&#10;like 40px which is ususally the size of the Windows Taskbar.">Icon Padding Y</TextBlock>
-                                <local:NumericUpDownControl x:Name="numericIconPaddingY" ValueChanged="PaddingInputChanged" Grid.Row="2" Grid.Column="1" Margin="8,2,0,2"/>
-                                <Button x:Name="btnRevertIconPaddingY" Grid.Row="2" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertIconPaddingY_Click" />
+                                <local:NumericUpDownControl x:Name="numericIconPaddingY" ValueChanged="PaddingInputChanged" Grid.Row="1" Grid.Column="1" Margin="8,2,0,2"/>
+                                <Button x:Name="btnRevertIconPaddingY" Grid.Row="1" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertIconPaddingY_Click" />
 
                             </Grid>
                         </GroupBox>

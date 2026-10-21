@@ -10,14 +10,9 @@ namespace Switchie.GUI
     // Represents a virtual desktop mini view in the pager
     public class VirtualDesktop
     {
+        private readonly List<VirtualDesktopScreen> _screens = new List<VirtualDesktopScreen>();
         private DragDropData _dragDropData;
         private Rectangle dragBoxFromMouseDown;
-        private readonly List<VirtualDesktopScreen> _screens = new List<VirtualDesktopScreen>();
-
-        public MainForm Form { get; set; }
-        public Size Size { get; set; }
-        public Point Location { get; set; }
-        public int VirtualDesktopIndex { get; set; }
 
         public VirtualDesktop(int virtualDesktopIndex, MainForm form, Point location)
         {
@@ -29,15 +24,28 @@ namespace Switchie.GUI
 
             // Note: A virtual desktop includes a complete set of screens, if available
             foreach (var screen in Screen.AllScreens.OrderBy(x => x.Bounds.Left).ThenBy(x => x.Bounds.Top))
+            {
                 _screens.Add(new VirtualDesktopScreen()
                 {
                     Form = Form,
                     VirtualDesktop = this,
                     AttachedScreen = screen,
                     Location = new Point(location.X + _screens.Sum(x => x.Size.Width), location.Y),
-                    Size = Helpers.AspectRatioResize(new Size(screen.Bounds.Width, screen.Bounds.Height), 0, Form.Options.PagerHeight)
+                    Size = Helpers.AspectRatioResize(new Size(screen.Bounds.Width, screen.Bounds.Height), 0, Form.Options.PagerHeight),
                 });
+            }
+
             Size = new Size(_screens.Sum(x => x.Size.Width), Form.Options.PagerHeight);
+        }
+
+        public MainForm Form { get; set; }
+        public Size Size { get; set; }
+        public Point Location { get; set; }
+        public int VirtualDesktopIndex { get; set; }
+
+        public bool IsCurrentActiveDesktop
+        {
+            get => WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktop.GetInstance().Current) == VirtualDesktopIndex;
         }
 
         public void OnPaint(PaintEventArgs e)
@@ -52,8 +60,7 @@ namespace Switchie.GUI
                 // Draw a border around the active desktop
                 g.DrawRectangle(
                     new Pen(new SolidBrush(desktopBorderColor), Form.BorderSize),
-                    new Rectangle(Location.X, Location.Y, Size.Width - Form.BorderSize, Size.Height - Form.BorderSize)
-                );
+                    new Rectangle(Location.X, Location.Y, Size.Width - Form.BorderSize, Size.Height - Form.BorderSize));
             }
             else
             {
@@ -61,8 +68,7 @@ namespace Switchie.GUI
                 // -> TODO: Doesn't work if there is no window on the desktop
                 g.FillRectangle(
                     new SolidBrush(desktopBorderColor),
-                    new Rectangle(Location.X, Size.Height - 1, Size.Width, Size.Height)
-             );
+                    new Rectangle(Location.X, Size.Height - 1, Size.Width, Size.Height));
             }
         }
 
@@ -102,7 +108,9 @@ namespace Switchie.GUI
                         new Point(e.X - (dragSize.Width / 2), e.Y - (dragSize.Height / 2)), dragSize);
                 }
                 else
+                {
                     dragBoxFromMouseDown = Rectangle.Empty;
+                }
             }
         }
 
@@ -110,10 +118,13 @@ namespace Switchie.GUI
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
+            {
                 if (dragBoxFromMouseDown != Rectangle.Empty && !dragBoxFromMouseDown.Contains(e.X, e.Y))
                     Form.DoDragDrop(_dragDropData, DragDropEffects.Move);
+            }
         }
 
+        // Move window to another desktop
         public void OnDragDrop(object sender, DragEventArgs e)
         {
             if (!IsInsideBounds(Form.PointToClient(new Point(e.X, e.Y)))) return;
@@ -135,13 +146,9 @@ namespace Switchie.GUI
                 e.Effect = DragDropEffects.None;
                 return;
             }
+
             if ((e.AllowedEffect & DragDropEffects.Move) == DragDropEffects.Move)
                 e.Effect = DragDropEffects.Move;
-        }
-
-        public bool IsCurrentActiveDesktop
-        {
-            get => WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktop.GetInstance().Current) == VirtualDesktopIndex;
         }
 
         private bool IsInsideBounds(Point p) => IsInsideBounds(p.X, p.Y);
@@ -166,12 +173,14 @@ namespace Switchie.GUI
             foreach (var w in windows)
             {
                 if (_screens.Any(x => x.WindowAreas.ContainsKey(w.Handle) && x.WindowAreas[w.Handle].Contains(mousePosition)))
+                {
                     if (_screens.Select(x => x.AttachedScreen.DeviceName).Contains(Screen.FromHandle(w.Handle).DeviceName))
                     {
                         return w;
                     }
+                }
             }
-            
+
             return null;
         }
     }

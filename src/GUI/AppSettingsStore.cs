@@ -20,7 +20,6 @@ namespace Switchie.GUI
                     DesktopBorderStyle = (BorderStyle)ReadInt(key, "DesktopBorderStyle", (int)defaults.DesktopBorderStyle),
                     BackgroundOpacity = ReadDouble(key, "BackgroundOpacity", defaults.BackgroundOpacity),
                     PagerHeight = ReadInt(key, "PagerHeight", defaults.PagerHeight),
-                    PaddingSize = ReadInt(key, "PaddingSize", defaults.PaddingSize),
                     IconPaddingX = ReadInt(key, "IconPaddingX", defaults.IconPaddingX),
                     IconPaddingY = ReadInt(key, "IconPaddingY", defaults.IconPaddingY),
 
@@ -50,7 +49,6 @@ namespace Switchie.GUI
                 key.SetValue("DesktopBorderStyle", settings.DesktopBorderStyle, RegistryValueKind.DWord);
                 key.SetValue("BackgroundOpacity", settings.BackgroundOpacity.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 key.SetValue("PagerHeight", settings.PagerHeight, RegistryValueKind.DWord);
-                key.SetValue("PaddingSize", settings.PaddingSize, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingX", settings.IconPaddingX, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingY", settings.IconPaddingY, RegistryValueKind.DWord);
 
@@ -93,4 +91,3 @@ namespace Switchie.GUI
         }
     }
 }
-

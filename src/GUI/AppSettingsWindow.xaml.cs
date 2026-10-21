@@ -30,11 +30,10 @@ namespace Switchie
             _settingsBefore = AppSettings.Clone(settings);
             Settings = AppSettings.Clone(settings);
 
-            cmbDesktopModeDefault.Items.Add("Windows");
-            cmbDesktopModeDefault.Items.Add("Icons");
+            cmbDesktopModeDefault.Items.Add("Preview");
+            cmbDesktopModeDefault.Items.Add("MicroTaskbar");
             cmbDesktopModeDefault.SelectedIndex = (int)Settings.DesktopModeDefault; //Math.Max(0, Math.Min(1, Settings.DesktopModeDefault));
             numericPagerHeight.Value = Settings.PagerHeight;
-            numericPaddingSize.Value = Settings.PaddingSize;
             numericIconPaddingX.Value = Settings.IconPaddingX;
             numericIconPaddingY.Value = Settings.IconPaddingY;
 
@@ -104,7 +103,6 @@ namespace Switchie
             {
                 cmbDesktopModeDefault.SelectedIndex = _defaults.DesktopModeDefault <= 0 ? 0 : 1;
                 numericPagerHeight.Value = _defaults.PagerHeight;
-                numericPaddingSize.Value = _defaults.PaddingSize;
                 numericIconPaddingX.Value = _defaults.IconPaddingX;
                 numericIconPaddingY.Value = _defaults.IconPaddingY;
             }
@@ -161,7 +159,6 @@ namespace Switchie
             {
                 DesktopModeDefault = (DesktopMode)(cmbDesktopModeDefault.SelectedIndex <= 0 ? 0 : 1),
                 PagerHeight = numericPagerHeight.Value,
-                PaddingSize = numericPaddingSize.Value,
                 IconPaddingX = numericIconPaddingX.Value,
                 IconPaddingY = numericIconPaddingY.Value,
 
@@ -214,7 +211,6 @@ namespace Switchie
 
             btnRevertDesktopModeDefault.Visibility = cmbDesktopModeDefault.SelectedIndex != (int)_settingsBefore.DesktopModeDefault ? Visibility.Visible : Visibility.Hidden;
             btnRevertPagerHeight.Visibility = numericPagerHeight.Value != _settingsBefore.PagerHeight ? Visibility.Visible : Visibility.Hidden;
-            btnRevertPaddingSize.Visibility = numericPaddingSize.Value != _settingsBefore.PaddingSize ? Visibility.Visible : Visibility.Hidden;
             btnRevertIconPaddingX.Visibility = numericIconPaddingX.Value != _settingsBefore.IconPaddingX ? Visibility.Visible : Visibility.Hidden;
             btnRevertIconPaddingY.Visibility = numericIconPaddingY.Value != _settingsBefore.IconPaddingY ? Visibility.Visible : Visibility.Hidden;
 
@@ -262,20 +258,14 @@ namespace Switchie
             RequestPreview();
         }
 
-        // For: PaddingSize, IconPaddingX and IconPaddingY
+        // For: IconPaddingX and IconPaddingY
         private void PaddingInputChanged(object sender, RoutedPropertyChangedEventArgs<int> e)
         {
             UpdateRevertButtons();
             RequestPreview();
         }
 
-        // Why we don't need a call to RequestPreview() on those 3?
-        private void RevertPaddingSize_Click(object sender, RoutedEventArgs e)
-        {
-            numericPaddingSize.Value = _settingsBefore.PaddingSize;
-            UpdateRevertButtons();
-        }
-
+        // Why we don't need a call to RequestPreview() on those 2?
         private void RevertIconPaddingX_Click(object sender, RoutedEventArgs e)
         {
             numericIconPaddingX.Value = _settingsBefore.IconPaddingX;
