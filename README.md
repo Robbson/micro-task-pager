@@ -1,6 +1,9 @@
 # Micro Task Pager
 
-<img src="src/Resources/logo.png">
+<p align="center">
+  <img src="src/Resources/logo.png">
+</p>
+
 
 ## Description
 
