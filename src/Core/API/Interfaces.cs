@@ -1,6 +1,6 @@
 using System;
 
-namespace Switchie
+namespace MicroTaskPager.Core.API
 {
     public interface IIVirtualDesktop { }
 

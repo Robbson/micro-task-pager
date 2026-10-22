@@ -3,7 +3,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     public class AboutDialog : Form
     {
@@ -15,7 +15,7 @@ namespace Switchie.GUI
         {
             SuspendLayout();
 
-            Text = "About Switchie";
+            Text = "About Micro Task Pager";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
@@ -34,7 +34,7 @@ namespace Switchie.GUI
             try
             {
                 using (var iconStream = new MemoryStream(
-                    Helpers.GetResourceFromAssembly(typeof(Program), "Switchie.Resources.icon.png")))
+                    Helpers.GetResourceFromAssembly(typeof(Program), "MicroTaskPager.Resources.icon.png")))
                 using (var pngImage = Image.FromStream(iconStream))
                 {
                     iconBox.Image = new Bitmap(pngImage);
@@ -53,7 +53,7 @@ namespace Switchie.GUI
                 Location = new Point(0, 126),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 16, FontStyle.Bold),
-                Text = "Switchie",
+                Text = "Micro Task Pager",
             };
 
             var versionLabel = new Label
@@ -76,7 +76,7 @@ namespace Switchie.GUI
                 Location = new Point(20, 202),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Text = "Main author: darkguy2008",
+                Text = "Author: Robbson (Robin Siegemund) 2026",
             };
 
             var contributorsLabel = new Label
@@ -87,8 +87,9 @@ namespace Switchie.GUI
                 Location = new Point(20, 226),
                 TextAlign = ContentAlignment.TopLeft,
                 Font = new Font("Segoe UI", 9, FontStyle.Regular),
-                Text = "Contributors:\n• Robbson" +
-                       "\n• DARKGuy (Alemar)",
+                Text = "Acknowledgments:\n" +
+                " • DARKGuy (original project)\n" +
+                " • MScholtes (Virtual Desktop)",
             };
 
             var closeButton = new Button

@@ -1,3 +1,4 @@
+using MicroTaskPager.Core.API;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,7 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Interop;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     // Pager main application form
     public class MainForm : Form
@@ -44,7 +45,7 @@ namespace Switchie.GUI
             AllowDrop = true;
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             Icon = new System.Drawing.Icon(
-                new MemoryStream(Helpers.GetResourceFromAssembly(typeof(Program), "Switchie.Resources.icon.ico")));
+                new MemoryStream(Helpers.GetResourceFromAssembly(typeof(Program), "MicroTaskPager.Resources.icon.ico")));
 
             var storedLocation = RegistryAccess.RestoreLocation();
             Location = storedLocation ?? GetDefaultLocation();

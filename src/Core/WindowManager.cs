@@ -1,3 +1,4 @@
+using MicroTaskPager.Core.API;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Switchie
+namespace MicroTaskPager
 {
     public class WindowManager
     {

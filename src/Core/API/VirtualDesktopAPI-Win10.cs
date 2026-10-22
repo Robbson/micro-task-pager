@@ -2,9 +2,8 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace Switchie.VirtualDesktopAPI.Win10
+namespace MicroTaskPager.Core.API.Win10
 {
-
     public class WindowsVirtualDesktopAPI
     {
         public static readonly Guid CLSID_IMMERSIVESHELL = new Guid("C2F03A33-21F5-47FA-B4BB-156362A2F239");

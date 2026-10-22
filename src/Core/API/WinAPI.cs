@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Switchie
+namespace MicroTaskPager.Core.API
 {
     public class WinAPI
     {
@@ -33,7 +33,7 @@ namespace Switchie
         public const uint SWP_NOMOVE = 0x0002;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_SHOWWINDOW = 0x0040;
-  
+
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
 
@@ -72,23 +72,23 @@ namespace Switchie
 
         [DllImport("user32.dll")]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        
+
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
-        
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
-        
+
         [DllImport("user32.dll")]
         public static extern bool EnumWindows(EnumWindowsProc enumFunc, int lParam);
-        
+
         [DllImport("user32.dll")]
         public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-        
+
         [DllImport("user32.dll")]
         public static extern int GetWindowTextLength(IntPtr hWnd);
-        
+
         [DllImport("user32.dll")]
         public static extern bool IsWindowVisible(IntPtr hWnd);
 
@@ -97,31 +97,31 @@ namespace Switchie
 
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         public static extern IntPtr GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-        
+
         [DllImport("user32.dll")]
         public static extern IntPtr GetShellWindow();
-        
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-        
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-        
+
         [DllImport("user32.dll")]
         public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        
+
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
-        
+
         [DllImport("user32.dll")]
         public static extern int PostMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
-        
+
         [DllImport("user32.dll")]
         public static extern int LoadIcon(IntPtr hInstance, IntPtr lpIconName);
-        
+
         [DllImport("user32.dll", EntryPoint = "GetClassLong")]
         public static extern uint GetClassLong32(IntPtr hWnd, int nIndex);
-        
+
         [DllImport("user32.dll", EntryPoint = "GetClassLongPtr")]
         public static extern int GetClassLong64(IntPtr hWnd, int nIndex);
 

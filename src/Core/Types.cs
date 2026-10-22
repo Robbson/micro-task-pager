@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace Switchie
+namespace MicroTaskPager
 {
     public class Window
     {

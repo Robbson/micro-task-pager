@@ -4,11 +4,11 @@ using System.Globalization;
 using System.Reflection.Emit;
 using System.Windows;
 using System.Windows.Controls;
-using Switchie.GUI;
+using MicroTaskPager.GUI;
 using DrawingColor = System.Drawing.Color;
 using Forms = System.Windows.Forms;
 
-namespace Switchie
+namespace MicroTaskPager
 {
     public partial class AppSettingsWindow : System.Windows.Window
     {

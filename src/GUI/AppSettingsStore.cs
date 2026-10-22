@@ -3,11 +3,11 @@ using System.Drawing;
 using System.Globalization;
 using Microsoft.Win32;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     public static class AppSettingsStore
     {
-        private const string RegistryKeyPath = @"SOFTWARE\Switchie";
+        private const string RegistryKeyPath = @"SOFTWARE\MicroTaskPager";
 
         public static AppSettings Load()
         {

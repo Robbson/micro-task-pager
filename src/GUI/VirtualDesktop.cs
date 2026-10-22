@@ -1,3 +1,4 @@
+using MicroTaskPager.Core.API;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -5,7 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     // Represents a virtual desktop mini view in the pager
     public class VirtualDesktop

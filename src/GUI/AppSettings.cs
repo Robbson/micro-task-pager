@@ -1,16 +1,20 @@
 using System.Collections;
 using System.Drawing;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     public enum DesktopMode
     {
-        //Inherited,      // Takes the default mode
+        //Inherited,     // Takes the default mode
         Preview,        // Desktop -> Preview
         MicroTaskbar,   // Micro Traskbar
     }
 
-    public enum BorderStyle { Box, Underline };
+    public enum BorderStyle
+    {
+        Box,
+        Underline,
+    }
 
     public class AppSettings
     {
@@ -60,7 +64,7 @@ namespace Switchie.GUI
 
                 PrimaryUpdateDelay = source.PrimaryUpdateDelay,
                 SecondaryUpdateDelay = source.SecondaryUpdateDelay,
-                ShowAppInTaskbar = source.ShowAppInTaskbar
+                ShowAppInTaskbar = source.ShowAppInTaskbar,
             };
         }
     }

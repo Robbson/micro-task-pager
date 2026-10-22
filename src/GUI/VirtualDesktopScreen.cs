@@ -1,3 +1,4 @@
+using MicroTaskPager.Core.API;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -10,7 +11,7 @@ using System.Windows.Documents;
 using System.Windows.Forms;
 using System.Windows.Media.Media3D;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     // TODO: Screen is not a good term here, it's just a VirtualDesktop, right?
     public class VirtualDesktopScreen

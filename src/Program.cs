@@ -2,9 +2,9 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace Switchie
+namespace MicroTaskPager
 {
-    static class Program
+    internal static class Program
     {
         private static Mutex mutex = null;
 
@@ -12,14 +12,14 @@ namespace Switchie
         public static WindowsVersion WindowsVersion = new WindowsVersion();
 
         [STAThread]
-        static void Main()
+        private static void Main()
         {
             // Only allow a single instance of the app per windows user
-            const string mutexName = "robbson-switchie-win-app";
+            const string mutexName = "micro-task-pager-win-app";
             mutex = new Mutex(true, mutexName, out bool createdNew);
             if (!createdNew)
             {
-                MessageBox.Show("Switchie is already running.", "Startup Error");
+                MessageBox.Show("Micro Task Pager is already running.", "Startup Error");
                 return;
             }
 

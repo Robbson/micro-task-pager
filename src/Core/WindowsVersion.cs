@@ -1,11 +1,7 @@
-namespace Switchie
+namespace MicroTaskPager
 {
     public class WindowsVersion
     {
-        public int Major { get; set; }
-        public int Minor { get; set; }
-        public int Build { get; set; }
-
         public WindowsVersion()
         {
             Microsoft.Win32.RegistryKey registryKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
@@ -13,6 +9,10 @@ namespace Switchie
             Minor = int.Parse(registryKey.GetValue("CurrentMinorVersionNumber").ToString());
             Build = int.Parse(registryKey.GetValue("CurrentBuildNumber").ToString());
         }
+
+        public int Major { get; set; }
+        public int Minor { get; set; }
+        public int Build { get; set; }
 
         public bool IsWin11_22H2_OrLater() => Major == 10 && Minor == 0 && Build >= 22621;
         public bool IsWin11_21H2_OrLater() => Major == 10 && Minor == 0 && Build >= 22000;

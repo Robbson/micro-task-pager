@@ -1,4 +1,20 @@
-# Switchie Changelog
+# Changelog
+
+## v1.5.0 (not released yet)
+
+- project decoupled from the long abandoned Switchie project, rebranded to *Micro Task Pager* with a different develeping focus
+- Desktops: complete rewrite of the MicroTaskbar renderer
+- App: added prevention against multiple app instances
+- App: removed paddingSize parameter
+- Settings Dialog: Live preview now also works for pagerHeight parameter
+- Settings Dialog: Added numeric input control for easy fine granular changes
+- Settings Dialog: Better organization of all parameters
+- Settings Dialog: Reset to defaults now works for each tab individually
+- Settings Dialog: Allow revert single parameters to previous values instead of defaults
+- Internal: Added automatic build versions
+- Internal: Added StyleCop.Analyzer width customized settings
+- Internal: Multiple code refactorings
+
 
 ## v1.4.4
 

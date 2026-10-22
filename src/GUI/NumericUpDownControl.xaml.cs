@@ -14,7 +14,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace Switchie.GUI
+namespace MicroTaskPager.GUI
 {
     public partial class NumericUpDownControl : UserControl
     {

@@ -1,5 +1,6 @@
 using System;
-namespace Switchie
+
+namespace MicroTaskPager.Core.API
 {
     public class WindowsVirtualDesktop
     {
@@ -16,16 +17,17 @@ namespace Switchie
             if (WindowsVirtualDesktop._instance == null)
             {
                 if (Program.WindowsVersion.IsWin11_22H2_OrLater())
-                    _instance = new Switchie.VirtualDesktopAPI.Win11_.WindowsVirtualDesktop();
+                    _instance = new API.Win11_.WindowsVirtualDesktop();
                 else if (Program.WindowsVersion.IsWin11_21H2_OrLater())
-                    _instance = new Switchie.VirtualDesktopAPI.Win11.WindowsVirtualDesktop();
+                    _instance = new API.Win11.WindowsVirtualDesktop();
                 else if (Program.WindowsVersion.IsWin10())
-                    _instance = new Switchie.VirtualDesktopAPI.Win10.WindowsVirtualDesktop();
+                    _instance = new API.Win10.WindowsVirtualDesktop();
                 else if (Program.WindowsVersion.IsWin10LTSC())
-                    _instance = new Switchie.VirtualDesktopAPI.Win10LTSC.WindowsVirtualDesktop();
+                    _instance = new API.Win10LTSC.WindowsVirtualDesktop();
                 else
                     throw new PlatformNotSupportedException();
             }
+
             return WindowsVirtualDesktop._instance;
         }
     }
@@ -40,16 +42,17 @@ namespace Switchie
             if (WindowsVirtualDesktopManager._instance == null)
             {
                 if (Program.WindowsVersion.IsWin11_22H2_OrLater())
-                    _instance = new Switchie.VirtualDesktopAPI.Win11_.WindowsVirtualDesktopManager();
+                    _instance = new API.Win11_.WindowsVirtualDesktopManager();
                 else if (Program.WindowsVersion.IsWin11_21H2_OrLater())
-                    _instance = new Switchie.VirtualDesktopAPI.Win11.WindowsVirtualDesktopManager();
+                    _instance = new API.Win11.WindowsVirtualDesktopManager();
                 else if (Program.WindowsVersion.IsWin10())
-                    _instance = new Switchie.VirtualDesktopAPI.Win10.WindowsVirtualDesktopManager();
+                    _instance = new API.Win10.WindowsVirtualDesktopManager();
                 else if (Program.WindowsVersion.IsWin10LTSC())
-                    _instance = new Switchie.VirtualDesktopAPI.Win10LTSC.WindowsVirtualDesktopManager();
+                    _instance = new API.Win10LTSC.WindowsVirtualDesktopManager();
                 else
                     throw new PlatformNotSupportedException();
             }
+
             return WindowsVirtualDesktopManager._instance;
         }
     }

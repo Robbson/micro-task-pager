@@ -1,10 +1,10 @@
 // Adapted from https://github.com/MScholtes/VirtualDesktop with a few modifications
 using System;
 using System.Runtime.InteropServices;
+using MicroTaskPager.Core.API;
 
-namespace Switchie.VirtualDesktopAPI.Win11
+namespace MicroTaskPager.Core.API.Win11
 {
-
     public class WindowsVirtualDesktopAPI
     {
         public static readonly Guid CLSID_IMMERSIVESHELL = new Guid("C2F03A33-21F5-47FA-B4BB-156362A2F239");

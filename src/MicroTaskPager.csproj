@@ -34,11 +34,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EditorConfigFiles Remove="C:\dev\Switchie\src\GUI\.editorconfig" />
+    <EditorConfigFiles Remove="C:\dev\micro-task-pager\src\GUI\.editorconfig" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="C:\dev\Switchie\src\.editorconfig" />
+    <None Include="C:\dev\micro-task-pager\src\.editorconfig" />
   </ItemGroup>
 
 </Project>
