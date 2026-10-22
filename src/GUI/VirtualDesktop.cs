@@ -180,7 +180,6 @@ namespace MicroTaskPager.GUI
             else
             {
                 // Just underline the active desktop
-                // -> TODO: Doesn't work if there is no window on the desktop
                 g.FillRectangle(
                     new SolidBrush(desktopBorderColor),
                     new Rectangle(Location.X, Size.Height - Form.BorderSize, Size.Width, Size.Height));

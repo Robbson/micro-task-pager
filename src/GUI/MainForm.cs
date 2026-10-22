@@ -34,6 +34,10 @@ namespace MicroTaskPager.GUI
         public MainForm()
         {
             SuspendLayout();
+            SetStyle(
+                ControlStyles.ResizeRedraw
+                | ControlStyles.OptimizedDoubleBuffer
+                | ControlStyles.AllPaintingInWmPaint, true);
 
             // Form properties set to defaults
             Name = "frmMain";
@@ -103,6 +107,13 @@ namespace MicroTaskPager.GUI
             }
         }
 
+        protected override void OnResize(EventArgs e) 
+        {
+            Debug.WriteLine("RESIZED");
+            base.OnResize(e);
+            Invalidate();   // invalidates the whole client area at the new size
+        }
+
         // Default app window location: Centered and above Taskbar
         private Point GetDefaultLocation() => new Point(
                 (Screen.PrimaryScreen.Bounds.Width / 2) - (Size.Width / 2),
@@ -141,12 +152,21 @@ namespace MicroTaskPager.GUI
             _virtualDesktops.Clear();
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
 
-            SuspendLayout();
             var newSize = new Size(_virtualDesktops.Sum(d => d.Size.Width), Options.PagerHeight);
-            ClientSize = newSize;
-            MinimumSize = newSize;
-            MaximumSize = newSize;
-            ResumeLayout();
+
+            SuspendLayout();
+            try
+            {
+                MaximumSize = Size.Empty;   // remove old cap first
+                MinimumSize = Size.Empty;   // remove old floor first
+                ClientSize = newSize;
+                MinimumSize = newSize;
+                MaximumSize = newSize;
+            }
+            finally
+            {
+                ResumeLayout();
+            }
         }
 
         private void GetVirtualDesktopsAndAddMouseHandlers(List<VirtualDesktop> virtualDesktops)
@@ -347,7 +367,11 @@ namespace MicroTaskPager.GUI
                     Text = "Exit",
                     Image = Helpers.CreateGlyphBitmap("✕"),
                 },
-                () => Environment.Exit(1));
+                () =>
+                {
+
+                    Environment.Exit(0);
+                });
 
             //menu.Opened += (ss, ee) => _forceAppAlwaysOnTop = false;
             menu.Show(this, PointToClient(Cursor.Position));
@@ -355,7 +379,7 @@ namespace MicroTaskPager.GUI
 
         private void OpenSettingsDialog()
         {
-            var originalSettings = Options; //AppSettings.Clone(Options);
+            var originalSettings = AppSettings.Clone(Options);
             var settingsWindow = new AppSettingsWindow(Options);
             new WindowInteropHelper(settingsWindow) { Owner = Handle };
 
@@ -364,13 +388,12 @@ namespace MicroTaskPager.GUI
             bool? result = settingsWindow.ShowDialog();
             if (result == true)
             {
-                Options = settingsWindow.Settings;
-                ApplySettings(Options, true); // save and reset to new settings
+                ApplySettings(settingsWindow.Settings, true); // save and reset to new settings
             }
             else
             {
-                Options = originalSettings;
-                ApplySettings(Options, false); // restore visuals
+                // Don't assign Options beforehand: ApplySettings compares against it to detect layout changes
+                ApplySettings(originalSettings, false); // restore visuals
             }
         }
 
@@ -388,8 +411,6 @@ namespace MicroTaskPager.GUI
             BackColor = Options.DesktopBackgroundColor;
             Opacity = Math.Max(0.25, Math.Min(1.0, Options.BackgroundOpacity));
 
-            Invalidate();
-
             if (persist)
             {
                 AppSettingsStore.Save(settings);
@@ -399,6 +420,8 @@ namespace MicroTaskPager.GUI
             {
                 ResetVirtualDesktops();
             }
+
+            Invalidate();
         }
 
         private void OpenAboutDialog()

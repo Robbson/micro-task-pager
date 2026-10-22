@@ -161,7 +161,7 @@ namespace MicroTaskPager.GUI
             }
             else
             {
-                screenCenterX = (width % (tileWidth * iconsNum)) / 2;
+                screenCenterX = (width - (tileWidth * iconsNum)) / 2;
                 screenCenterY = (height - tileHeight) / 2;
             }
 
