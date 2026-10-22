@@ -1,4 +1,4 @@
-using MicroTaskPager.Core.API;
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -10,15 +10,18 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Forms;
 using System.Windows.Media.Media3D;
+using MicroTaskPager.Config;
+using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.GUI
 {
     // TODO: Screen is not a good term here, it's just a VirtualDesktop, right?
-    public class VirtualDesktopScreen
+    // It's the pure content renderer, depending on the used mode, also window order is determined here
+    public class VirtualDesktopRenderer
     {
         private readonly Font _font;
 
-        public VirtualDesktopScreen()
+        public VirtualDesktopRenderer()
         {
             _font = new Font("Segoe UI Symbol", 12, FontStyle.Regular, GraphicsUnit.Pixel);
         }

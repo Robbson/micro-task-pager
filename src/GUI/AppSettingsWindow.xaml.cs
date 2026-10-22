@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Reflection.Emit;
 using System.Windows;
 using System.Windows.Controls;
+using MicroTaskPager.Config;
 using MicroTaskPager.GUI;
 using DrawingColor = System.Drawing.Color;
 using Forms = System.Windows.Forms;

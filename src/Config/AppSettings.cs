@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Drawing;
 
-namespace MicroTaskPager.GUI
+namespace MicroTaskPager.Config
 {
     public enum DesktopMode
     {
@@ -42,7 +42,6 @@ namespace MicroTaskPager.GUI
         public int SecondaryUpdateDelay { get; set; } = 500;
         public bool ShowAppInTaskbar { get; set; } = true;
 
-
         public static AppSettings Clone(AppSettings source)
         {
             return new AppSettings
@@ -69,4 +68,3 @@ namespace MicroTaskPager.GUI
         }
     }
 }
-

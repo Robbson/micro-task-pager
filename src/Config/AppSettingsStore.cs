@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Globalization;
 using Microsoft.Win32;
 
-namespace MicroTaskPager.GUI
+namespace MicroTaskPager.Config
 {
     public static class AppSettingsStore
     {

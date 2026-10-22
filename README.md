@@ -16,6 +16,6 @@
 ## Acknowledgements
 
 - [Switchie](https://github.com/darkguy2008/Switchie) (the abandoned original project that *Micro Task Pager* is based on)
-- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) (thanks to this great project we have desktop management also in recent versions of Windows 10/11)
+- [VirtualDesktop](https://github.com/MScholtes/VirtualDesktop) (thanks to this project we have desktop management also in recent versions of Windows 10/11)
 
 Made with ♥ from Munich, Germany

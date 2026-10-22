@@ -1,13 +1,15 @@
-using MicroTaskPager.Core.API;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Interop;
+using MicroTaskPager.Config;
+using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.GUI
 {
@@ -271,10 +273,13 @@ namespace MicroTaskPager.GUI
 
         private void OnMouseDown(object sender, MouseEventArgs e)
         {
+            Debug.WriteLine("Mouse pressed");
+
             if ((e.Button & MouseButtons.Middle) == MouseButtons.Middle)
             {
                 IsDraggingWindow = true;
                 dragOffset = e.Location;
+                Cursor = Cursors.SizeAll;
             }
         }
 
@@ -282,7 +287,7 @@ namespace MicroTaskPager.GUI
         {
             if (IsDraggingWindow)
             {
-                Cursor = Cursors.SizeAll;
+                //Cursor = Cursors.SizeAll;
                 Location = new Point(e.X + Location.X - dragOffset.X, e.Y + Location.Y - dragOffset.Y);
             }
         }
