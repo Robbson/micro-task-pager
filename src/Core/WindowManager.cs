@@ -1,4 +1,3 @@
-using MicroTaskPager.Core.API;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,14 +6,15 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using MicroTaskPager.Core.API;
 
-namespace MicroTaskPager
+namespace MicroTaskPager.Core
 {
     public class WindowManager
     {
-        static readonly List<IntPtr> hWndBlacklist = new List<IntPtr>();
-        static readonly string[] classBlacklist = new string[] {
-             "Windows.UI.Core.CoreWindow" // Start menu
+        private static readonly List<IntPtr> hWndBlacklist = new List<IntPtr>();
+        private static readonly string[] classBlacklist = new string[] {
+             "Windows.UI.Core.CoreWindow", // Start menu
         };
 
         public static List<Window> GetOpenWindows()
@@ -22,7 +22,8 @@ namespace MicroTaskPager
             var windowList = new List<Window>();
             var shellWindow = WinAPI.GetShellWindow();
 
-            WinAPI.EnumWindows((IntPtr hWnd, int lParam) =>
+            WinAPI.EnumWindows(
+                (IntPtr hWnd, int lParam) =>
             {
                 // Ignore specific windows
                 if (hWnd == shellWindow) return true;
@@ -52,6 +53,7 @@ namespace MicroTaskPager
                 {
                     // Note: This is where Exception thrown: 'System.Runtime.InteropServices.COMException' comes from
                     // All windows where this happens are getting blacklisted
+                    Debug.WriteLine("Window black-listed: " + hWnd);
                     hWndBlacklist.Add(hWnd);
                     return true;
                 }
@@ -71,13 +73,14 @@ namespace MicroTaskPager
                     Icon = hIcon != 0 ? new Bitmap(Icon.FromHandle((IntPtr)hIcon).ToBitmap(), 16, 16) : null,
                     IsActive = hWnd == WinAPI.GetForegroundWindow(),
                     Dimensions = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
-                    VirtualDesktopIndex = index
+                    VirtualDesktopIndex = index,
                 });
 
                 return true;
             }, 0);
 
-            windowList.Sort((x, y) => x.ProcessID.CompareTo(y.ProcessID));
+            // Process IDs would not work for windows of same process, so we use the handles now
+            windowList.Sort((x, y) => x.Handle.ToInt32().CompareTo(y.Handle.ToInt32()));
             return windowList;
         }
 
@@ -103,7 +106,7 @@ namespace MicroTaskPager
                 WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_NOACTIVATE);
         }
 
-        static int GetWindowZOrder(IntPtr hWnd)
+        private static int GetWindowZOrder(IntPtr hWnd)
         {
             var zOrder = -1;
             while ((hWnd = WinAPI.GetWindow(hWnd, WinAPI.GW_HWNDNEXT)) != IntPtr.Zero) zOrder++;

@@ -1,4 +1,4 @@
-namespace MicroTaskPager
+namespace MicroTaskPager.Core
 {
     public class WindowsVersion
     {

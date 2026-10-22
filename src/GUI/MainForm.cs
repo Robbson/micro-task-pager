@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Interop;
 using MicroTaskPager.Config;
+using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.GUI
@@ -174,11 +175,7 @@ namespace MicroTaskPager.GUI
                     {
                         try
                         {
-                            // Probably not required anymore, now that we have covering detection
-                            //if (_forceAlwaysOnTop) WindowManager.SetAlwaysOnTop(Handle, _forceAlwaysOnTop);
-
-                            // Change Detection via Hash (calculated on basic parameters of all opened windows)
-                            // -> Works now finally as expected because all windows are sorted first to remain in the same state
+                            // Change Detection via Hash (calculated on basic parameters of all opened windows) based on all windows sorted by their handles
                             Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows());
                             var hash =
                             $"{_activeDesktopIndex}" +
@@ -224,7 +221,6 @@ namespace MicroTaskPager.GUI
                         if (HasDesktopCountChanged())
                         {
                             // TODO: Adjust the list length for the individual view settings
-
                             ResetVirtualDesktops();
                         }
 
@@ -273,8 +269,6 @@ namespace MicroTaskPager.GUI
 
         private void OnMouseDown(object sender, MouseEventArgs e)
         {
-            Debug.WriteLine("Mouse pressed");
-
             if ((e.Button & MouseButtons.Middle) == MouseButtons.Middle)
             {
                 IsDraggingWindow = true;

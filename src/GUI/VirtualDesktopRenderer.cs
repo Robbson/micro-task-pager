@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -11,6 +10,7 @@ using System.Windows.Documents;
 using System.Windows.Forms;
 using System.Windows.Media.Media3D;
 using MicroTaskPager.Config;
+using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.GUI

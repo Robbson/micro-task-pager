@@ -350,11 +350,15 @@ namespace MicroTaskPager.Core.API.Win11_
                         break;
                     }
                 }
-                Marshal.ReleaseComObject(desktops);
-                WindowsVirtualDesktop wvd = new WindowsVirtualDesktop();
-                return wvd.FromIndex(index);
 
+                Marshal.ReleaseComObject(desktops);
+                if (index >= 0)
+                {
+                    WindowsVirtualDesktop wvd = new WindowsVirtualDesktop();
+                    return wvd.FromIndex(index);
+                }
             }
+
             return null;
         }
 

@@ -10,6 +10,7 @@
     <ApplicationIcon>Resources/icon.ico</ApplicationIcon>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+		<Platforms>AnyCPU;ARM64;x64;x86</Platforms>
   </PropertyGroup>
 
 	<Target Name="IncrementVersion" BeforeTargets="BeforeBuild">

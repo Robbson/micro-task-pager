@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
 
-namespace MicroTaskPager
+namespace MicroTaskPager.Core
 {
     public class Helpers
     {
