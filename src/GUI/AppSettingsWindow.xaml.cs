@@ -101,6 +101,21 @@ namespace MicroTaskPager
         }
         #endregion
 
+        private static DrawingColor PickColor(DrawingColor initial)
+        {
+            using (var dlg = new Forms.ColorDialog())
+            {
+                dlg.FullOpen = true;
+                dlg.Color = initial;
+                return dlg.ShowDialog() == Forms.DialogResult.OK ? dlg.Color : initial;
+            }
+        }
+
+        private static System.Windows.Media.SolidColorBrush ToBrush(DrawingColor color)
+        {
+            return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(color.A, color.R, color.G, color.B));
+        }
+
         private void ResetToDefaults_Click(object sender, RoutedEventArgs e)
         {
             if (tabControl.SelectedIndex == 0)
@@ -409,16 +424,6 @@ namespace MicroTaskPager
             RevertColor(ref _activeWindowBorderColor, _settingsBefore.ActiveWindowBorderColor);
         }
 
-        private static DrawingColor PickColor(DrawingColor initial)
-        {
-            using (var dlg = new Forms.ColorDialog())
-            {
-                dlg.FullOpen = true;
-                dlg.Color = initial;
-                return dlg.ShowDialog() == Forms.DialogResult.OK ? dlg.Color : initial;
-            }
-        }
-
         private void RefreshColorPreviews()
         {
             previewBackgroundColor.Background = ToBrush(_desktopBackgroundColor);
@@ -430,10 +435,6 @@ namespace MicroTaskPager
             previewActiveWindowBorderColor.Background = ToBrush(_activeWindowBorderColor);
         }
 
-        private static System.Windows.Media.SolidColorBrush ToBrush(DrawingColor color)
-        {
-            return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(color.A, color.R, color.G, color.B));
-        }
         #endregion
 
         #region Misc Tab Handlers

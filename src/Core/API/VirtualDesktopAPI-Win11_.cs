@@ -1,4 +1,5 @@
 ﻿// Adapted from https://github.com/MScholtes/VirtualDesktop with a few modifications
+#pragma warning disable
 using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -13,27 +14,11 @@ namespace MicroTaskPager.Core.API.Win11_
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGER = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
         public static readonly Guid CLSID_VIRTUALDESKTOPPINNEDAPPS = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct SIZE
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
         public enum APPLICATION_VIEW_CLOAK_TYPE : int
         {
             AVCT_NONE = 0,
             AVCT_DEFAULT = 1,
-            AVCT_VIRTUAL_DESKTOP = 2
+            AVCT_VIRTUAL_DESKTOP = 2,
         }
 
         public enum APPLICATION_VIEW_COMPATIBILITY_POLICY : int
@@ -42,7 +27,7 @@ namespace MicroTaskPager.Core.API.Win11_
             AVCP_SMALL_SCREEN = 1,
             AVCP_TABLET_SMALL_SCREEN = 2,
             AVCP_VERY_SMALL_SCREEN = 3,
-            AVCP_HIGH_SCALE_FACTOR = 4
+            AVCP_HIGH_SCALE_FACTOR = 4,
         }
 
         [ComImport]
@@ -153,7 +138,6 @@ namespace MicroTaskPager.Core.API.Win11_
             int UnregisterForApplicationViewChanges(int cookie);
         }
 
-
         [ComImport]
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("53F5CA0B-158F-4124-900C-057158060B27")]
@@ -193,6 +177,7 @@ namespace MicroTaskPager.Core.API.Win11_
             Guid GetWindowDesktopId(IntPtr topLevelWindow);
             void MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
         }
+
         /*
                 [ComImport]
                 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -222,19 +207,30 @@ namespace MicroTaskPager.Core.API.Win11_
             bool IsRemote();
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SIZE
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 
     public class WindowsVirtualDesktop : IWindowsVirtualDesktop
     {
         private static WindowsVirtualDesktopManager _windowsVirtualDesktopManager = new WindowsVirtualDesktopManager();
-        public void Restart() => WindowsVirtualDesktop._windowsVirtualDesktopManager = new WindowsVirtualDesktopManager();
-        [DllImport("user32.dll")] private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
-
-        public IIVirtualDesktop ivd { get; set; }
         public WindowsVirtualDesktop() { }
         public WindowsVirtualDesktop(IIVirtualDesktop desktop) { this.ivd = desktop; }
-        public void MakeVisible() => _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
-        public IWindowsVirtualDesktop FromIndex(int index) => new WindowsVirtualDesktop(_windowsVirtualDesktopManager.GetDesktop(index));
+
+        public IIVirtualDesktop ivd { get; set; }
 
         public int Count
         {
@@ -246,13 +242,16 @@ namespace MicroTaskPager.Core.API.Win11_
             get => new WindowsVirtualDesktop((IIVirtualDesktop)_windowsVirtualDesktopManager.VirtualDesktopManagerInternal.GetCurrentDesktop());
         }
 
+        public void Restart() => WindowsVirtualDesktop._windowsVirtualDesktopManager = new WindowsVirtualDesktopManager();
+
+        public void MakeVisible() => _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+        public IWindowsVirtualDesktop FromIndex(int index) => new WindowsVirtualDesktop(_windowsVirtualDesktopManager.GetDesktop(index));
+
         public void MoveWindow(IntPtr hWnd)
         {
-            int processId;
             if (hWnd == IntPtr.Zero) throw new ArgumentNullException();
-            GetWindowThreadProcessId(hWnd, out processId);
-            WindowsVirtualDesktopAPI.IApplicationView view;
-            _windowsVirtualDesktopManager.ApplicationViewCollection.GetViewForHwnd(hWnd, out view);
+            GetWindowThreadProcessId(hWnd, out int processId);
+            _windowsVirtualDesktopManager.ApplicationViewCollection.GetViewForHwnd(hWnd, out WindowsVirtualDesktopAPI.IApplicationView view);
             try
             {
                 _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.MoveViewToDesktop(view, (WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
@@ -263,29 +262,19 @@ namespace MicroTaskPager.Core.API.Win11_
                 _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.MoveViewToDesktop(view, (WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
             }
         }
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
     }
 
     public class WindowsVirtualDesktopManager : IWindowsVirtualDesktopManager
     {
+#pragma warning disable SA1401 // Fields should be private (which can't because they are accessed from the class above)
         public WindowsVirtualDesktopAPI.IVirtualDesktopPinnedApps VirtualDesktopPinnedApps;
         public WindowsVirtualDesktopAPI.IVirtualDesktopManager VirtualDesktopManagerPrivate;
         public WindowsVirtualDesktopAPI.IApplicationViewCollection ApplicationViewCollection;
         public WindowsVirtualDesktopAPI.IVirtualDesktopManagerInternal VirtualDesktopManagerInternal;
-        public int FromDesktop(IWindowsVirtualDesktop desktop) => desktop != null ? GetDesktopIndex((WindowsVirtualDesktopAPI.IVirtualDesktop)desktop.ivd) : -1;
-        public bool IsWindowPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsViewPinned(GetApplicationView(hWnd));
-        public bool IsApplicationPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsAppIdPinned(GetAppId(hWnd));
-
-        private WindowsVirtualDesktopAPI.IApplicationView GetApplicationView(IntPtr hWnd)
-        {
-            ApplicationViewCollection.GetViewForHwnd(hWnd, out WindowsVirtualDesktopAPI.IApplicationView view);
-            return view;
-        }
-
-        private string GetAppId(IntPtr hWnd)
-        {
-            GetApplicationView(hWnd).GetAppUserModelId(out string appId);
-            return appId;
-        }
+#pragma warning restore SA1401 // Fields should be private
 
         public WindowsVirtualDesktopManager()
         {
@@ -296,34 +285,37 @@ namespace MicroTaskPager.Core.API.Win11_
             VirtualDesktopPinnedApps = (WindowsVirtualDesktopAPI.IVirtualDesktopPinnedApps)shell.QueryService(WindowsVirtualDesktopAPI.CLSID_VIRTUALDESKTOPPINNEDAPPS, typeof(WindowsVirtualDesktopAPI.IVirtualDesktopPinnedApps).GUID);
         }
 
+        public int FromDesktop(IWindowsVirtualDesktop desktop) => desktop != null ? GetDesktopIndex((WindowsVirtualDesktopAPI.IVirtualDesktop)desktop.ivd) : -1;
+        public bool IsWindowPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsViewPinned(GetApplicationView(hWnd));
+        public bool IsApplicationPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsAppIdPinned(GetAppId(hWnd));
+
         public WindowsVirtualDesktopAPI.IVirtualDesktop GetDesktop(int index)
-        {   // get desktop with index
+        {
+            // get desktop with index
             int count = VirtualDesktopManagerInternal.GetCount();
             if (index < 0 || index >= count) throw new ArgumentOutOfRangeException("index");
-            WindowsVirtualDesktopAPI.IObjectArray desktops;
-            VirtualDesktopManagerInternal.GetDesktops(out desktops);
-            object objdesktop;
-            desktops.GetAt(index, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out objdesktop);
+            VirtualDesktopManagerInternal.GetDesktops(out WindowsVirtualDesktopAPI.IObjectArray desktops);
+            desktops.GetAt(index, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out object objdesktop);
             Marshal.ReleaseComObject(desktops);
             return (WindowsVirtualDesktopAPI.IVirtualDesktop)objdesktop;
         }
 
         public int GetDesktopIndex(WindowsVirtualDesktopAPI.IVirtualDesktop desktop)
-        { // get index of desktop
+        {
+            // get index of desktop
             int index = -1;
-            Guid IdSearch = desktop.GetId();
-            WindowsVirtualDesktopAPI.IObjectArray desktops;
-            VirtualDesktopManagerInternal.GetDesktops(out desktops);
-            object objdesktop;
+            Guid idSearch = desktop.GetId();
+            VirtualDesktopManagerInternal.GetDesktops(out WindowsVirtualDesktopAPI.IObjectArray desktops);
             for (int i = 0; i < VirtualDesktopManagerInternal.GetCount(); i++)
             {
-                desktops.GetAt(i, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out objdesktop);
-                if (IdSearch.CompareTo(((WindowsVirtualDesktopAPI.IVirtualDesktop)objdesktop).GetId()) == 0)
+                desktops.GetAt(i, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out object objdesktop);
+                if (idSearch.CompareTo(((WindowsVirtualDesktopAPI.IVirtualDesktop)objdesktop).GetId()) == 0)
                 {
                     index = i;
                     break;
                 }
             }
+
             Marshal.ReleaseComObject(desktops);
             return index;
         }
@@ -338,12 +330,10 @@ namespace MicroTaskPager.Core.API.Win11_
                 // the above gives “COMException: A null reference pointer was passed to the stub. (Exception from HRESULT: 0x800706F4)” error, so replace it wuth more code:
 
                 int index = -1;
-                WindowsVirtualDesktopAPI.IObjectArray desktops;
-                VirtualDesktopManagerInternal.GetDesktops(out desktops);
-                object objdesktop;
+                VirtualDesktopManagerInternal.GetDesktops(out WindowsVirtualDesktopAPI.IObjectArray desktops);
                 for (int i = 0; i < VirtualDesktopManagerInternal.GetCount(); i++)
                 {
-                    desktops.GetAt(i, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out objdesktop);
+                    desktops.GetAt(i, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out object objdesktop);
                     if (id.CompareTo(((WindowsVirtualDesktopAPI.IVirtualDesktop)objdesktop).GetId()) == 0)
                     {
                         index = i;
@@ -367,6 +357,18 @@ namespace MicroTaskPager.Core.API.Win11_
             string appId = GetAppId(hWnd);
             if (!VirtualDesktopPinnedApps.IsAppIdPinned(appId))
                 VirtualDesktopPinnedApps.PinAppID(appId);
+        }
+
+        private WindowsVirtualDesktopAPI.IApplicationView GetApplicationView(IntPtr hWnd)
+        {
+            ApplicationViewCollection.GetViewForHwnd(hWnd, out WindowsVirtualDesktopAPI.IApplicationView view);
+            return view;
+        }
+
+        private string GetAppId(IntPtr hWnd)
+        {
+            GetApplicationView(hWnd).GetAppUserModelId(out string appId);
+            return appId;
         }
     }
 }

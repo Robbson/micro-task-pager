@@ -12,8 +12,9 @@ namespace MicroTaskPager.Core
 {
     public class WindowManager
     {
-        private static readonly List<IntPtr> hWndBlacklist = new List<IntPtr>();
-        private static readonly string[] classBlacklist = new string[] {
+        private static readonly List<IntPtr> _hWndBlacklist = new List<IntPtr>();
+        private static readonly string[] _classBlacklist = new string[]
+        {
              "Windows.UI.Core.CoreWindow", // Start menu
         };
 
@@ -29,7 +30,7 @@ namespace MicroTaskPager.Core
             var shellWindow = WinAPI.GetShellWindow();
 
             WinAPI.EnumWindows(
-                (IntPtr hWnd, int lParam) =>
+                (hWnd, lParam) =>
             {
                 // Ignore specific windows
                 if (hWnd == shellWindow) return true;
@@ -38,17 +39,17 @@ namespace MicroTaskPager.Core
                 int length = WinAPI.GetWindowTextLength(hWnd);
 
                 if (length == 0) return true;
-                if (hWndBlacklist.Contains(hWnd)) return true;
+                if (_hWndBlacklist.Contains(hWnd)) return true;
 
                 var className = new StringBuilder(256);
                 IntPtr nRet = WinAPI.GetClassName(hWnd, className, className.Capacity);
-                if (classBlacklist.Contains(className.ToString())) return true;
+                if (_classBlacklist.Contains(className.ToString())) return true;
 
                 // Get required window data
                 var titleBuilder = new StringBuilder(length);
                 WinAPI.GetWindowText(hWnd, titleBuilder, length + 1);
 
-                var rect = new WinAPI.RECT();
+                var rect = default(WinAPI.RECT);
                 WinAPI.GetWindowRect(hWnd, ref rect);
 
                 // Get virtual desktop index
@@ -60,9 +61,10 @@ namespace MicroTaskPager.Core
                     // Note: This is where Exception thrown: 'System.Runtime.InteropServices.COMException' comes from
                     // All windows where this happens are getting blacklisted
                     Debug.WriteLine("Window black-listed: " + hWnd);
-                    hWndBlacklist.Add(hWnd);
+                    _hWndBlacklist.Add(hWnd);
                     return true;
                 }
+
                 if (index < 0) return true;
 
                 int hIcon = WinAPI.SendMessage(hWnd, WinAPI.WM_GETICON, WinAPI.ICON_SMALL2, 0);
@@ -102,8 +104,7 @@ namespace MicroTaskPager.Core
         public static void SetAlwaysOnTop(IntPtr handle, bool value)
         {
             WinAPI.SetWindowPos(handle, value ? WinAPI.HWND_TOPMOST : WinAPI.HWND_NOTOPMOST,
-                0, 0, 0, 0, WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_SHOWWINDOW
-            );
+                0, 0, 0, 0, WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_SHOWWINDOW);
         }
 
         public static void RestoreWindow(IntPtr windowHandle)

@@ -19,13 +19,6 @@ namespace MicroTaskPager.GUI
                 typeof(RoutedPropertyChangedEventHandler<int>),
                 typeof(NumericUpDownControl));
 
-        // .NET wrapper for XAML access
-        public event RoutedPropertyChangedEventHandler<int> ValueChanged
-        {
-            add => AddHandler(ValueChangedEvent, value);
-            remove => RemoveHandler(ValueChangedEvent, value);
-        }
-
         // Register of dependency property for the value
         public static readonly DependencyProperty ValueProperty =
             DependencyProperty.Register(
@@ -36,6 +29,22 @@ namespace MicroTaskPager.GUI
                     0,
                     FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
                     OnValueChanged));
+
+        public NumericUpDownControl() => InitializeComponent();
+
+        // .NET wrapper for XAML access
+        public event RoutedPropertyChangedEventHandler<int> ValueChanged
+        {
+            add => AddHandler(ValueChangedEvent, value);
+            remove => RemoveHandler(ValueChangedEvent, value);
+        }
+
+        // .NET wrapper for XAML access
+        public int Value
+        {
+            get => (int)GetValue(ValueProperty);
+            set => SetValue(ValueProperty, value);
+        }
 
         // Method gets called automatically when 'Value' changes
         private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -51,18 +60,6 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        public NumericUpDownControl() => InitializeComponent();
-
-        // .NET wrapper for XAML access
-        public int Value
-        {
-            get => (int)GetValue(ValueProperty);
-            set => SetValue(ValueProperty, value);
-        }
-
-        private void BtnDown_Click(object sender, RoutedEventArgs e) => Value--;
-        private void BtnUp_Click(object sender, RoutedEventArgs e) => Value++;
-
         // Hilfsmethode: Gibt true zurück, wenn der Text NUR aus Zahlen besteht
         private static bool IsTextNumeric(string text)
         {
@@ -70,6 +67,9 @@ namespace MicroTaskPager.GUI
             // Wenn Sie auch negative Zahlen erlauben wollen, nutzen Sie: @"^-?[0-9]*$"
             return Regex.IsMatch(text, @"^[0-9]*$");
         }
+
+        private void BtnDown_Click(object sender, RoutedEventArgs e) => Value--;
+        private void BtnUp_Click(object sender, RoutedEventArgs e) => Value++;
 
         // 1. Tastatureingaben filtern
         private void TextBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)

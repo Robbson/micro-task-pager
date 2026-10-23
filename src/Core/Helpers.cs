@@ -64,8 +64,8 @@ namespace MicroTaskPager.Core
                 iWidth = finalWidth;
                 iHeight = finalHeight;
             }
+
             return new Size(iWidth, iHeight);
         }
     }
-
 }

@@ -1,3 +1,4 @@
+#pragma warning disable
 using System;
 
 namespace MicroTaskPager.Core.API
@@ -14,11 +15,12 @@ namespace MicroTaskPager.Core.API
     public interface IWindowsVirtualDesktop
     {
         int Count { get; }
-        void Restart();
-        void MakeVisible();
-        void MoveWindow(IntPtr hWnd);
         IIVirtualDesktop ivd { get; set; }
         IWindowsVirtualDesktop Current { get; }
         IWindowsVirtualDesktop FromIndex(int index);
+
+        void Restart();
+        void MakeVisible();
+        void MoveWindow(IntPtr hWnd);
     }
 }

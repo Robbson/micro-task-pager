@@ -7,10 +7,13 @@ namespace MicroTaskPager
 {
     internal static class Program
     {
-        private static Mutex mutex = null;
-
         public static readonly CancellationTokenSource ApplicationClosing = new CancellationTokenSource();
+
+#pragma warning disable SA1401 // Fields should be private -> Needs to be public
         public static WindowsVersion WindowsVersion = new WindowsVersion();
+#pragma warning restore SA1401 // Fields should be private
+
+        private static Mutex mutex = null;
 
         [STAThread]
         private static void Main()

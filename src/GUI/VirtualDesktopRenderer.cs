@@ -15,7 +15,6 @@ using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.GUI
 {
-    // TODO: Screen is not a good term here, it's just a VirtualDesktop, right?
     // It's the pure content renderer, depending on the used mode, also window order is determined here
     public class VirtualDesktopRenderer
     {

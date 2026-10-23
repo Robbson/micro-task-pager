@@ -1,7 +1,8 @@
 // Adapted from https://github.com/MScholtes/VirtualDesktop with a few modifications
-using MicroTaskPager.Core.API;
+#pragma warning disable
 using System;
 using System.Runtime.InteropServices;
+using MicroTaskPager.Core.API;
 
 namespace MicroTaskPager.Core.API.Win10LTSC
 {
@@ -12,27 +13,11 @@ namespace MicroTaskPager.Core.API.Win10LTSC
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGER = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
         public static readonly Guid CLSID_VIRTUALDESKTOPPINNEDAPPS = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
 
-        [StructLayout(LayoutKind.Sequential)]
-        public struct SIZE
-        {
-            public int X;
-            public int Y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
         public enum APPLICATION_VIEW_CLOAK_TYPE : int
         {
             AVCT_NONE = 0,
             AVCT_DEFAULT = 1,
-            AVCT_VIRTUAL_DESKTOP = 2
+            AVCT_VIRTUAL_DESKTOP = 2,
         }
 
         public enum APPLICATION_VIEW_COMPATIBILITY_POLICY : int
@@ -41,7 +26,7 @@ namespace MicroTaskPager.Core.API.Win10LTSC
             AVCP_SMALL_SCREEN = 1,
             AVCP_TABLET_SMALL_SCREEN = 2,
             AVCP_VERY_SMALL_SCREEN = 3,
-            AVCP_HIGH_SCALE_FACTOR = 4
+            AVCP_HIGH_SCALE_FACTOR = 4,
         }
 
         [ComImport]
@@ -188,17 +173,36 @@ namespace MicroTaskPager.Core.API.Win10LTSC
             bool IsViewVisible(IApplicationView view);
             Guid GetId();
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SIZE
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
     }
 
     public class WindowsVirtualDesktop : IWindowsVirtualDesktop
     {
         private static WindowsVirtualDesktopManager _windowsVirtualDesktopManager = new WindowsVirtualDesktopManager();
+
+        public WindowsVirtualDesktop() { }
+        public WindowsVirtualDesktop(IIVirtualDesktop desktop) { this.ivd = desktop; }
+
         public void Restart() => WindowsVirtualDesktop._windowsVirtualDesktopManager = new WindowsVirtualDesktopManager();
         [DllImport("user32.dll")] private static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
 
         public IIVirtualDesktop ivd { get; set; }
-        public WindowsVirtualDesktop() { }
-        public WindowsVirtualDesktop(IIVirtualDesktop desktop) { this.ivd = desktop; }
+
         public void MakeVisible() => _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
         public IWindowsVirtualDesktop FromIndex(int index) => new WindowsVirtualDesktop(_windowsVirtualDesktopManager.GetDesktop(index));
 
@@ -237,6 +241,7 @@ namespace MicroTaskPager.Core.API.Win10LTSC
         public WindowsVirtualDesktopAPI.IVirtualDesktopManager VirtualDesktopManagerPrivate;
         public WindowsVirtualDesktopAPI.IApplicationViewCollection ApplicationViewCollection;
         public WindowsVirtualDesktopAPI.IVirtualDesktopManagerInternal VirtualDesktopManagerInternal;
+
         public int FromDesktop(IWindowsVirtualDesktop desktop) => desktop != null ? GetDesktopIndex((WindowsVirtualDesktopAPI.IVirtualDesktop)desktop.ivd) : -1;
         public bool IsWindowPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsViewPinned(GetApplicationView(hWnd));
         public bool IsApplicationPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsAppIdPinned(GetAppId(hWnd));
@@ -288,6 +293,7 @@ namespace MicroTaskPager.Core.API.Win10LTSC
                     break;
                 }
             }
+
             Marshal.ReleaseComObject(desktops);
             return index;
         }
@@ -306,5 +312,4 @@ namespace MicroTaskPager.Core.API.Win10LTSC
                 VirtualDesktopPinnedApps.PinAppID(appId);
         }
     }
-
 }

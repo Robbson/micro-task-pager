@@ -60,3 +60,16 @@ dotnet_diagnostic.SA1407.severity = none
 
 # I like ommiting brackets, especially when new line for each { is standard
 dotnet_diagnostic.SA1503.severity = none
+
+# Regarding first function call and filename
+dotnet_diagnostic.SA1649.severity = none
+
+# A file may only contain a single type
+dotnet_diagnostic.SA1402.severity = none
+
+# An enumeration should be documented
+dotnet_diagnostic.SA1602.severity = none
+
+# Element should not be on a singe line -> why we should waste additional lines for empty blocks?
+dotnet_diagnostic.SA1501.severity = none
+dotnet_diagnostic.SA1502.severity = none

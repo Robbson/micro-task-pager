@@ -18,9 +18,9 @@ namespace MicroTaskPager.GUI
     public class VirtualDesktop
     {
         private readonly List<VirtualDesktopRenderer> _screenRenderers = new List<VirtualDesktopRenderer>();
+        private readonly int _numScreens;
         private DragDropData _dragDropData;
         private Rectangle dragBoxFromMouseDown;
-        private int _numScreens;
 
         // Used only in MainFrame when ResetVirtualDesktops() ist called (for each desktop)
         public VirtualDesktop(int virtualDesktopIndex, MainForm form, Point location)

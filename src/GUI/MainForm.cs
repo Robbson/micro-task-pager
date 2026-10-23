@@ -404,11 +404,7 @@ namespace MicroTaskPager.GUI
                     Text = "Exit",
                     Image = Helpers.CreateGlyphBitmap("✕"),
                 },
-                () =>
-                {
-
-                    Environment.Exit(0);
-                });
+                () => Environment.Exit(0));
 
             //menu.Opened += (ss, ee) => _forceAppAlwaysOnTop = false;
             menu.Show(this, PointToClient(Cursor.Position));
