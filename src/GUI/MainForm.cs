@@ -28,9 +28,12 @@ namespace MicroTaskPager.GUI
 
         // --- Internal Application State ---
         private readonly List<Desktop> _virtualDesktops = new List<Desktop>();
+        private readonly ActiveWindowTracker _activeWindowTracker = new ActiveWindowTracker();
+        private readonly IntPtr _foregroundWindowAtStartup;
         private bool _isAppPinned = false;
         private int _activeDesktopIndex = 0;
         private int _currentDesktopCount = 0;
+        private int _desktopSwitchVersion = 0;
         private string _screenConfigurationSignature = string.Empty;
         private string _windowsHash = string.Empty;
 
@@ -38,6 +41,9 @@ namespace MicroTaskPager.GUI
 
         public MainForm()
         {
+            // Capture the window that was active before the pager shows up (the pager isn't shown yet)
+            _foregroundWindowAtStartup = WinAPI.GetForegroundWindow();
+
             SuspendLayout();
             SetStyle(
                 ControlStyles.ResizeRedraw
@@ -103,6 +109,28 @@ namespace MicroTaskPager.GUI
         // Application Options: Configurable by user
         public AppSettings Options { get; private set; }
 
+        // Restores the last active window of the desktop the pager just switched to
+        public void RestoreLastActiveWindow(int desktopIndex)
+        {
+            _activeWindowTracker.RestoreLastActiveWindow(desktopIndex);
+
+            // The desktop switch can still be in progress, so retry once after the switch animation
+            int version = ++_desktopSwitchVersion;
+            Task.Run(async () =>
+            {
+                await Task.Delay(150);
+                TryInvoke(() =>
+                {
+                    if (version != _desktopSwitchVersion || GetActiveDesktopIndex() != desktopIndex)
+                    {
+                        return;
+                    }
+
+                    _activeWindowTracker.RestoreLastActiveWindow(desktopIndex);
+                });
+            });
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -126,6 +154,7 @@ namespace MicroTaskPager.GUI
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             // Stop the background polling loops before the window handle gets destroyed
+            _activeWindowTracker.Dispose();
             Program.ApplicationClosing.Cancel();
             base.OnFormClosing(e);
         }
@@ -141,6 +170,20 @@ namespace MicroTaskPager.GUI
                         $"{x.DeviceName}:" +
                         $"{x.Bounds.X},{x.Bounds.Y},{x.Bounds.Width},{x.Bounds.Height}:" +
                         $"{x.Primary}"));
+        }
+
+        private static int GetActiveDesktopIndex()
+        {
+            try
+            {
+                return WindowsVirtualDesktopManager.GetInstance()
+                    .FromDesktop(WindowsVirtualDesktop.GetInstance().Current);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Could not determine the active desktop");
+                return -1;
+            }
         }
 
         // Safe Invoke for the background loops: during shutdown the handle can disappear between
@@ -254,6 +297,10 @@ namespace MicroTaskPager.GUI
 
         private void OnShown(object sender, EventArgs e)
         {
+            // Remember the window that was active before the pager got shown
+            _activeWindowTracker.Start(Handle);
+            _activeWindowTracker.RememberWindow(_foregroundWindowAtStartup);
+
             // Primary application loop to check global window changes so the miniatures get updated
             Task.Run(async () =>
             {

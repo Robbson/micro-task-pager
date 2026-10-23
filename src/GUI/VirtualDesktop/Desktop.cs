@@ -128,6 +128,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     // Changing Desktop has to be done when mouse gets up, otherwise we instantly select and focus an
                     // app of the new desktop
                     WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible();
+                    Form.RestoreLastActiveWindow(VirtualDesktopIndex);
                     Form.Invalidate();
                 }
             }
