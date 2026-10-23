@@ -83,6 +83,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseDown(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
+            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
                 var w = GetWindowUnderCursor(e.Location);
@@ -108,6 +109,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseUp(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
+            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
                 // Bring a window into front by clicking on its miniature / icon
@@ -162,6 +164,8 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseMove(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
+            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
+
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
                 // The previously prepared drag & drop gets activated

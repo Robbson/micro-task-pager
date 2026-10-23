@@ -327,7 +327,7 @@ namespace MicroTaskPager.GUI
 
         private void OnMouseDown(object sender, MouseEventArgs e)
         {
-            if ((e.Button & MouseButtons.Middle) == MouseButtons.Middle)
+            if ((e.Button & MouseButtons.Middle) == MouseButtons.Middle || (Control.ModifierKeys & Keys.Shift) != Keys.None)
             {
                 IsDraggingWindow = true;
                 dragOffset = e.Location;
