@@ -31,6 +31,7 @@ namespace MicroTaskPager.GUI
         private bool _isAppPinned = false;
         private int _activeDesktopIndex = 0;
         private int _currentDesktopCount = 0;
+        private string _screenConfigurationSignature = string.Empty;
         private string _windowsHash = string.Empty;
 
         private Point dragOffset;
@@ -74,6 +75,7 @@ namespace MicroTaskPager.GUI
 
             // Collect all virtual desktops and add mouse event listeners to them (uses PagerHeight)
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
+            _screenConfigurationSignature = GetScreenConfigurationSignature();
 
             // Pager size depending on current amount of virtual desktops
             Size = new Size(_virtualDesktops.Sum(x => x.Size.Width), PagerHeightPixels);
@@ -128,6 +130,19 @@ namespace MicroTaskPager.GUI
             base.OnFormClosing(e);
         }
 
+        // Detects monitors being added/removed or their resolution/arrangement changing while the app runs
+        private static string GetScreenConfigurationSignature()
+        {
+            return string.Join(
+                "|",
+                Screen.AllScreens
+                    .OrderBy(x => x.DeviceName, StringComparer.Ordinal)
+                    .Select(x =>
+                        $"{x.DeviceName}:" +
+                        $"{x.Bounds.X},{x.Bounds.Y},{x.Bounds.Width},{x.Bounds.Height}:" +
+                        $"{x.Primary}"));
+        }
+
         // Safe Invoke for the background loops: during shutdown the handle can disappear between
         // the loop check and the Invoke call, which throws InvalidOperationException
         private bool TryInvoke(Action action)
@@ -172,6 +187,18 @@ namespace MicroTaskPager.GUI
 
         private bool HasDesktopCountChanged() => _currentDesktopCount != WindowsVirtualDesktop.GetInstance().Count;
 
+        private bool HasScreenConfigurationChanged()
+        {
+            var signature = GetScreenConfigurationSignature();
+            if (signature == _screenConfigurationSignature)
+            {
+                return false;
+            }
+
+            _screenConfigurationSignature = signature;
+            return true;
+        }
+
         private void ResetVirtualDesktops()
         {
             // Remove mouse listeners for all existing desktops first before removing them
@@ -190,6 +217,7 @@ namespace MicroTaskPager.GUI
 
             _virtualDesktops.Clear();
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
+            _screenConfigurationSignature = GetScreenConfigurationSignature();
 
             var newSize = new Size(_virtualDesktops.Sum(d => d.Size.Width), PagerHeightPixels);
 
@@ -282,7 +310,7 @@ namespace MicroTaskPager.GUI
                             WindowManager.RestoreWindow(Handle);
                         }
 
-                        if (HasDesktopCountChanged())
+                        if (HasDesktopCountChanged() || HasScreenConfigurationChanged())
                         {
                             ResetVirtualDesktops();
                         }
