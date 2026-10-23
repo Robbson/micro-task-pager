@@ -9,7 +9,7 @@ namespace MicroTaskPager
     {
         private static Mutex mutex = null;
 
-        public static CancellationToken ApplicationClosing = new CancellationToken();
+        public static readonly CancellationTokenSource ApplicationClosing = new CancellationTokenSource();
         public static WindowsVersion WindowsVersion = new WindowsVersion();
 
         [STAThread]

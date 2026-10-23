@@ -29,7 +29,10 @@ namespace MicroTaskPager
             InitializeComponent();
 
             _settingsBefore = AppSettings.Clone(settings);
-            Settings = AppSettings.Clone(settings);
+
+            // The window only reads the passed settings; edits are collected in BuildSettingsFromControls()
+            // and MainForm keeps its own copy for restoring on Cancel.
+            Settings = settings;
 
             cmbDesktopModeDefault.Items.Add("Preview");
             cmbDesktopModeDefault.Items.Add("MicroTaskbar");
@@ -339,7 +342,6 @@ namespace MicroTaskPager
         private void ChooseDesktopBackgroundColor_Click(object sender, RoutedEventArgs e)
         {
             ChooseColor(ref _desktopBackgroundColor);
-            Settings.DesktopBackgroundColor = _desktopBackgroundColor;
         }
 
         private void ChooseDesktopBorderColor_Click(object sender, RoutedEventArgs e)

@@ -107,10 +107,41 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        protected override void OnResize(EventArgs e) 
+        protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
             Invalidate();   // invalidates the whole client area at the new size
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            // Stop the background polling loops before the window handle gets destroyed
+            Program.ApplicationClosing.Cancel();
+            base.OnFormClosing(e);
+        }
+
+        // Safe Invoke for the background loops: during shutdown the handle can disappear between
+        // the loop check and the Invoke call, which throws InvalidOperationException
+        private bool TryInvoke(Action action)
+        {
+            if (IsDisposed || !IsHandleCreated)
+            {
+                return false;
+            }
+
+            try
+            {
+                Invoke(action);
+                return true;
+            }
+            catch (InvalidOperationException) when (IsDisposed || !IsHandleCreated)
+            {
+                return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
         }
 
         // Default app window location: Centered and above Taskbar
@@ -190,7 +221,7 @@ namespace MicroTaskPager.GUI
             {
                 while (!Program.ApplicationClosing.IsCancellationRequested)
                 {
-                    Invoke(new Action(() =>
+                    if (!TryInvoke(() =>
                     {
                         try
                         {
@@ -215,7 +246,10 @@ namespace MicroTaskPager.GUI
                         catch
                         {
                         }
-                    }));
+                    }))
+                    {
+                        break;
+                    }
 
                     // So we don't waste too many CPU cycles
                     await Task.Delay(Options.PrimaryUpdateDelay);
@@ -229,7 +263,7 @@ namespace MicroTaskPager.GUI
             {
                 while (!Program.ApplicationClosing.IsCancellationRequested)
                 {
-                    Invoke(new Action(() =>
+                    if (!TryInvoke(() =>
                     {
                         // Check if window is covered shoulf be fine with every 500ms
                         if (IsCovered())
@@ -270,7 +304,11 @@ namespace MicroTaskPager.GUI
                         catch
                         {
                         }
-                    }));
+                    }))
+                    {
+                        break;
+                    }
+
                     await Task.Delay(Options.SecondaryUpdateDelay);
                 }
             });
