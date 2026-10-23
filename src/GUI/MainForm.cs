@@ -12,6 +12,7 @@ using MicroTaskPager.Config;
 using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
 using MicroTaskPager.GUI.VirtualDesktop;
+using Serilog;
 
 namespace MicroTaskPager.GUI
 {
@@ -23,8 +24,10 @@ namespace MicroTaskPager.GUI
         public ConcurrentBag<Window> Windows = new ConcurrentBag<Window>();
 #pragma warning restore SA1401 // Fields should be private
 
+        private static readonly ILogger _logger = Log.ForContext<MainForm>();
+
         // --- Internal Application State ---
-        private readonly List<DesktopRenderer> _virtualDesktops = new List<DesktopRenderer>();
+        private readonly List<Desktop> _virtualDesktops = new List<Desktop>();
         private bool _isAppPinned = false;
         private int _activeDesktopIndex = 0;
         private int _currentDesktopCount = 0;
@@ -200,12 +203,12 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        private void GetVirtualDesktopsAndAddMouseHandlers(List<DesktopRenderer> virtualDesktops)
+        private void GetVirtualDesktopsAndAddMouseHandlers(List<Desktop> virtualDesktops)
         {
             _currentDesktopCount = WindowsVirtualDesktop.GetInstance().Count;
             Enumerable.Range(0, _currentDesktopCount).ToList().ForEach(d =>
             {
-                DesktopRenderer desktop = new DesktopRenderer(d, this, new Point(_virtualDesktops.Sum(i => i.Size.Width), 0));
+                Desktop desktop = new Desktop(d, this, new Point(_virtualDesktops.Sum(i => i.Size.Width), 0));
                 MouseUp += desktop.OnMouseUp;
                 MouseDown += desktop.OnMouseDown;
                 MouseWheel += desktop.OnMouseWheel;
@@ -245,8 +248,9 @@ namespace MicroTaskPager.GUI
                                 Invalidate();
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            _logger.Error(ex, "Error while building change detection hash");
                         }
                     }))
                     {
@@ -290,8 +294,9 @@ namespace MicroTaskPager.GUI
                                 WindowsVirtualDesktopManager.GetInstance().PinApplication(Handle);
                                 _isAppPinned = true;
                             }
-                            catch
+                            catch (Exception ex)
                             {
+                                _logger.Error(ex, "Error while pinning application " + Handle);
                             }
                         }
 
@@ -302,8 +307,9 @@ namespace MicroTaskPager.GUI
                             Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows());
                             //Invalidate();
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            _logger.Error(ex, "Error while trying to get Active Desktop Index");
                         }
                     }))
                     {
@@ -403,7 +409,7 @@ namespace MicroTaskPager.GUI
                     Text = "Exit",
                     Image = Helpers.CreateGlyphBitmap("✕"),
                 },
-                () => Environment.Exit(0));
+                () => Application.Exit());
 
             //menu.Opened += (ss, ee) => _forceAppAlwaysOnTop = false;
             menu.Show(this, PointToClient(Cursor.Position));

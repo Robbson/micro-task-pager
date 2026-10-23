@@ -19,27 +19,23 @@
 	
   <ItemGroup>
     <Content Remove="Resources/icon.ico" />
-    <Content Remove="Resources/icon.png" />
+    <Content Remove="Resources/logo.png" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Resources/icon.ico" />
-    <EmbeddedResource Include="Resources/icon.png" />
+    <EmbeddedResource Include="Resources/logo.png" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.118">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <EditorConfigFiles Remove="C:\dev\micro-task-pager\src\GUI\.editorconfig" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="C:\dev\micro-task-pager\src\.editorconfig" />
   </ItemGroup>
 
 </Project>

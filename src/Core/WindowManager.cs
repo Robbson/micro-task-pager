@@ -7,11 +7,14 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using MicroTaskPager.Core.API;
+using MicroTaskPager.GUI;
+using Serilog;
 
 namespace MicroTaskPager.Core
 {
     public class WindowManager
     {
+        private static readonly ILogger _logger = Log.ForContext<WindowManager>();
         private static readonly List<IntPtr> _hWndBlacklist = new List<IntPtr>();
         private static readonly string[] _classBlacklist = new string[]
         {
@@ -52,17 +55,21 @@ namespace MicroTaskPager.Core
                 var rect = default(WinAPI.RECT);
                 WinAPI.GetWindowRect(hWnd, ref rect);
 
+                // TODO: We can't just ignore exceptions
                 // Get virtual desktop index
                 int index = 0;
                 WinAPI.GetWindowThreadProcessId(hWnd, out uint pid);
-                try { index = WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktopManager.GetInstance().FromWindow((IntPtr)hWnd)); }
-                catch
+                try
+                {
+                    index = WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktopManager.GetInstance().FromWindow((IntPtr)hWnd));
+                }
+                catch (Exception ex)
                 {
                     // Note: This is where Exception thrown: 'System.Runtime.InteropServices.COMException' comes from
                     // -> This happens when a windows gets snapped to a split view and the special window appears where the user has to select one of a list
                     //    to view for the other half of the screen
                     // All windows where this happens are getting blacklisted
-                    Debug.WriteLine("Window black-listed: " + hWnd);
+                    _logger.Error(ex, "Error while trying to get virtual desktop index, window gets blacklisted: " + hWnd);
                     _hWndBlacklist.Add(hWnd);
                     return true;
                 }

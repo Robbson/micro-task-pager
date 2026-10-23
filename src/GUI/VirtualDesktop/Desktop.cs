@@ -14,10 +14,10 @@ using BorderStyle = MicroTaskPager.Config.BorderStyle;
 namespace MicroTaskPager.GUI.VirtualDesktop
 {
     // Holds all data for a desktop shown as a rectangle in the app, manages a ScreenRenderer for each physical PC screen
-    // - this DesktopRenderer class only handles selecting a desktop, drag & drop windows inbetween and painting the selection border,
+    // - this Desktop class only handles selecting a desktop, drag & drop windows inbetween and painting the selection border,
     //   while the ScreenRenderer draws all the content
     // - It's no WinForm Control! It just receives direct rendering requests from the MainForm and also forces the rendering ob its Screen Renderer child classes
-    public class DesktopRenderer
+    public class Desktop
     {
         private readonly List<ScreenRenderer> _screenRenderers = new List<ScreenRenderer>();
         private readonly int _numScreens;
@@ -25,7 +25,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         private Rectangle dragBoxFromMouseDown;
 
         // Used only in MainFrame when ResetVirtualDesktops() ist called (for each desktop)
-        public DesktopRenderer(int virtualDesktopIndex, MainForm form, Point location)
+        public Desktop(int virtualDesktopIndex, MainForm form, Point location)
         {
             Form = form;
             Location = location;

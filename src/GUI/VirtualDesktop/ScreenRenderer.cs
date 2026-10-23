@@ -27,7 +27,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public MainForm Form { get; set; }
         public Point Location { get; set; }
         public Screen AttachedScreen { get; set; }
-        public DesktopRenderer VirtualDesktop { get; set; }
+        public Desktop VirtualDesktop { get; set; }
         public Dictionary<IntPtr, Rectangle> WindowAreas { get; set; } = new Dictionary<IntPtr, Rectangle>();
         public ViewMode Mode { get; set; }
 

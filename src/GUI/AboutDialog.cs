@@ -18,24 +18,24 @@ namespace MicroTaskPager.GUI
 
             Text = "About Micro Task Pager";
             FormBorderStyle = FormBorderStyle.FixedDialog;
-            StartPosition = FormStartPosition.CenterParent;
+            StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(420, 340);
+            ClientSize = new Size(600, 480);
             BackColor = Color.White;
 
             var iconBox = new PictureBox
             {
-                Size = new Size(96, 96),
+                Size = new Size(512, 278),
                 SizeMode = PictureBoxSizeMode.Zoom,
-                Location = new Point((ClientSize.Width - 96) / 2, 20),
+                Location = new Point((ClientSize.Width - 512) / 2, 20),
             };
 
             try
             {
                 using (var iconStream = new MemoryStream(
-                    Helpers.GetResourceFromAssembly(typeof(Program), "MicroTaskPager.Resources.icon.png")))
+                    Helpers.GetResourceFromAssembly(typeof(Program), "MicroTaskPager.Resources.logo.png")))
                 using (var pngImage = Image.FromStream(iconStream))
                 {
                     iconBox.Image = new Bitmap(pngImage);
@@ -46,23 +46,12 @@ namespace MicroTaskPager.GUI
                 iconBox.Image = Icon?.ToBitmap();
             }
 
-            var appNameLabel = new Label
-            {
-                AutoSize = false,
-                Width = ClientSize.Width,
-                Height = 32,
-                Location = new Point(0, 126),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Segoe UI", 16, FontStyle.Bold),
-                Text = "Micro Task Pager",
-            };
-
             var versionLabel = new Label
             {
                 AutoSize = false,
                 Width = ClientSize.Width,
                 Height = 24,
-                Location = new Point(0, 160),
+                Location = new Point(0, 300),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 10, FontStyle.Regular),
                 ForeColor = Color.DimGray,
@@ -74,8 +63,8 @@ namespace MicroTaskPager.GUI
                 AutoSize = false,
                 Width = ClientSize.Width - 40,
                 Height = 24,
-                Location = new Point(20, 202),
-                TextAlign = ContentAlignment.MiddleLeft,
+                Location = new Point(20, 330),
+                TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
                 Text = "Author: Robbson (Robin Siegemund) 2026",
             };
@@ -84,8 +73,8 @@ namespace MicroTaskPager.GUI
             {
                 AutoSize = false,
                 Width = ClientSize.Width - 40,
-                Height = 70,
-                Location = new Point(20, 226),
+                Height = 60,
+                Location = new Point((ClientSize.Width - 160) / 2, 360),
                 TextAlign = ContentAlignment.TopLeft,
                 Font = new Font("Segoe UI", 9, FontStyle.Regular),
                 Text = "Acknowledgments:\n" +
@@ -98,7 +87,7 @@ namespace MicroTaskPager.GUI
                 Text = "Close",
                 Width = 100,
                 Height = 30,
-                Location = new Point((ClientSize.Width - 100) / 2, 298),
+                Location = new Point((ClientSize.Width - 100) / 2, 425),
                 DialogResult = DialogResult.OK,
             };
 
@@ -106,7 +95,6 @@ namespace MicroTaskPager.GUI
             CancelButton = closeButton;
 
             Controls.Add(iconBox);
-            Controls.Add(appNameLabel);
             Controls.Add(versionLabel);
             Controls.Add(authorLabel);
             Controls.Add(contributorsLabel);
