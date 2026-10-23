@@ -17,9 +17,15 @@ namespace MicroTaskPager.Core
              "Windows.UI.Core.CoreWindow", // Start menu
         };
 
+        // Icons are expensive GDI+ objects and GetOpenWindows runs several times per second,
+        // so they are cached per window handle and shared between snapshots instead of recreated on every poll
+        private static readonly Dictionary<IntPtr, (IntPtr Source, Bitmap Bitmap)> IconCache =
+            new Dictionary<IntPtr, (IntPtr Source, Bitmap Bitmap)>();
+
         public static List<Window> GetOpenWindows()
         {
             var windowList = new List<Window>();
+            var activeHandles = new HashSet<IntPtr>();
             var shellWindow = WinAPI.GetShellWindow();
 
             WinAPI.EnumWindows(
@@ -63,6 +69,7 @@ namespace MicroTaskPager.Core
                 if (hIcon == 0) { hIcon = WinAPI.GetClassLongPtr(hWnd, WinAPI.GCL_HICON); }
                 if (hIcon == 0) { hIcon = WinAPI.LoadIcon(IntPtr.Zero, (IntPtr)WinAPI.IDI_APPLICATION); }
 
+                activeHandles.Add(hWnd);
                 windowList.Add(new Window()
                 {
                     Handle = hWnd,
@@ -70,7 +77,7 @@ namespace MicroTaskPager.Core
                     ProcessID = pid,
                     Class = className.ToString(),
                     ZOrder = GetWindowZOrder(hWnd),
-                    Icon = hIcon != 0 ? new Bitmap(Icon.FromHandle((IntPtr)hIcon).ToBitmap(), 16, 16) : null,
+                    Icon = GetWindowIcon(hWnd, (IntPtr)hIcon),
                     IsActive = hWnd == WinAPI.GetForegroundWindow(),
                     Dimensions = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
                     VirtualDesktopIndex = index,
@@ -78,6 +85,8 @@ namespace MicroTaskPager.Core
 
                 return true;
             }, 0);
+
+            PruneIconCache(activeHandles);
 
             // Process IDs would not work for windows of same process, so we use the handles now
             windowList.Sort((x, y) => x.Handle.ToInt32().CompareTo(y.Handle.ToInt32()));
@@ -111,6 +120,53 @@ namespace MicroTaskPager.Core
             var zOrder = -1;
             while ((hWnd = WinAPI.GetWindow(hWnd, WinAPI.GW_HWNDNEXT)) != IntPtr.Zero) zOrder++;
             return zOrder;
+        }
+
+        private static Bitmap GetWindowIcon(IntPtr hWnd, IntPtr hIcon)
+        {
+            lock (IconCache)
+            {
+                if (IconCache.TryGetValue(hWnd, out var cached))
+                {
+                    if (cached.Source == hIcon)
+                    {
+                        return cached.Bitmap;
+                    }
+
+                    cached.Bitmap?.Dispose();
+                    IconCache.Remove(hWnd);
+                }
+
+                var bitmap = CreateWindowIcon(hIcon);
+                IconCache[hWnd] = (hIcon, bitmap);
+                return bitmap;
+            }
+        }
+
+        private static Bitmap CreateWindowIcon(IntPtr hIcon)
+        {
+            if (hIcon == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            using (var icon = Icon.FromHandle(hIcon))
+            using (var source = icon.ToBitmap())
+            {
+                return new Bitmap(source, 16, 16);
+            }
+        }
+
+        private static void PruneIconCache(HashSet<IntPtr> activeHandles)
+        {
+            lock (IconCache)
+            {
+                foreach (var handle in IconCache.Keys.Where(x => !activeHandles.Contains(x)).ToList())
+                {
+                    IconCache[handle].Bitmap?.Dispose();
+                    IconCache.Remove(handle);
+                }
+            }
         }
     }
 }

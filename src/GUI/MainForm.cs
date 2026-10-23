@@ -109,7 +109,6 @@ namespace MicroTaskPager.GUI
 
         protected override void OnResize(EventArgs e) 
         {
-            Debug.WriteLine("RESIZED");
             base.OnResize(e);
             Invalidate();   // invalidates the whole client area at the new size
         }

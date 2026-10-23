@@ -19,12 +19,10 @@ namespace MicroTaskPager.GUI
     // It's the pure content renderer, depending on the used mode, also window order is determined here
     public class VirtualDesktopRenderer
     {
-        private readonly Font _font;
-
-        public VirtualDesktopRenderer()
-        {
-            _font = new Font("Segoe UI Symbol", 12, FontStyle.Regular, GraphicsUnit.Pixel);
-        }
+        // Shared by all renderers and for the whole process lifetime, because a Font is a native GDI object.
+        // Creating one per renderer (and per settings preview) leaked a handle each time.
+        private static readonly Font _font =
+            new Font("Segoe UI Symbol", 12, FontStyle.Regular, GraphicsUnit.Pixel);
 
         public Size Size { get; set; }
         public MainForm Form { get; set; }
@@ -102,22 +100,35 @@ namespace MicroTaskPager.GUI
                 Color borderColor = wnd.IsActive ? Form.Options.ActiveWindowBorderColor : Form.Options.WindowBorderColor;
 
                 // Window rectangle fill
-                g.FillRectangle(
-                    new SolidBrush(fillColor),
-                    new Rectangle(area.X, area.Y, area.Width - Form.BorderSize, area.Height - Form.BorderSize));
+                using (var fillBrush = new SolidBrush(fillColor))
+                {
+                    g.FillRectangle(
+                        fillBrush,
+                        new Rectangle(area.X, area.Y, area.Width - Form.BorderSize, area.Height - Form.BorderSize));
+                }
 
                 // Window icon
-                var oldBounds = g.ClipBounds;
-                g.Clip = new Region(area);
-                g.DrawImage(wnd.Icon, new Point(
-                    (area.X + area.Width / 2) - wnd.Icon.Width / 2,
-                    (area.Y + area.Height / 2) - wnd.Icon.Height / 2));
-                g.Clip = new Region(oldBounds);
+                var state = g.Save();
+                try
+                {
+                    g.SetClip(area);
+                    g.DrawImage(wnd.Icon, new Point(
+                        (area.X + area.Width / 2) - wnd.Icon.Width / 2,
+                        (area.Y + area.Height / 2) - wnd.Icon.Height / 2));
+                }
+                finally
+                {
+                    g.Restore(state);
+                }
 
                 // Window border
-                g.DrawRectangle(
-                    new Pen(new SolidBrush(borderColor), Form.BorderSize),
-                    new Rectangle(area.X, area.Y, area.Width - Form.BorderSize, area.Height - Form.BorderSize));
+                using (var borderBrush = new SolidBrush(borderColor))
+                using (var borderPen = new Pen(borderBrush, Form.BorderSize))
+                {
+                    g.DrawRectangle(
+                        borderPen,
+                        new Rectangle(area.X, area.Y, area.Width - Form.BorderSize, area.Height - Form.BorderSize));
+                }
             }
         }
 
@@ -188,13 +199,23 @@ namespace MicroTaskPager.GUI
                 if (remainingIcons > 0 && col == colsNum - 1 && row == rowsNum - 1)
                 {
                     // Reserve the last possible position for the remaining count (+1 because it reduces the available slots)
-                    g.DrawString("+" + (remainingIcons + 1).ToString(), _font, new SolidBrush(Form.Options.ActiveWindowBorderColor), areaCenterOffsetX, areaCenterOffsetY - 1);
+                    using (var textBrush = new SolidBrush(Form.Options.ActiveWindowBorderColor))
+                    {
+                        g.DrawString("+" + (remainingIcons + 1).ToString(), _font, textBrush, areaCenterOffsetX, areaCenterOffsetY - 1);
+                    }
+
                     break; // No more drawing
                 }
                 else
                 {
                     // Highlight the selection area
-                    if (wnd.IsActive) g.FillRectangle(new SolidBrush(Form.Options.ActiveWindowBackgroundColor), selectionArea);
+                    if (wnd.IsActive)
+                    {
+                        using (var highlightBrush = new SolidBrush(Form.Options.ActiveWindowBackgroundColor))
+                        {
+                            g.FillRectangle(highlightBrush, selectionArea);
+                        }
+                    }
 
                     // Place the icon in the selection area's center
                     g.DrawImage(wnd.Icon, new Point(areaCenterOffsetX, areaCenterOffsetY));

@@ -151,38 +151,46 @@ namespace MicroTaskPager.GUI
             Graphics g = e.Graphics;
             var separaterColor = Color.FromArgb(64, Color.LightBlue); // TODO: Make color and maybe alpha value a settings parameter
 
-            int xoffset = 0;
-            _screenRenderers.ForEach(renderer =>
+            using (var separatorBrush = new SolidBrush(separaterColor))
             {
-                // Trigger repaint of each renderer
-                renderer.OnPaint(e);
-
-                // Draw separators when more than one screens are present
-                if (_numScreens > 1)
+                int xoffset = 0;
+                _screenRenderers.ForEach(renderer =>
                 {
-                    xoffset += renderer.Size.Width;
-                    g.FillRectangle(
-                        new SolidBrush(separaterColor),
-                        //new HatchBrush(HatchStyle.LightHorizontal, Color.Transparent, separaterColor
-                        new Rectangle(Location.X + xoffset, Location.Y, Form.BorderSize, Size.Height - Form.BorderSize));
-                }
-            });
+                    // Trigger repaint of each renderer
+                    renderer.OnPaint(e);
+
+                    // Draw separators when more than one screens are present
+                    if (_numScreens > 1)
+                    {
+                        xoffset += renderer.Size.Width;
+                        g.FillRectangle(
+                            separatorBrush,
+                            new Rectangle(Location.X + xoffset, Location.Y, Form.BorderSize, Size.Height - Form.BorderSize));
+                    }
+                });
+            }
 
             Color desktopBorderColor = IsCurrentActiveDesktop ? Form.Options.ActiveDesktopBorderColor : Form.Options.DesktopBorderColor;
 
-            if (Form.Options.DesktopBorderStyle == BorderStyle.Box)
+            using (var desktopBorderBrush = new SolidBrush(desktopBorderColor))
             {
-                // Draw a border around the active desktop
-                g.DrawRectangle(
-                    new Pen(new SolidBrush(desktopBorderColor), Form.BorderSize),
-                    new Rectangle(Location.X, Location.Y, Size.Width - Form.BorderSize, Size.Height - Form.BorderSize));
-            }
-            else
-            {
-                // Just underline the active desktop
-                g.FillRectangle(
-                    new SolidBrush(desktopBorderColor),
-                    new Rectangle(Location.X, Size.Height - Form.BorderSize, Size.Width, Size.Height));
+                if (Form.Options.DesktopBorderStyle == BorderStyle.Box)
+                {
+                    // Draw a border around the active desktop
+                    using (var desktopBorderPen = new Pen(desktopBorderBrush, Form.BorderSize))
+                    {
+                        g.DrawRectangle(
+                            desktopBorderPen,
+                            new Rectangle(Location.X, Location.Y, Size.Width - Form.BorderSize, Size.Height - Form.BorderSize));
+                    }
+                }
+                else
+                {
+                    // Just underline the active desktop
+                    g.FillRectangle(
+                        desktopBorderBrush,
+                        new Rectangle(Location.X, Size.Height - Form.BorderSize, Size.Width, Size.Height));
+                }
             }
         }
 
