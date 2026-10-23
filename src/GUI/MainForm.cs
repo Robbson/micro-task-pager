@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using MicroTaskPager.Config;
 using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
+using MicroTaskPager.GUI.VirtualDesktop;
 
 namespace MicroTaskPager.GUI
 {
@@ -23,7 +24,7 @@ namespace MicroTaskPager.GUI
 #pragma warning restore SA1401 // Fields should be private
 
         // --- Internal Application State ---
-        private readonly List<VirtualDesktop> _virtualDesktops = new List<VirtualDesktop>();
+        private readonly List<DesktopRenderer> _virtualDesktops = new List<DesktopRenderer>();
         private bool _isAppPinned = false;
         private int _activeDesktopIndex = 0;
         private int _currentDesktopCount = 0;
@@ -199,12 +200,12 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        private void GetVirtualDesktopsAndAddMouseHandlers(List<VirtualDesktop> virtualDesktops)
+        private void GetVirtualDesktopsAndAddMouseHandlers(List<DesktopRenderer> virtualDesktops)
         {
             _currentDesktopCount = WindowsVirtualDesktop.GetInstance().Count;
             Enumerable.Range(0, _currentDesktopCount).ToList().ForEach(d =>
             {
-                VirtualDesktop desktop = new VirtualDesktop(d, this, new Point(_virtualDesktops.Sum(i => i.Size.Width), 0));
+                DesktopRenderer desktop = new DesktopRenderer(d, this, new Point(_virtualDesktops.Sum(i => i.Size.Width), 0));
                 MouseUp += desktop.OnMouseUp;
                 MouseDown += desktop.OnMouseDown;
                 MouseWheel += desktop.OnMouseWheel;
@@ -274,7 +275,6 @@ namespace MicroTaskPager.GUI
 
                         if (HasDesktopCountChanged())
                         {
-                            // TODO: Adjust the list length for the individual view settings
                             ResetVirtualDesktops();
                         }
 

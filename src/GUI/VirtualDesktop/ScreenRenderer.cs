@@ -13,10 +13,10 @@ using MicroTaskPager.Config;
 using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
 
-namespace MicroTaskPager.GUI
+namespace MicroTaskPager.GUI.VirtualDesktop
 {
     // It's the pure content renderer, depending on the used mode, also window order is determined here
-    public class VirtualDesktopScreenRenderer
+    public class ScreenRenderer
     {
         // Shared by all renderers and for the whole process lifetime, because a Font is a native GDI object.
         // Creating one per renderer (and per settings preview) leaked a handle each time.
@@ -27,7 +27,7 @@ namespace MicroTaskPager.GUI
         public MainForm Form { get; set; }
         public Point Location { get; set; }
         public Screen AttachedScreen { get; set; }
-        public VirtualDesktop VirtualDesktop { get; set; }
+        public DesktopRenderer VirtualDesktop { get; set; }
         public Dictionary<IntPtr, Rectangle> WindowAreas { get; set; } = new Dictionary<IntPtr, Rectangle>();
         public ViewMode Mode { get; set; }
 

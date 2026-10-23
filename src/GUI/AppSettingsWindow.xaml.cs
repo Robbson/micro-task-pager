@@ -7,7 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using MicroTaskPager.Config;
 using MicroTaskPager.Core.API;
-using MicroTaskPager.GUI;
 using DrawingColor = System.Drawing.Color;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
@@ -15,7 +14,7 @@ using DrawingSize = System.Drawing.Size;
 using Forms = System.Windows.Forms;
 using WpfPoint = System.Windows.Point;
 
-namespace MicroTaskPager
+namespace MicroTaskPager.GUI
 {
     public partial class AppSettingsWindow : System.Windows.Window
     {
