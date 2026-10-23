@@ -10,14 +10,15 @@ namespace MicroTaskPager.Core
     {
         public static Bitmap CreateGlyphBitmap(string glyph, int size = 16)
         {
-            var bmp = new Bitmap(size, size);
+            int pixelSize = Dpi.Scale(size);
+            var bmp = new Bitmap(pixelSize, pixelSize);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.Clear(Color.Transparent);
                 g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
 
                 // Try common Windows fonts with broad unicode support.
-                using (var font = new Font("Segoe UI Symbol", size - 2, FontStyle.Regular, GraphicsUnit.Pixel))
+                using (var font = new Font("Segoe UI Symbol", pixelSize - Dpi.Scale(2), FontStyle.Regular, GraphicsUnit.Pixel))
                 using (var sf = new StringFormat
                 {
                     Alignment = StringAlignment.Center,
@@ -25,7 +26,7 @@ namespace MicroTaskPager.Core
                     FormatFlags = StringFormatFlags.NoWrap,
                 })
                 {
-                    g.DrawString(glyph, font, Brushes.Black, new RectangleF(0, 0, size, size), sf);
+                    g.DrawString(glyph, font, Brushes.Black, new RectangleF(0, 0, pixelSize, pixelSize), sf);
                 }
             }
 

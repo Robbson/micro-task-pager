@@ -69,7 +69,7 @@ namespace MicroTaskPager.Core
                     // -> This happens when a windows gets snapped to a split view and the special window appears where the user has to select one of a list
                     //    to view for the other half of the screen
                     // All windows where this happens are getting blacklisted
-                    _logger.Error(ex, "Error while trying to get virtual desktop index, window gets blacklisted: " + hWnd);
+                    _logger.Error(ex, "Error while trying to get virtual desktop index, window gets blacklisted: " + hWnd.ToString("X"));
                     _hWndBlacklist.Add(hWnd);
                     return true;
                 }
@@ -163,7 +163,7 @@ namespace MicroTaskPager.Core
             using (var icon = Icon.FromHandle(hIcon))
             using (var source = icon.ToBitmap())
             {
-                return new Bitmap(source, 16, 16);
+                return new Bitmap(source, Dpi.Scale(16), Dpi.Scale(16));
             }
         }
 

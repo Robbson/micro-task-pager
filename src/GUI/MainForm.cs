@@ -46,8 +46,10 @@ namespace MicroTaskPager.GUI
             // Form properties set to defaults
             Name = "frmMain";
             DoubleBuffered = true;
-            AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+
+            // The pager is laid out in physical pixels and handles its own DPI scaling (see Dpi class),
+            // so WinForms must not scale it a second time.
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             StartPosition = FormStartPosition.Manual;
             ControlBox = false;
             MaximizeBox = false;
@@ -74,7 +76,7 @@ namespace MicroTaskPager.GUI
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
 
             // Pager size depending on current amount of virtual desktops
-            Size = new Size(_virtualDesktops.Sum(x => x.Size.Width), Options.PagerHeight);
+            Size = new Size(_virtualDesktops.Sum(x => x.Size.Width), PagerHeightPixels);
             MinimumSize = Size;
             MaximumSize = Size;
             ClientSize = Size;
@@ -91,7 +93,10 @@ namespace MicroTaskPager.GUI
         public bool IsDraggingWindow { get; set; }
 
         // Why property?
-        public int BorderSize { get; } = 1;
+        public int BorderSize { get; } = Dpi.Scale(1);
+
+        // PagerHeight is a logical value (device independent), all drawing uses physical pixels
+        public int PagerHeightPixels => Dpi.Scale(Options.PagerHeight);
 
         // Application Options: Configurable by user
         public AppSettings Options { get; private set; }
@@ -186,7 +191,7 @@ namespace MicroTaskPager.GUI
             _virtualDesktops.Clear();
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
 
-            var newSize = new Size(_virtualDesktops.Sum(d => d.Size.Width), Options.PagerHeight);
+            var newSize = new Size(_virtualDesktops.Sum(d => d.Size.Width), PagerHeightPixels);
 
             SuspendLayout();
             try
@@ -353,6 +358,7 @@ namespace MicroTaskPager.GUI
         {
             //_forceAppAlwaysOnTop = false;
             ContextMenuStrip menu = new ContextMenuStrip();
+            menu.ImageScalingSize = new Size(Dpi.Scale(16), Dpi.Scale(16));
 
             Helpers.AddMenuItem(this, menu,
                  new ToolStripMenuItem()

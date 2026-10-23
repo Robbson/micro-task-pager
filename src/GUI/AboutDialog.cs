@@ -16,6 +16,11 @@ namespace MicroTaskPager.GUI
         {
             SuspendLayout();
 
+            // Built in code, so tell WinForms to scale the pixel based layout from 96 DPI to the
+            // system DPI (the process is system DPI aware, see app.manifest).
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             Text = "About Micro Task Pager";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;

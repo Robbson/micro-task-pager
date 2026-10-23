@@ -61,13 +61,13 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     VirtualDesktop = this,
                     AttachedScreen = screen,
                     Location = new Point(location.X + _screenRenderers.Sum(x => x.Size.Width), location.Y),
-                    Size = Helpers.AspectRatioResize(new Size(screen.Bounds.Width, screen.Bounds.Height), 0, Form.Options.PagerHeight),
+                    Size = Helpers.AspectRatioResize(new Size(screen.Bounds.Width, screen.Bounds.Height), 0, Form.PagerHeightPixels),
                     Mode = mode,
                 });
                 screen_cnt++;
             }
 
-            Size = new Size(_screenRenderers.Sum(x => x.Size.Width), Form.Options.PagerHeight);
+            Size = new Size(_screenRenderers.Sum(x => x.Size.Width), Form.PagerHeightPixels);
         }
 
         public MainForm Form { get; set; }
@@ -232,12 +232,22 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             {
                 if (Form.Options.DesktopBorderStyle == BorderStyle.Box)
                 {
+                    // GDI+ centers the pen stroke on the rectangle path. Inset the path by half the
+                    // border width, otherwise the outer half falls outside the desktop bounds and the
+                    // border looks incomplete (one pixel missing at the right and bottom edge) at
+                    // DPI scale factors where BorderSize is greater than 1.
+                    int borderInset = Form.BorderSize / 2;
+
                     // Draw a border around the active desktop
                     using (var desktopBorderPen = new Pen(desktopBorderBrush, Form.BorderSize))
                     {
                         g.DrawRectangle(
                             desktopBorderPen,
-                            new Rectangle(Location.X, Location.Y, Size.Width - Form.BorderSize, Size.Height - Form.BorderSize));
+                            new Rectangle(
+                                Location.X + borderInset,
+                                Location.Y + borderInset,
+                                Size.Width - Form.BorderSize,
+                                Size.Height - Form.BorderSize));
                     }
                 }
                 else

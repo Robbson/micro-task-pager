@@ -21,7 +21,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         // Shared by all renderers and for the whole process lifetime, because a Font is a native GDI object.
         // Creating one per renderer (and per settings preview) leaked a handle each time.
         private static readonly Font _font =
-            new Font("Segoe UI Symbol", 12, FontStyle.Regular, GraphicsUnit.Pixel);
+            new Font("Segoe UI Symbol", Dpi.Scale(12), FontStyle.Regular, GraphicsUnit.Pixel);
 
         public Size Size { get; set; }
         public MainForm Form { get; set; }
@@ -81,7 +81,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
                 // Scale rectangles down to the thumbnail's desired size
                 var ar = Helpers.AspectRatioResize(
-                    new Size(AttachedScreen.Bounds.Width, AttachedScreen.Bounds.Height), 0, Form.Options.PagerHeight);
+                    new Size(AttachedScreen.Bounds.Width, AttachedScreen.Bounds.Height), 0, Form.PagerHeightPixels);
                 float percentageWidth = (float)ar.Width * 100 / AttachedScreen.Bounds.Width;
                 float percentageHeight = (float)ar.Height * 100 / AttachedScreen.Bounds.Height;
 
@@ -122,12 +122,19 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 }
 
                 // Window border
+                // GDI+ centers the pen stroke on the rectangle path, so inset by half the border
+                // width to keep the complete border inside the window area.
+                int borderInset = Form.BorderSize / 2;
                 using (var borderBrush = new SolidBrush(borderColor))
                 using (var borderPen = new Pen(borderBrush, Form.BorderSize))
                 {
                     g.DrawRectangle(
                         borderPen,
-                        new Rectangle(area.X, area.Y, area.Width - Form.BorderSize, area.Height - Form.BorderSize));
+                        new Rectangle(
+                            area.X + borderInset,
+                            area.Y + borderInset,
+                            area.Width - Form.BorderSize,
+                            area.Height - Form.BorderSize));
                 }
             }
         }
@@ -137,8 +144,8 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             int iconsNum = windows.Length;
             int iconWidth = windows[0].Icon.Width;
             int iconHeight = windows[0].Icon.Height;
-            int iconPaddingX = Form.Options.IconPaddingX;
-            int iconPaddingY = Form.Options.IconPaddingY;
+            int iconPaddingX = Dpi.Scale(Form.Options.IconPaddingX);
+            int iconPaddingY = Dpi.Scale(Form.Options.IconPaddingY);
             int width = Size.Width;
             int height = Size.Height;
 
