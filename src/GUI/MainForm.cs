@@ -264,7 +264,7 @@ namespace MicroTaskPager.GUI
                 {
                     if (!TryInvoke(() =>
                     {
-                        // Check if window is covered shoulf be fine with every 500ms
+                        // Check if window is covered should be fine with every 500ms
                         if (IsCovered())
                         {
                             WindowManager.RestoreWindow(Handle);

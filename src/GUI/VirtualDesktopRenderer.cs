@@ -29,6 +29,7 @@ namespace MicroTaskPager.GUI
         public Screen AttachedScreen { get; set; }
         public VirtualDesktop VirtualDesktop { get; set; }
         public Dictionary<IntPtr, Rectangle> WindowAreas { get; set; } = new Dictionary<IntPtr, Rectangle>();
+        public DesktopMode Mode { get; set; }
 
         private Point MousePosition { get => System.Windows.Forms.Control.MousePosition; }
         private Window ActiveWindow { get => Form.Windows.SingleOrDefault(x => x.IsActive); }

@@ -21,7 +21,7 @@ namespace MicroTaskPager.Config
         // DesktopModeDefault: Only changeable in the settings window, defines the default for new desktops
         // -> But is Desktop the right name? If it spans around multiple physical screens... yes, but it's still a desktop!
         public DesktopMode DesktopModeDefault { get; set; } = DesktopMode.Preview;
-        public ArrayList DesktopModeArray { get; set; } = null;
+        public ArrayList RendererDesktopModes { get; set; } = null;
 
         public int PagerHeight { get; set; } = 40;
         public int IconPaddingX { get; set; } = 0;

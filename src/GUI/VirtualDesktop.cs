@@ -71,14 +71,6 @@ namespace MicroTaskPager.GUI
                 var w = GetWindowUnderCursor(e.Location);
                 if (w != null)
                 {
-                    // Bring a window into front by clicking on its miniature / icon
-                    // -> only when it's already the active desktop, which makes desktop switches smoother
-                    //    without touching the last window z-order
-                    if (IsCurrentActiveDesktop)
-                    {
-                        WinAPI.SetForegroundWindow(w.Handle);
-                    }
-
                     // Prepare drag & drop for the selected window (even if it's not in the users mind)
                     _dragDropData = new DragDropData()
                     {
@@ -101,9 +93,24 @@ namespace MicroTaskPager.GUI
             if (!IsInsideBounds(e.X, e.Y)) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
-                // So changing the desktop is delayed till mouse button ist liftet
-                WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible();
-                Form.Invalidate();
+                // Bring a window into front by clicking on its miniature / icon
+                // -> only when it's already the active desktop, which makes desktop switches smoother
+                //    without touching the last window z-order
+                if (IsCurrentActiveDesktop)
+                {
+                    var w = GetWindowUnderCursor(e.Location);
+                    if (w != null)
+                    {
+                        WinAPI.SetForegroundWindow(w.Handle);
+                    }
+                }
+                else
+                {
+                    // Changing Desktop has to be done when mouse gets up, otherwise we instantly select and focus an
+                    // app of the new desktop
+                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible();
+                    Form.Invalidate();
+                }
             }
         }
 
