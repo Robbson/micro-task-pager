@@ -101,7 +101,6 @@ namespace MicroTaskPager.GUI
             }
             catch
             {
-                // TODO: Check, if we run into issues when render target is gone
                 WindowsVirtualDesktop.Restart();
                 WindowsVirtualDesktopManager.Restart();
             }
@@ -356,7 +355,7 @@ namespace MicroTaskPager.GUI
                  },
                  () =>
                  {
-                     //TODO: Individual Mode per desktop
+                     // TODO: Individual Mode per desktop
                      Options.DesktopModeDefault = Options.DesktopModeDefault == DesktopMode.MicroTaskbar ? DesktopMode.Preview : DesktopMode.MicroTaskbar;
                      AppSettingsStore.Save(Options);
                      Invalidate();
@@ -415,6 +414,7 @@ namespace MicroTaskPager.GUI
             var originalSettings = AppSettings.Clone(Options);
             var settingsWindow = new AppSettingsWindow(Options);
             new WindowInteropHelper(settingsWindow) { Owner = Handle };
+            settingsWindow.PositionNextToOwner(Bounds);
 
             settingsWindow.PreviewChanged += s => PreviewSettings(s);
 

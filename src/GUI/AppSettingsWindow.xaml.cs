@@ -4,15 +4,23 @@ using System.Globalization;
 using System.Reflection.Emit;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using MicroTaskPager.Config;
+using MicroTaskPager.Core.API;
 using MicroTaskPager.GUI;
 using DrawingColor = System.Drawing.Color;
+using DrawingPoint = System.Drawing.Point;
+using DrawingRectangle = System.Drawing.Rectangle;
+using DrawingSize = System.Drawing.Size;
 using Forms = System.Windows.Forms;
+using WpfPoint = System.Windows.Point;
 
 namespace MicroTaskPager
 {
     public partial class AppSettingsWindow : System.Windows.Window
     {
+        private const int PlacementGap = 8;
+
         private readonly AppSettings _defaults = new AppSettings();
         private readonly AppSettings _settingsBefore;
 
@@ -23,6 +31,8 @@ namespace MicroTaskPager
         private DrawingColor _activeWindowBackgroundColor;
         private DrawingColor _windowBorderColor;
         private DrawingColor _activeWindowBorderColor;
+
+        private DrawingRectangle? _placementOwnerBounds;
 
         public AppSettingsWindow(AppSettings settings)
         {
@@ -68,11 +78,20 @@ namespace MicroTaskPager
 
             RefreshColorPreviews();
             UpdateRevertButtons();
+
+            SourceInitialized += OnSourceInitialized;
         }
 
         public event Action<AppSettings> PreviewChanged;
 
         public AppSettings Settings { get; private set; }
+
+        // Remembers the pager bounds; the actual placement happens in OnSourceInitialized,
+        // when the HWND (and therefore the real pixel size) exists.
+        public void PositionNextToOwner(DrawingRectangle ownerBounds)
+        {
+            _placementOwnerBounds = ownerBounds;
+        }
 
         #region Generic arsers & utilites
         private static bool TryParsePositiveInt(string input, int min, out int value)
@@ -101,6 +120,86 @@ namespace MicroTaskPager
         }
         #endregion
 
+        private static DrawingPoint FindPlacement(DrawingRectangle owner, DrawingSize size)
+        {
+            return TryPlaceRight(owner, size)
+                ?? TryPlaceLeft(owner, size)
+                ?? TryPlaceBelow(owner, size)
+                ?? TryPlaceAbove(owner, size)
+                ?? CenterOverOwner(owner, size);
+        }
+
+        private static DrawingPoint? TryPlaceRight(DrawingRectangle owner, DrawingSize size)
+        {
+            int x = owner.Right + PlacementGap;
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var area = screen.WorkingArea;
+                if (x >= area.Left && x + size.Width <= area.Right && size.Height <= area.Height)
+                {
+                    int y = Math.Max(area.Top, Math.Min(owner.Top, area.Bottom - size.Height));
+                    return new DrawingPoint(x, y);
+                }
+            }
+
+            return null;
+        }
+
+        private static DrawingPoint? TryPlaceLeft(DrawingRectangle owner, DrawingSize size)
+        {
+            int x = owner.Left - PlacementGap - size.Width;
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var area = screen.WorkingArea;
+                if (x >= area.Left && x + size.Width <= area.Right && size.Height <= area.Height)
+                {
+                    int y = Math.Max(area.Top, Math.Min(owner.Top, area.Bottom - size.Height));
+                    return new DrawingPoint(x, y);
+                }
+            }
+
+            return null;
+        }
+
+        private static DrawingPoint? TryPlaceBelow(DrawingRectangle owner, DrawingSize size)
+        {
+            int y = owner.Bottom + PlacementGap;
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var area = screen.WorkingArea;
+                if (y >= area.Top && y + size.Height <= area.Bottom && size.Width <= area.Width)
+                {
+                    int x = Math.Max(area.Left, Math.Min(owner.Left, area.Right - size.Width));
+                    return new DrawingPoint(x, y);
+                }
+            }
+
+            return null;
+        }
+
+        private static DrawingPoint? TryPlaceAbove(DrawingRectangle owner, DrawingSize size)
+        {
+            int y = owner.Top - PlacementGap - size.Height;
+            foreach (var screen in Forms.Screen.AllScreens)
+            {
+                var area = screen.WorkingArea;
+                if (y >= area.Top && y + size.Height <= area.Bottom && size.Width <= area.Width)
+                {
+                    int x = Math.Max(area.Left, Math.Min(owner.Left, area.Right - size.Width));
+                    return new DrawingPoint(x, y);
+                }
+            }
+
+            return null;
+        }
+
+        private static DrawingPoint CenterOverOwner(DrawingRectangle owner, DrawingSize size)
+        {
+            return new DrawingPoint(
+                owner.Left + ((owner.Width - size.Width) / 2),
+                owner.Top + ((owner.Height - size.Height) / 2));
+        }
+
         private static DrawingColor PickColor(DrawingColor initial)
         {
             using (var dlg = new Forms.ColorDialog())
@@ -114,6 +213,36 @@ namespace MicroTaskPager
         private static System.Windows.Media.SolidColorBrush ToBrush(DrawingColor color)
         {
             return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(color.A, color.R, color.G, color.B));
+        }
+
+        private void OnSourceInitialized(object sender, EventArgs e)
+        {
+            if (!_placementOwnerBounds.HasValue)
+            {
+                return;
+            }
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var windowRect = default(WinAPI.RECT);
+            if (!WinAPI.GetWindowRect(hwnd, ref windowRect))
+            {
+                return;
+            }
+
+            var size = new DrawingSize(
+                windowRect.Right - windowRect.Left,
+                windowRect.Bottom - windowRect.Top);
+            var location = FindPlacement(_placementOwnerBounds.Value, size);
+
+            var source = HwndSource.FromHwnd(hwnd);
+            if (source?.CompositionTarget == null)
+            {
+                return;
+            }
+
+            var dip = source.CompositionTarget.TransformFromDevice.Transform(new WpfPoint(location.X, location.Y));
+            Left = dip.X;
+            Top = dip.Y;
         }
 
         private void ResetToDefaults_Click(object sender, RoutedEventArgs e)
@@ -199,7 +328,6 @@ namespace MicroTaskPager
             };
         }
 
-        // TODO: Do I still need this Event when I know modify the options directly
         // -> Well, for recalculations it s necessary
         private void RequestPreview()
         {
@@ -265,8 +393,6 @@ namespace MicroTaskPager
         private void PagerHeightChanged(object sender, RoutedPropertyChangedEventArgs<int> e)
         {
             UpdateRevertButtons();
-
-            //TODO: Preview Suppoer with those notices from AI help
             RequestPreview();
         }
 

@@ -5,7 +5,7 @@
         Title="Micro Task Pager Settings"
         Width="460"
         Height="625"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="Manual"
         ResizeMode="NoResize">
     <Window.Resources>
         <Style TargetType="ToolTip">
