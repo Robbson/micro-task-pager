@@ -50,11 +50,11 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center">Desktop Default Mode</TextBlock>
-                                <ComboBox x:Name="cmbDesktopModeDefault" Grid.Row="0" Grid.Column="1" Margin="8,2,0,2" SelectionChanged="DesktopModeDefaultChanged" />
-                                <Button x:Name="btnRevertDesktopModeDefault" Grid.Row="0" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertDesktopModeDefault_Click" />
+                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" ToolTip="Only affects newly created desktops and their screens">View Mode Default</TextBlock>
+                                <ComboBox x:Name="cmbViewModeDefault" Grid.Row="0" Grid.Column="1" Margin="8,2,0,2" SelectionChanged="ViewModeDefaultChanged" />
+                                <Button x:Name="btnRevertViewModeDefault" Grid.Row="0" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertViewModeDefault_Click" />
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" 
+                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"
                                            ToolTip="The pager's width is automatically calculated from this value and from the size&#10;of all available screen space as well as the amount of virtual desktops.">Pager Height</TextBlock>
                                 <local:NumericUpDownControl x:Name="numericPagerHeight" ValueChanged="PagerHeightChanged" Grid.Row="1" Grid.Column="1" Margin="8,2,0,2"/>
                                 <Button x:Name="btnRevertPagerHeight" Grid.Row="1" Grid.Column="2" Width="28" Height="24" Margin="8,2,0,2" Content="↺" ToolTip="Revert to default" Click="RevertPagerHeight_Click" />

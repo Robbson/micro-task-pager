@@ -1,13 +1,14 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Windows.Documents;
 
 namespace MicroTaskPager.Config
 {
-    public enum DesktopMode
+    public enum ViewMode
     {
-        //Inherited,     // Takes the default mode
-        Preview,        // Desktop -> Preview
-        MicroTaskbar,   // Micro Traskbar
+        Preview,
+        MicroTaskbar,
     }
 
     public enum BorderStyle
@@ -18,10 +19,9 @@ namespace MicroTaskPager.Config
 
     public class AppSettings
     {
-        // DesktopModeDefault: Only changeable in the settings window, defines the default for new desktops
-        // -> But is Desktop the right name? If it spans around multiple physical screens... yes, but it's still a desktop!
-        public DesktopMode DesktopModeDefault { get; set; } = DesktopMode.Preview;
-        public ArrayList RendererDesktopModes { get; set; } = null;
+        // ViewModeDefault: Only changeable in the settings window, defines the default for newly created desktop's screens
+        public ViewMode ViewModeDefault { get; set; } = ViewMode.MicroTaskbar;
+        public List<ViewMode> RendererViewModes { get; set; } = new List<ViewMode>();
 
         public int PagerHeight { get; set; } = 40;
         public int IconPaddingX { get; set; } = 0;
@@ -46,7 +46,8 @@ namespace MicroTaskPager.Config
         {
             return new AppSettings
             {
-                DesktopModeDefault = source.DesktopModeDefault,
+                ViewModeDefault = source.ViewModeDefault,
+                RendererViewModes = source.RendererViewModes == null ? null : new List<ViewMode>(source.RendererViewModes),
                 PagerHeight = source.PagerHeight,
                 IconPaddingX = source.IconPaddingX,
                 IconPaddingY = source.IconPaddingY,

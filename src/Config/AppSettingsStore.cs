@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using Microsoft.Win32;
@@ -16,7 +18,8 @@ namespace MicroTaskPager.Config
             {
                 return key == null ? defaults : new AppSettings
                 {
-                    DesktopModeDefault = (DesktopMode)ReadInt(key, "DesktopModeDefault", (int)defaults.DesktopModeDefault),
+                    ViewModeDefault = (ViewMode)ReadInt(key, "ViewModeDefault", (int)defaults.ViewModeDefault),
+                    RendererViewModes = ReadViewModes(key, "RendererViewModes", defaults.RendererViewModes),
                     DesktopBorderStyle = (BorderStyle)ReadInt(key, "DesktopBorderStyle", (int)defaults.DesktopBorderStyle),
                     BackgroundOpacity = ReadDouble(key, "BackgroundOpacity", defaults.BackgroundOpacity),
                     PagerHeight = ReadInt(key, "PagerHeight", defaults.PagerHeight),
@@ -45,7 +48,17 @@ namespace MicroTaskPager.Config
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RegistryKeyPath))
             {
                 if (key == null) return;
-                key.SetValue("DesktopModeDefault", settings.DesktopModeDefault, RegistryValueKind.DWord);
+                key.SetValue("ViewModeDefault", settings.ViewModeDefault, RegistryValueKind.DWord);
+
+                if (settings.RendererViewModes == null)
+                {
+                    key.DeleteValue("RendererViewModes", false);
+                }
+                else
+                {
+                    key.SetValue("RendererViewModes", ToViewModesBytes(settings.RendererViewModes), RegistryValueKind.Binary);
+                }
+
                 key.SetValue("DesktopBorderStyle", settings.DesktopBorderStyle, RegistryValueKind.DWord);
                 key.SetValue("BackgroundOpacity", settings.BackgroundOpacity.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 key.SetValue("PagerHeight", settings.PagerHeight, RegistryValueKind.DWord);
@@ -78,6 +91,34 @@ namespace MicroTaskPager.Config
         {
             object value = key.GetValue(valueName);
             return value == null ? fallback : int.TryParse(value.ToString(), out int argb) ? Color.FromArgb(argb) : fallback;
+        }
+
+        // Stored as REG_BINARY with one byte per desktop (values must fit into a byte)
+        private static List<ViewMode> ReadViewModes(RegistryKey key, string valueName, List<ViewMode> fallback)
+        {
+            if (!(key.GetValue(valueName) is byte[] bytes))
+            {
+                return fallback;
+            }
+
+            var modes = new List<ViewMode>(bytes.Length);
+            foreach (byte mode in bytes)
+            {
+                modes.Add((ViewMode)mode);
+            }
+
+            return modes;
+        }
+
+        private static byte[] ToViewModesBytes(List<ViewMode> modes)
+        {
+            var bytes = new byte[modes.Count];
+            for (int i = 0; i < modes.Count; i++)
+            {
+                bytes[i] = Convert.ToByte(modes[i], CultureInfo.InvariantCulture);
+            }
+
+            return bytes;
         }
 
         private static double ReadDouble(RegistryKey key, string valueName, double fallback)

@@ -97,7 +97,7 @@ namespace MicroTaskPager.GUI
             base.OnPaint(e);
             try
             {
-                _virtualDesktops.ForEach(x => x.OnPaint(e));
+                _virtualDesktops.ForEach(x => x.Render(e));
             }
             catch
             {
@@ -170,6 +170,7 @@ namespace MicroTaskPager.GUI
             {
                 MouseUp -= desktop.OnMouseUp;
                 MouseDown -= desktop.OnMouseDown;
+                MouseWheel -= desktop.OnMouseWheel;
                 MouseMove -= desktop.OnMouseMove;
                 DragOver -= desktop.OnDragOver;
                 DragDrop -= desktop.OnDragDrop;
@@ -206,6 +207,7 @@ namespace MicroTaskPager.GUI
                 VirtualDesktop desktop = new VirtualDesktop(d, this, new Point(_virtualDesktops.Sum(i => i.Size.Width), 0));
                 MouseUp += desktop.OnMouseUp;
                 MouseDown += desktop.OnMouseDown;
+                MouseWheel += desktop.OnMouseWheel;
                 MouseMove += desktop.OnMouseMove;
                 DragOver += desktop.OnDragOver;
                 DragDrop += desktop.OnDragDrop;
@@ -319,7 +321,7 @@ namespace MicroTaskPager.GUI
             Cursor = Cursors.Default;
             if ((e.Button & MouseButtons.Right) == MouseButtons.Right)
             {
-                ShowContextMenu();
+                ShowContextMenu(e.X, e.Y);
             }
         }
 
@@ -337,12 +339,11 @@ namespace MicroTaskPager.GUI
         {
             if (IsDraggingWindow)
             {
-                //Cursor = Cursors.SizeAll;
                 Location = new Point(e.X + Location.X - dragOffset.X, e.Y + Location.Y - dragOffset.Y);
             }
         }
 
-        private void ShowContextMenu()
+        private void ShowContextMenu(int mouseX, int mouseY)
         {
             //_forceAppAlwaysOnTop = false;
             ContextMenuStrip menu = new ContextMenuStrip();
@@ -350,15 +351,14 @@ namespace MicroTaskPager.GUI
             Helpers.AddMenuItem(this, menu,
                  new ToolStripMenuItem()
                  {
-                     Text = "Toggle Desktop Mode",
+                     Text = "Toggle View Mode",
                      Image = Helpers.CreateGlyphBitmap("↔"),
                  },
                  () =>
                  {
-                     // TODO: Individual Mode per desktop
-                     Options.DesktopModeDefault = Options.DesktopModeDefault == DesktopMode.MicroTaskbar ? DesktopMode.Preview : DesktopMode.MicroTaskbar;
-                     AppSettingsStore.Save(Options);
-                     Invalidate();
+                     // Change a desktop's mode using a faked mouse wheel event including a hacky impossible wheel-direction: none
+                     MouseEventArgs eventArgs = new MouseEventArgs(MouseButtons.None, 0, mouseX, mouseY, 0);
+                     this.OnMouseWheel(eventArgs);
                  });
 
             // --- Position related ---

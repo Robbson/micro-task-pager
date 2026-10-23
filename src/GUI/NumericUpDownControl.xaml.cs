@@ -28,7 +28,22 @@ namespace MicroTaskPager.GUI
                 new FrameworkPropertyMetadata(
                     0,
                     FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
-                    OnValueChanged));
+                    OnValueChanged,
+                    CoerceValueCore));
+
+        public static readonly DependencyProperty MinimumProperty =
+            DependencyProperty.Register(
+                nameof(Minimum),
+                typeof(int),
+                typeof(NumericUpDownControl),
+                new PropertyMetadata(int.MinValue, OnLimitChanged));
+
+        public static readonly DependencyProperty MaximumProperty =
+            DependencyProperty.Register(
+                nameof(Maximum),
+                typeof(int),
+                typeof(NumericUpDownControl),
+                new PropertyMetadata(int.MaxValue, OnLimitChanged));
 
         public NumericUpDownControl() => InitializeComponent();
 
@@ -44,6 +59,40 @@ namespace MicroTaskPager.GUI
         {
             get => (int)GetValue(ValueProperty);
             set => SetValue(ValueProperty, value);
+        }
+
+        public int Minimum
+        {
+            get => (int)GetValue(MinimumProperty);
+            set => SetValue(MinimumProperty, value);
+        }
+
+        public int Maximum
+        {
+            get => (int)GetValue(MaximumProperty);
+            set => SetValue(MaximumProperty, value);
+        }
+
+        private static void OnLimitChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is NumericUpDownControl control)
+            {
+                control.CoerceValue(ValueProperty);
+            }
+        }
+
+        private static object CoerceValueCore(DependencyObject d, object baseValue)
+        {
+            if (d is NumericUpDownControl control)
+            {
+                int value = (int)baseValue;
+                int minimum = control.Minimum;
+                int maximum = control.Maximum;
+
+                return Math.Max(minimum, Math.Min(maximum, value));
+            }
+
+            return baseValue;
         }
 
         // Method gets called automatically when 'Value' changes
@@ -68,8 +117,17 @@ namespace MicroTaskPager.GUI
             return Regex.IsMatch(text, @"^[0-9]*$");
         }
 
-        private void BtnDown_Click(object sender, RoutedEventArgs e) => Value--;
-        private void BtnUp_Click(object sender, RoutedEventArgs e) => Value++;
+        private void BtnDown_Click(object sender, RoutedEventArgs e)
+        {
+            CommitValue();
+            Value--;
+        }
+
+        private void BtnUp_Click(object sender, RoutedEventArgs e)
+        {
+            CommitValue();
+            Value++;
+        }
 
         // 1. Tastatureingaben filtern
         private void TextBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
@@ -104,6 +162,20 @@ namespace MicroTaskPager.GUI
             {
                 e.Handled = true; // Blockiert die Leertaste
             }
+            else if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                CommitValue();
+                e.Handled = true;
+            }
+        }
+
+        private void TextBox_LostFocus(object sender, RoutedEventArgs e) => CommitValue();
+
+        private void CommitValue()
+        {
+            var binding = ValueTextBox.GetBindingExpression(TextBox.TextProperty);
+            binding?.UpdateSource();
+            binding?.UpdateTarget();
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -12,12 +13,13 @@ using BorderStyle = MicroTaskPager.Config.BorderStyle;
 
 namespace MicroTaskPager.GUI
 {
-    // Represents a desktop shown as a rectangle in the app, manages a VirtualDesktopRenderer for each physical PC screen
+    // Holds all data for a desktop shown as a rectangle in the app, manages a VirtualDesktopScreenRenderer for each physical PC screen
     // - this VirtualDesktop class only handles selecting a desktop, drag & drop windows inbetween and painting the selection border,
-    //   while the VirtualDesktopRenderer draws all the content
+    //   while the VirtualDesktopScreenRenderer draws all the content
+    // - It's no WinForm Control! It just receives direct rendering requests from the MainForm and also forces the rendering ob its Screen Renderer child classes
     public class VirtualDesktop
     {
-        private readonly List<VirtualDesktopRenderer> _screenRenderers = new List<VirtualDesktopRenderer>();
+        private readonly List<VirtualDesktopScreenRenderer> _screenRenderers = new List<VirtualDesktopScreenRenderer>();
         private readonly int _numScreens;
         private DragDropData _dragDropData;
         private Rectangle dragBoxFromMouseDown;
@@ -38,16 +40,31 @@ namespace MicroTaskPager.GUI
             // => TODO: The only natural solution would be a columns of desktops or a (partial) grid for both directions
             var physcialScreens = Screen.AllScreens.OrderBy(x => x.Bounds.Left).ThenBy(x => x.Bounds.Top);
             _numScreens = physcialScreens.Count();
+            var screen_cnt = 0;
             foreach (var screen in physcialScreens)
             {
-                _screenRenderers.Add(new VirtualDesktopRenderer()
+                var index = VirtualDesktopIndex + screen_cnt;
+                var mode = Form.Options.ViewModeDefault;
+                if (index < Form.Options.RendererViewModes.Count)
+                {
+                    mode = Form.Options.RendererViewModes[index];
+                }
+                else
+                {
+                    // Fill missing items using the default mode
+                    Form.Options.RendererViewModes.Add(mode);
+                }
+
+                _screenRenderers.Add(new VirtualDesktopScreenRenderer()
                 {
                     Form = Form,
                     VirtualDesktop = this,
                     AttachedScreen = screen,
                     Location = new Point(location.X + _screenRenderers.Sum(x => x.Size.Width), location.Y),
                     Size = Helpers.AspectRatioResize(new Size(screen.Bounds.Width, screen.Bounds.Height), 0, Form.Options.PagerHeight),
+                    Mode = mode,
                 });
+                screen_cnt++;
             }
 
             Size = new Size(_screenRenderers.Sum(x => x.Size.Width), Form.Options.PagerHeight);
@@ -114,6 +131,34 @@ namespace MicroTaskPager.GUI
             }
         }
 
+        public void OnMouseWheel(object sender, MouseEventArgs e)
+        {
+            if (!IsInsideBounds(e.X, e.Y)) return;
+
+            // Hacky, so we know the event is faked and came from the context menu
+            if ((Control.ModifierKeys & Keys.Shift) != Keys.None || e.Delta == 0)
+            {
+                // Get current mode for the desktop screen from the RendererViewModes array
+                var screenIndex = _screenRenderers.FindIndex(s => e.X >= s.Location.X && e.X <= (s.Location.X + s.Size.Width));
+                int mode = (int)Form.Options.RendererViewModes[VirtualDesktopIndex + screenIndex];
+
+                // Change value according wheel direction and trim it to bounds
+                mode = e.Delta > 0 ? mode + 1 : mode - 1;
+                int maxValue = Enum.GetValues(typeof(ViewMode)).Length - 1;
+                if (mode < 0) mode = maxValue; else if (mode > maxValue) mode = 0;
+
+                // Store the result in the array as well as in the renderer directly
+                Form.Options.RendererViewModes[VirtualDesktopIndex + screenIndex] = (ViewMode)mode;
+                _screenRenderers[screenIndex].Mode = (ViewMode)mode;
+
+                // Store to registry
+                AppSettingsStore.Save(Form.Options);
+
+                // Force a rerender by invalidate the parent MainForm (no need to Reset everything)
+                Form.Invalidate();
+            }
+        }
+
         public void OnMouseMove(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
@@ -153,7 +198,7 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        public void OnPaint(PaintEventArgs e)
+        public void Render(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
             var separaterColor = Color.FromArgb(64, Color.LightBlue); // TODO: Make color and maybe alpha value a settings parameter
@@ -164,7 +209,7 @@ namespace MicroTaskPager.GUI
                 _screenRenderers.ForEach(renderer =>
                 {
                     // Trigger repaint of each renderer
-                    renderer.OnPaint(e);
+                    renderer.Render(e);
 
                     // Draw separators when more than one screens are present
                     if (_numScreens > 1)
@@ -214,7 +259,7 @@ namespace MicroTaskPager.GUI
 
             // For desktop preview mode, we search across all screens for the clicked window in z-order from front to back,
             // otherwise order should stay the same (using process id & handle)
-            var windows = Form.Options.DesktopModeDefault == DesktopMode.Preview
+            var windows = Form.Options.ViewModeDefault == ViewMode.Preview
                 ? visibleWindows.OrderByDescending(x => x.ZOrder)
                 : visibleWindows
                     .OrderBy(x => x.ProcessID)

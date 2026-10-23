@@ -15,12 +15,14 @@
 
         <Button Grid.Column="0" Content="-" Click="BtnDown_Click" Margin="0,0,2,0"/>
 
-        <TextBox Grid.Column="1" 
-                 Text="{Binding Value, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}" 
+        <TextBox x:Name="ValueTextBox"
+                 Grid.Column="1" 
+                 Text="{Binding Value, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=Explicit}" 
                  VerticalContentAlignment="Center" 
                  HorizontalContentAlignment="Center"
                  PreviewTextInput="TextBox_PreviewTextInput"
                  PreviewKeyDown="TextBox_PreviewKeyDown"
+                 LostFocus="TextBox_LostFocus"
                  DataObject.Pasting="TextBox_Pasting" />
 
         <Button Grid.Column="2" Content="+" Click="BtnUp_Click" Margin="2,0,0,0"/>

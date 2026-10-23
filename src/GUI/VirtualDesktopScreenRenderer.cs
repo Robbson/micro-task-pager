@@ -16,7 +16,7 @@ using MicroTaskPager.Core.API;
 namespace MicroTaskPager.GUI
 {
     // It's the pure content renderer, depending on the used mode, also window order is determined here
-    public class VirtualDesktopRenderer
+    public class VirtualDesktopScreenRenderer
     {
         // Shared by all renderers and for the whole process lifetime, because a Font is a native GDI object.
         // Creating one per renderer (and per settings preview) leaked a handle each time.
@@ -29,12 +29,12 @@ namespace MicroTaskPager.GUI
         public Screen AttachedScreen { get; set; }
         public VirtualDesktop VirtualDesktop { get; set; }
         public Dictionary<IntPtr, Rectangle> WindowAreas { get; set; } = new Dictionary<IntPtr, Rectangle>();
-        public DesktopMode Mode { get; set; }
+        public ViewMode Mode { get; set; }
 
         private Point MousePosition { get => System.Windows.Forms.Control.MousePosition; }
         private Window ActiveWindow { get => Form.Windows.SingleOrDefault(x => x.IsActive); }
 
-        public void OnPaint(PaintEventArgs e)
+        public void Render(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
 
@@ -42,9 +42,9 @@ namespace MicroTaskPager.GUI
                 x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex &&
                 !WinAPI.IsIconic(x.Handle));
 
-            Window[] windows = Form.Options.DesktopModeDefault == DesktopMode.Preview
+            Window[] windows = Mode == ViewMode.Preview
 
-                // For desktop preview mode, all windows have to be sorted in z-order to draw from back to front
+                // For preview view mode, all windows have to be sorted in z-order to draw from back to front
                 ? visibleWindows.OrderBy(x => x.ZOrder).ToArray()
 
                 // Otherwise order should stay the same (using process id and handle)
@@ -53,9 +53,9 @@ namespace MicroTaskPager.GUI
 
             if (windows.Length == 0) return;
 
-            switch (Form.Options.DesktopModeDefault)
+            switch (Mode)
             {
-                case DesktopMode.MicroTaskbar:
+                case ViewMode.MicroTaskbar:
                     RenderMicroTaskbar(g, windows);
                     break;
                 default:

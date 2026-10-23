@@ -44,9 +44,9 @@ namespace MicroTaskPager
             // and MainForm keeps its own copy for restoring on Cancel.
             Settings = settings;
 
-            cmbDesktopModeDefault.Items.Add("Preview");
-            cmbDesktopModeDefault.Items.Add("MicroTaskbar");
-            cmbDesktopModeDefault.SelectedIndex = (int)Settings.DesktopModeDefault; //Math.Max(0, Math.Min(1, Settings.DesktopModeDefault));
+            cmbViewModeDefault.Items.Add("Preview");
+            cmbViewModeDefault.Items.Add("MicroTaskbar");
+            cmbViewModeDefault.SelectedIndex = (int)Settings.ViewModeDefault;
             numericPagerHeight.Value = Settings.PagerHeight;
             numericIconPaddingX.Value = Settings.IconPaddingX;
             numericIconPaddingY.Value = Settings.IconPaddingY;
@@ -63,7 +63,7 @@ namespace MicroTaskPager
 
             cmbDesktopBorderStyle.Items.Add("Box");
             cmbDesktopBorderStyle.Items.Add("Underline");
-            cmbDesktopBorderStyle.SelectedIndex = (int)Settings.DesktopBorderStyle; //Math.Max(0, Math.Min(1, Settings.DesktopBorderStyle));
+            cmbDesktopBorderStyle.SelectedIndex = (int)Settings.DesktopBorderStyle;
             _desktopBackgroundColor = Settings.DesktopBackgroundColor;
             _desktopBorderColor = Settings.DesktopBorderColor;
             _activeDesktopBorderColor = Settings.ActiveDesktopBorderColor;
@@ -249,7 +249,7 @@ namespace MicroTaskPager
         {
             if (tabControl.SelectedIndex == 0)
             {
-                cmbDesktopModeDefault.SelectedIndex = _defaults.DesktopModeDefault <= 0 ? 0 : 1;
+                cmbViewModeDefault.SelectedIndex = _defaults.ViewModeDefault <= 0 ? 0 : 1;
                 numericPagerHeight.Value = _defaults.PagerHeight;
                 numericIconPaddingX.Value = _defaults.IconPaddingX;
                 numericIconPaddingY.Value = _defaults.IconPaddingY;
@@ -305,7 +305,8 @@ namespace MicroTaskPager
 
             return new AppSettings
             {
-                DesktopModeDefault = (DesktopMode)(cmbDesktopModeDefault.SelectedIndex <= 0 ? 0 : 1),
+                ViewModeDefault = (ViewMode)(cmbViewModeDefault.SelectedIndex <= 0 ? 0 : 1),
+                RendererViewModes = Settings.RendererViewModes,
                 PagerHeight = numericPagerHeight.Value,
                 IconPaddingX = numericIconPaddingX.Value,
                 IconPaddingY = numericIconPaddingY.Value,
@@ -356,7 +357,7 @@ namespace MicroTaskPager
                 return;
             }
 
-            btnRevertDesktopModeDefault.Visibility = cmbDesktopModeDefault.SelectedIndex != (int)_settingsBefore.DesktopModeDefault ? Visibility.Visible : Visibility.Hidden;
+            btnRevertViewModeDefault.Visibility = cmbViewModeDefault.SelectedIndex != (int)_settingsBefore.ViewModeDefault ? Visibility.Visible : Visibility.Hidden;
             btnRevertPagerHeight.Visibility = numericPagerHeight.Value != _settingsBefore.PagerHeight ? Visibility.Visible : Visibility.Hidden;
             btnRevertIconPaddingX.Visibility = numericIconPaddingX.Value != _settingsBefore.IconPaddingX ? Visibility.Visible : Visibility.Hidden;
             btnRevertIconPaddingY.Visibility = numericIconPaddingY.Value != _settingsBefore.IconPaddingY ? Visibility.Visible : Visibility.Hidden;
@@ -377,21 +378,27 @@ namespace MicroTaskPager
         }
 
         #region Layout Tab Handlers
-        private void DesktopModeDefaultChanged(object sender, SelectionChangedEventArgs e)
+        private void ViewModeDefaultChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateRevertButtons();
             RequestPreview();
         }
 
-        private void RevertDesktopModeDefault_Click(object sender, RoutedEventArgs e)
+        private void RevertViewModeDefault_Click(object sender, RoutedEventArgs e)
         {
-            cmbDesktopModeDefault.SelectedIndex = _settingsBefore.DesktopModeDefault <= 0 ? 0 : 1;
+            cmbViewModeDefault.SelectedIndex = _settingsBefore.ViewModeDefault <= 0 ? 0 : 1;
             UpdateRevertButtons();
         }
 
-        // THIS is very special because it needs recalulation in the MainFrame
         private void PagerHeightChanged(object sender, RoutedPropertyChangedEventArgs<int> e)
         {
+            // Check minimium height of the Pager including padding value consideration
+            var height = numericPagerHeight.Value - numericIconPaddingY.Value;
+            if (height < 16)
+            {
+                numericPagerHeight.Value += 16 - height;
+            }
+
             UpdateRevertButtons();
             RequestPreview();
         }

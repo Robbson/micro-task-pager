@@ -31,19 +31,19 @@ namespace MicroTaskPager.Config
             key.Close();
         }
 
-        public static int GetDesktopModeDefault()
+        public static int GetViewModeDefault()
         {
             RegistryKey key = Registry.CurrentUser.OpenSubKey(AppRegistryKey);
             if (key == null) return 0;
-            var desktopModeDefault = key.GetValue("DesktopModeDefault");
-            if (desktopModeDefault == null) return 0;
-            return int.Parse(desktopModeDefault.ToString());
+            var viewModeDefault = key.GetValue("ViewModeDefault");
+            if (viewModeDefault == null) return 0;
+            return int.Parse(viewModeDefault.ToString());
         }
 
-        public static void SaveDesktopModeDefault(int renderMode)
+        public static void SaveViewModeDefault(int renderMode)
         {
             RegistryKey key = Registry.CurrentUser.CreateSubKey(AppRegistryKey);
-            key.SetValue("DesktopModeDefault", renderMode);
+            key.SetValue("ViewModeDefault", renderMode);
             key.Close();
         }
     }

@@ -13,6 +13,9 @@ tab_width = 4
 
 #### Universal Roslyn-Analyzer Rules ####
 
+# SA0001: XML comment analysis is disabled due to project configuration
+dotnet_diagnostic.SA0001.severity = none
+
 # --- 1. Prefixes and Redundancy ---
 # Rule SA1101: Prefix local calls with this
 # Disabling this stops StyleCop from forcing 'this.' on every instance member.

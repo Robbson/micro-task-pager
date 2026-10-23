@@ -59,6 +59,8 @@ namespace MicroTaskPager.Core
                 catch
                 {
                     // Note: This is where Exception thrown: 'System.Runtime.InteropServices.COMException' comes from
+                    // -> This happens when a windows gets snapped to a split view and the special window appears where the user has to select one of a list
+                    //    to view for the other half of the screen
                     // All windows where this happens are getting blacklisted
                     Debug.WriteLine("Window black-listed: " + hWnd);
                     _hWndBlacklist.Add(hWnd);
