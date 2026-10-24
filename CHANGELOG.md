@@ -1,19 +1,48 @@
 # Changelog
 
-## v1.5.0 (not released yet)
+## v1.5.0
 
-- project decoupled from the long abandoned Switchie project, rebranded to *Micro Task Pager* with a different develeping focus
-- Desktops: complete rewrite of the MicroTaskbar renderer
-- App: added prevention against multiple app instances
-- App: removed paddingSize parameter
-- Settings Dialog: Live preview now also works for pagerHeight parameter
-- Settings Dialog: Added numeric input control for easy fine granular changes
-- Settings Dialog: Better organization of all parameters
-- Settings Dialog: Reset to defaults now works for each tab individually
-- Settings Dialog: Allow revert single parameters to previous values instead of defaults
-- Internal: Added automatic build versions
-- Internal: Added StyleCop.Analyzer width customized settings
-- Internal: Multiple code refactorings
+### General
+- project decoupled from the long abandoned Switchie project, rebranded to *Micro Task Pager* with a different developing focus
+- all new icon and logo, updated about dialog 
+- added file logging for easier support in case of errors
+- multiple starts of the app (with the same user) are now prevented
+- fixed app shutdown crash
+- improved application exit
+
+### Pager
+- support of high-DPI screens
+- added individual view modes for each desktop's screen
+- added pager movement with shift + left mouse button as an alternative to mouse middle-button dragging
+- each desktop now remembers it's last active window and reactivates it when the users comes back to it
+- complete rewrite of the MicroTaskbar renderer for a cleaner look on opened windows at any pager size
+- screen (dis-)connections to the PC while the app is running are now recognized, no restart required
+- shows a separator line in case of multiple screens
+- show pager dragging cursor already on click
+- fixed missing selection for windows of the same process
+- fixed icons centering routines and pageHeight rendering preview
+- fixed memory leaks regarding GDI objects and fonts in the main form
+- fixed annoying Window activation before drag & drop operations
+- removed no longer needed paddingSize parameter
+- optimized redraws
+
+### Settings Dialog
+- better organization of all changeable parameters
+- updated settings dialog positioning next to the pager instead of over it
+- allow revert single parameters to previous values instead of defaults
+- reset to defaults now works for each tab individually
+- live preview now also works for pagerHeight parameter
+- added numeric input control for easy fine granular changes
+- updated numeric controls with min/max limits
+- restrict pagerHeight minimum height including padding
+- fixed out of bounds exception when opening settings window
+
+### Internal
+- added automatic build versions
+- added StyleCop.Analyzer width customized settings
+- improved exception handling;  
+- updated prod build for zip archive generation 
+- tons of code refactorings
 
 
 ## v1.4.4
