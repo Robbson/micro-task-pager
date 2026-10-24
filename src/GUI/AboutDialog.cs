@@ -71,7 +71,7 @@ namespace MicroTaskPager.GUI
                 Location = new Point(20, 330),
                 TextAlign = ContentAlignment.MiddleCenter,
                 Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                Text = "Author: Robbson (Robin Siegemund) 2026",
+                Text = "Author: Robbson 2026",
             };
 
             var contributorsLabel = new Label

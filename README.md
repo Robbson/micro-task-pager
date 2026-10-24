@@ -70,7 +70,7 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 2. Extract the archive.
 3. Run `MicroTaskPager.exe`.
 
-No installer is required. The archive also contains this README, the changelog, and the license.
+No installer is required. Keep the extracted files together: the executable needs the bundled DLLs and `MicroTaskPager.exe.config`. The archive also contains this README, the changelog, the license, and the third-party notices.
 
 > [!IMPORTANT]
 > The application is not code-signed yet. Windows SmartScreen may therefore show a warning the first time you start it.
