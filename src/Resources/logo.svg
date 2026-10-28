@@ -196,8 +196,8 @@
    inkscape:pagecheckerboard="false"
    inkscape:deskcolor="#d1d1d1"
    inkscape:zoom="1.6227549"
-   inkscape:cx="534.89285"
-   inkscape:cy="345.40028"
+   inkscape:cx="535.20097"
+   inkscape:cy="345.7084"
    inkscape:window-width="2872"
    inkscape:window-height="1368"
    inkscape:window-x="35"
@@ -219,7 +219,7 @@
 
 <g
    id="g21"
-   transform="translate(266.47467,-129.53729)"
+   transform="translate(256.13524,-129.53729)"
    inkscape:label="Pager"><rect
      style="fill:#404040;fill-opacity:1;stroke:#000000;stroke-width:4.75331;stroke-dasharray:none;stroke-opacity:1"
      id="rect2"
@@ -419,9 +419,9 @@
      inkscape:label="Task"><tspan
        x="51.135269"
        y="152.26875"
-       id="tspan3"><tspan
+       id="tspan9"><tspan
          style="font-style:italic;font-weight:bold;font-size:42.6667px;line-height:0;font-family:Sans;-inkscape-font-specification:'Sans Bold Italic'"
-         id="tspan2">Task</tspan></tspan></text><text
+         id="tspan8">Task</tspan></tspan></text><text
      xml:space="preserve"
      style="font-size:48.82px;writing-mode:lr-tb;direction:ltr;white-space:pre;inline-size:484.379;display:inline;fill:#404040;fill-opacity:1;stroke:none;stroke-width:0.529215;stroke-linecap:square;stroke-linejoin:miter;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
      x="51.135269"
@@ -431,9 +431,9 @@
      inkscape:label="Pager"><tspan
        x="51.135269"
        y="152.26875"
-       id="tspan5"><tspan
+       id="tspan11"><tspan
          style="font-style:italic;font-weight:bold;font-size:42.6667px;line-height:0;font-family:Sans;-inkscape-font-specification:'Sans Bold Italic'"
-         id="tspan4">Pager</tspan></tspan></text><text
+         id="tspan10">Pager</tspan></tspan></text><text
      xml:space="preserve"
      style="font-size:48.82px;writing-mode:lr-tb;direction:ltr;white-space:pre;inline-size:484.379;display:inline;fill:#404040;fill-opacity:1;stroke:none;stroke-width:0.529215;stroke-linecap:square;stroke-linejoin:miter;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
      x="51.135269"
@@ -443,9 +443,9 @@
      inkscape:label="Micro"><tspan
        x="51.135269"
        y="152.26875"
-       id="tspan7"><tspan
+       id="tspan13"><tspan
          style="font-style:italic;font-weight:bold;font-size:42.6667px;line-height:0;font-family:Sans;-inkscape-font-specification:'Sans Bold Italic'"
-         id="tspan6">Micro</tspan></tspan></text></g><g
+         id="tspan12">Micro</tspan></tspan></text></g><g
    id="g2-8-8"
    inkscape:label="Title-Path"
    transform="translate(-2.5968942,41.217016)"
