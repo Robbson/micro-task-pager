@@ -4,7 +4,7 @@ Micro Task Pager includes the third-party components listed below. Their license
 
 These notices apply only to the bundled third-party assemblies. Micro Task Pager's own source code is licensed under the MIT License; see [LICENSE](LICENSE).
 
-Microsoft .NET Framework is a system prerequisite and is not included in this distribution.
+Microsoft .NET 8 Desktop Runtime is a system prerequisite and is not included in this distribution.
 
 The versions below reflect the dependencies used by the current release. Update this file when the dependencies change.
 
@@ -35,20 +35,6 @@ The versions below reflect the dependencies used by the current release. Update 
 - License: Apache License 2.0
 
 The Serilog distributions used here do not include a separate NOTICE file.
-
-### .NET runtime libraries
-
-The following assemblies are copyright © .NET Foundation and Contributors and are licensed under the MIT License:
-
-- System.Buffers 4.5.1
-- System.Diagnostics.DiagnosticSource 8.0.1
-- System.Memory 4.5.5
-- System.Numerics.Vectors 4.5.0
-- System.Runtime.CompilerServices.Unsafe 6.0.0
-- System.Threading.Channels 8.0.0
-- System.Threading.Tasks.Extensions 4.5.4
-
-Project: <https://github.com/dotnet/runtime>
 
 ## Apache License 2.0
 
@@ -256,34 +242,4 @@ The following license applies to the Serilog packages listed above.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-```
-
-## MIT License
-
-The following license applies to the .NET runtime libraries listed above.
-
-```text
-The MIT License (MIT)
-
-Copyright (c) .NET Foundation and Contributors
-
-All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 ```

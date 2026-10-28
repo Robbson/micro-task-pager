@@ -362,10 +362,8 @@ namespace MicroTaskPager.GUI
                             ResetVirtualDesktops();
                         }
 
-                        // This works only when the pinning is manually done by the user after application has started
-                        // (because auto pinning will always fail)
-
-                        // This should only be the case at start up, right
+                        // Pin the pager application to all virtual desktops so it remains visible
+                        // after switching desktops. This is also performed on startup.
                         if (Options.ShowAppInTaskbar && !_isAppPinned)
                         {
                             try

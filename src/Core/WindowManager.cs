@@ -14,13 +14,19 @@ namespace MicroTaskPager.Core
 {
     public class WindowManager
     {
+        private const int MaxDesktopIndexFailures = 10;
         private static readonly ILogger _logger = Log.ForContext<WindowManager>();
+        private static readonly uint _currentProcessId = (uint)Process.GetCurrentProcess().Id;
         private static readonly List<IntPtr> _hWndBlacklist = new List<IntPtr>();
+        private static readonly Dictionary<IntPtr, int> _desktopIndexFailures = new Dictionary<IntPtr, int>();
         private static readonly string[] _classBlacklist = new string[]
         {
              "Windows.UI.Core.CoreWindow", // Start menu
         };
 
+        // A window can be enumerated before it is registered in the virtual desktop view collection.
+        // Only blacklist it after several failed attempts so transient windows are retried
+        // instead of disappearing from the pager forever.
         // Icons are expensive GDI+ objects and GetOpenWindows runs several times per second,
         // so they are cached per window handle and shared between snapshots instead of recreated on every poll
         private static readonly Dictionary<IntPtr, (IntPtr Source, Bitmap Bitmap)> IconCache =
@@ -38,6 +44,10 @@ namespace MicroTaskPager.Core
                 // Ignore specific windows
                 if (hWnd == shellWindow) return true;
                 if (!WinAPI.IsWindowVisible(hWnd)) return true;
+
+                // Never show the pager's own windows (settings/about dialogs) in the pager
+                WinAPI.GetWindowThreadProcessId(hWnd, out uint pid);
+                if (pid == _currentProcessId) return true;
 
                 int length = WinAPI.GetWindowTextLength(hWnd);
 
@@ -58,19 +68,33 @@ namespace MicroTaskPager.Core
                 // TODO: We can't just ignore exceptions
                 // Get virtual desktop index
                 int index = 0;
-                WinAPI.GetWindowThreadProcessId(hWnd, out uint pid);
                 try
                 {
                     index = WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktopManager.GetInstance().FromWindow((IntPtr)hWnd));
+                    _desktopIndexFailures.Remove(hWnd);
                 }
                 catch (Exception ex)
                 {
                     // Note: This is where Exception thrown: 'System.Runtime.InteropServices.COMException' comes from
                     // -> This happens when a windows gets snapped to a split view and the special window appears where the user has to select one of a list
                     //    to view for the other half of the screen
-                    // All windows where this happens are getting blacklisted
-                    _logger.Error(ex, "Error while trying to get virtual desktop index, window gets blacklisted: " + hWnd.ToString("X"));
-                    _hWndBlacklist.Add(hWnd);
+                    // -> It can also happen for a short moment while a newly created window is not yet registered
+                    //    in the application view collection
+                    _desktopIndexFailures.TryGetValue(hWnd, out int failures);
+                    failures++;
+                    _desktopIndexFailures[hWnd] = failures;
+
+                    if (failures >= MaxDesktopIndexFailures)
+                    {
+                        _logger.Error(ex, "Error while trying to get virtual desktop index, window gets blacklisted: " + hWnd.ToString("X"));
+                        _hWndBlacklist.Add(hWnd);
+                        _desktopIndexFailures.Remove(hWnd);
+                    }
+                    else
+                    {
+                        _logger.Debug(ex, "Could not get virtual desktop index yet, window gets retried: " + hWnd.ToString("X"));
+                    }
+
                     return true;
                 }
 
@@ -98,6 +122,7 @@ namespace MicroTaskPager.Core
             }, 0);
 
             PruneIconCache(activeHandles);
+            PruneDesktopIndexFailures();
 
             // Process IDs would not work for windows of same process, so we use the handles now
             windowList.Sort((x, y) => x.Handle.ToInt32().CompareTo(y.Handle.ToInt32()));
@@ -176,6 +201,14 @@ namespace MicroTaskPager.Core
                     IconCache[handle].Bitmap?.Dispose();
                     IconCache.Remove(handle);
                 }
+            }
+        }
+
+        private static void PruneDesktopIndexFailures()
+        {
+            foreach (var handle in _desktopIndexFailures.Keys.Where(x => !WinAPI.IsWindow(x)).ToList())
+            {
+                _desktopIndexFailures.Remove(handle);
             }
         }
     }

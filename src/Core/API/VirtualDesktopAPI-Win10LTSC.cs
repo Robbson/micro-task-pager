@@ -13,6 +13,10 @@ namespace MicroTaskPager.Core.API.Win10LTSC
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGER = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
         public static readonly Guid CLSID_VIRTUALDESKTOPPINNEDAPPS = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
 
+        // GetWindowDesktopId returns these special IDs for windows/apps pinned to all desktops.
+        public static readonly Guid APP_ON_ALL_DESKTOPS = new Guid("BB64D5B7-4DE3-4AB2-A87C-DB7601AEA7DC");
+        public static readonly Guid WINDOW_ON_ALL_DESKTOPS = new Guid("C2DDEA68-66F2-4CF9-8264-1BFD00FBBBAC");
+
         public enum APPLICATION_VIEW_CLOAK_TYPE : int
         {
             AVCT_NONE = 0,
@@ -61,10 +65,16 @@ namespace MicroTaskPager.Core.API.Win10LTSC
         }
 
         [ComImport]
-        [InterfaceType(ComInterfaceType.InterfaceIsIInspectable)]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         [Guid("372E1D3B-38D3-42E4-A15B-8AB2B178F513")]
         public interface IApplicationView
         {
+            // IInspectable methods have to be declared explicitly since .NET (Core) does not
+            // support marshalling interfaces marked as InterfaceIsIInspectable.
+            int GetIids(out int iidCount, out IntPtr iids);
+            int GetRuntimeClassName(out IntPtr className);
+            int GetTrustLevel(out int trustLevel);
+
             int SetFocus();
             int SwitchTo();
             int TryInvokeBack(IntPtr /* IAsyncCallback* */ callback);
@@ -301,6 +311,8 @@ namespace MicroTaskPager.Core.API.Win10LTSC
         public IWindowsVirtualDesktop FromWindow(IntPtr hWnd)
         {
             Guid id = VirtualDesktopManagerPrivate.GetWindowDesktopId(hWnd);
+            if (id == WindowsVirtualDesktopAPI.APP_ON_ALL_DESKTOPS || id == WindowsVirtualDesktopAPI.WINDOW_ON_ALL_DESKTOPS)
+                return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.GetCurrentDesktop());
             if (id != Guid.Empty) return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.FindDesktop(ref id));
             return null;
         }

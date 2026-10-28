@@ -93,7 +93,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     _dragDropData = new DragDropData()
                     {
                         OriginDesktopIndex = VirtualDesktopIndex,
-                        DraggedWindow = w,
+                        DraggedWindowHandle = w.Handle.ToInt64(),
                     };
                     Size dragSize = SystemInformation.DragSize;
                     dragBoxFromMouseDown = new Rectangle(
@@ -194,10 +194,10 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             if (!IsInsideBounds(Form.PointToClient(new Point(e.X, e.Y)))) return;
             if (e.Data.GetDataPresent(typeof(DragDropData)))
             {
-                var ddd = (DragDropData)e.Data.GetData(typeof(DragDropData));
-                if (e.Effect == DragDropEffects.Move)
+                var ddd = e.Data.GetData(typeof(DragDropData)) as DragDropData;
+                if (ddd != null && e.Effect == DragDropEffects.Move)
                 {
-                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MoveWindow(ddd.DraggedWindow.Handle);
+                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MoveWindow(new IntPtr(ddd.DraggedWindowHandle));
                     Form.Invalidate();
                 }
             }

@@ -61,7 +61,7 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 ### Requirements
 
 - Windows 10 or Windows 11, 64-bit. Current Windows 11 releases, including 26H2, are tested.
-- .NET Framework 4.8 or newer. It is included in Windows 10 version 1903 and later, as well as Windows 11.
+- .NET 8 Desktop Runtime (x64). The .NET 8 SDK includes it for development.
 - On ARM64 devices running Windows 11, the x64 build runs through Windows emulation; there is no native ARM64 build yet.
 
 ### Installation
@@ -70,7 +70,7 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 2. Extract the archive.
 3. Run `MicroTaskPager.exe`.
 
-No installer is required. Keep the extracted files together: the executable needs the bundled DLLs and `MicroTaskPager.exe.config`. The archive also contains this README, the changelog, the license, and the third-party notices.
+No installer is required. Keep the extracted files together: the executable needs the bundled DLLs, `MicroTaskPager.deps.json`, and `MicroTaskPager.runtimeconfig.json`. The archive also contains this README, the changelog, the license, and the third-party notices.
 
 > [!IMPORTANT]
 > The application is not code-signed yet. Windows SmartScreen may therefore show a warning the first time you start it.
@@ -120,13 +120,13 @@ Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWA
 - Newly opened windows are occasionally not detected immediately.
 - In **Micro Taskbar** view, the order of icons follows the window order and cannot be rearranged manually.
 - The application is not code-signed, so SmartScreen warnings are expected.
-- The project still targets .NET Framework 4.8, so there is no optimized native ARM64 build.
+- The app is currently built for x64 only, so there is no optimized native ARM64 build.
 
 ## Building from source
 
 ### Prerequisites
 
-- Visual Studio 2022 with the **.NET desktop development** workload, or the .NET SDK with the .NET Framework 4.8 targeting pack.
+- Visual Studio 2022 with the **.NET desktop development** workload, or the .NET 8 SDK.
 - Windows 10 or Windows 11.
 
 ### Build
@@ -146,7 +146,7 @@ cd src
 .\Publish.cmd
 ```
 
-The script publishes a release build to `prod\` and creates a versioned ZIP archive there. Note that the build automatically increments the version in `src\version.txt`.
+The script publishes a release build to `prod\` and creates a versioned ZIP archive there. The package is framework-dependent: it does not bundle the .NET runtime, so users need the .NET 8 Desktop Runtime. Note that the build automatically increments the version in `src\version.txt`.
 
 ## Feedback
 
