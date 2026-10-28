@@ -40,6 +40,7 @@ namespace MicroTaskPager
                 // Register global exception handler
                 SetupGlobalExceptionHandling();
 
+                Application.SetHighDpiMode(HighDpiMode.SystemAware);
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new GUI.MainForm());

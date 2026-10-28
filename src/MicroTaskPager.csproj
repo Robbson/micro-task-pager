@@ -1,34 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <UseWPF>true</UseWPF>		
+    <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <ApplicationIcon>Resources/icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
-		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-		<Platforms>AnyCPU;ARM64;x64;x86</Platforms>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Platforms>AnyCPU;ARM64;x64;x86</Platforms>
   </PropertyGroup>
-
-	<Target Name="IncrementVersion" BeforeTargets="BeforeBuild">
+  <Target Name="IncrementVersion" BeforeTargets="BeforeBuild">
     <Exec Command="powershell -ExecutionPolicy Bypass -File IncrementVersion.ps1" />
-	</Target>
-	
+  </Target>
   <ItemGroup>
     <Content Remove="Resources/icon.ico" />
     <Content Remove="Resources/logo.png" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Resources/icon.ico" />
-    <EmbeddedResource Include="Resources/logo.png" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
     <PackageReference Include="Serilog.Sinks.Debug" Version="3.0.0" />
@@ -38,5 +27,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/icon.ico" />
+    <EmbeddedResource Include="Resources/logo.png" />
+  </ItemGroup>
 </Project>

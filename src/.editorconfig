@@ -76,3 +76,7 @@ dotnet_diagnostic.SA1602.severity = none
 # Element should not be on a singe line -> why we should waste additional lines for empty blocks?
 dotnet_diagnostic.SA1501.severity = none
 dotnet_diagnostic.SA1502.severity = none
+
+
+# Platform related warnings irrelevant for Windows only app
+dotnet_diagnostic.CA1416.severity = none
