@@ -13,6 +13,8 @@ namespace MicroTaskPager.Core.API.Win11_
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGERINTERNAL = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGER = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
         public static readonly Guid CLSID_VIRTUALDESKTOPPINNEDAPPS = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
+        public static readonly Guid APP_ON_ALL_DESKTOPS = new Guid("BB64D5B7-4DE3-4AB2-A87C-DB7601AEA7DC");
+        public static readonly Guid WINDOW_ON_ALL_DESKTOPS = new Guid("C2DDEA68-66F2-4CF9-8264-1BFD00FBBBAC");
 
         public enum APPLICATION_VIEW_CLOAK_TYPE : int
         {
@@ -325,6 +327,11 @@ namespace MicroTaskPager.Core.API.Win11_
             Guid id = VirtualDesktopManagerPrivate.GetWindowDesktopId(hWnd);
             if (id != Guid.Empty)
             {
+                if (id == WindowsVirtualDesktopAPI.APP_ON_ALL_DESKTOPS || id == WindowsVirtualDesktopAPI.WINDOW_ON_ALL_DESKTOPS)
+                {
+                    return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.GetCurrentDesktop());
+                }
+
                 //return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.FindDesktop(ref id));
 
                 // the above gives “COMException: A null reference pointer was passed to the stub. (Exception from HRESULT: 0x800706F4)” error, so replace it wuth more code:

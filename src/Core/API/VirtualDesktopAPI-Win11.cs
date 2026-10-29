@@ -12,6 +12,8 @@ namespace MicroTaskPager.Core.API.Win11
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGERINTERNAL = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
         public static readonly Guid CLSID_VIRTUALDESKTOPMANAGER = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
         public static readonly Guid CLSID_VIRTUALDESKTOPPINNEDAPPS = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
+        public static readonly Guid APP_ON_ALL_DESKTOPS = new Guid("BB64D5B7-4DE3-4AB2-A87C-DB7601AEA7DC");
+        public static readonly Guid WINDOW_ON_ALL_DESKTOPS = new Guid("C2DDEA68-66F2-4CF9-8264-1BFD00FBBBAC");
 
         public enum APPLICATION_VIEW_CLOAK_TYPE : int
         {
@@ -313,7 +315,14 @@ namespace MicroTaskPager.Core.API.Win11
         public IWindowsVirtualDesktop FromWindow(IntPtr hWnd)
         {
             Guid id = VirtualDesktopManagerPrivate.GetWindowDesktopId(hWnd);
-            if (id != Guid.Empty) return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.FindDesktop(ref id));
+            if (id != Guid.Empty)
+            {
+                if (id == WindowsVirtualDesktopAPI.APP_ON_ALL_DESKTOPS || id == WindowsVirtualDesktopAPI.WINDOW_ON_ALL_DESKTOPS)
+                {
+                    return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.GetCurrentDesktop());
+                }
+                return new WindowsVirtualDesktop(VirtualDesktopManagerInternal.FindDesktop(ref id));
+            }
             return null;
         }
 
