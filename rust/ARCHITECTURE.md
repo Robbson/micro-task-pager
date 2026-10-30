@@ -66,7 +66,7 @@ After a first look, the currently preferred technology stack seems to be:
 | COM interoperability | `windows-core` |
 | Main window | Native Win32 |
 | Main rendering | Direct2D via `windows-canvas` |
-| Settings UI | WinUI 3 via `windows-reactor` |
+| Settings UI | `winsafe` with classic Win32 controls because `windows-reactor` for WinUI 3 isn't stable yet |
 | Window previews | DWM Thumbnail API |
 | Application icons | Windows Shell APIs |
 | Build system | Cargo |
@@ -194,48 +194,12 @@ The application should redraw when its visual state changes.
 ## 8. Settings UI: WinUI 3 with windows-reactor
 
 The settings panel is relatively small and independent of the main rendering implementation.
-Evaluate Microsoft's `windows-reactor` crate for implementing it declaratively in Rust.
-`windows-reactor` provides a React-inspired component architecture for WinUI 3.
-
-Potential advantages:
-
-- Declarative UI construction.
-- Component-based architecture.
-- State-driven rendering.
-- Native WinUI 3 controls.
-- No XAML requirement for the UI definition.
-
-Potential controls include:
-
-- NavigationView.
-- ToggleSwitch.
-- ComboBox.
-- NumberBox.
-- ContentDialog.
+Currently it's a built programmatic win form so we should stick to a similar approach when using `winsafe`
 
 ### 8.1 Separate Settings Window
 
-Initially implement the settings panel as a separate WinUI 3 window.
-Do not assume that a WinUI 3 window can simply be embedded as a child control inside the existing Win32 HWND.
-Keep the settings model independent of WinUI.
+Keep the settings model independent.
 The actual model should be derived from the existing application's configuration requirements.
-
-### 8.2 WinUI Runtime Considerations
-
-WinUI 3 requires the Windows App SDK.
-
-Investigate:
-
-- Framework-dependent deployment.
-- Self-contained deployment.
-- Runtime initialization.
-- COM apartment requirements.
-- UI thread ownership.
-- Communication between the Win32 main window and the WinUI settings window.
-
-`windows-reactor` is a relatively young project. Check its current API, supported controls and deployment model before committing to it as a permanent dependency.
-
-If it introduces excessive complexity, a conventional Win32 settings dialog remains a perfectly valid alternative.
 
 
 ## 9. Migration Strategy
@@ -280,7 +244,6 @@ Do not proceed with a complete UI migration until the core virtual desktop funct
 ### Phase 5: Settings UI
 
 - Implement the independent settings model.
-- Evaluate `windows-reactor`.
 - Create the settings window.
 - Preserve existing configuration compatibility.
 
@@ -321,7 +284,7 @@ The following decisions are the initial architectural direction, not irreversibl
 | Rust project | Single Cargo crate initially |
 | Main window | Classic Win32 |
 | Main rendering | Direct2D via `windows-canvas` |
-| Settings UI | Evaluate `windows-reactor` |
+| Settings UI | Win32 controls via `winsafe` |
 | Virtual desktops | Custom version-specific COM bindings |
 | Window previews | DWM Thumbnail API |
 | Application icons | Windows Shell APIs |
