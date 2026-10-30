@@ -78,11 +78,18 @@ cargo test
   toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
 - The current binary is a scaffold: it loads settings and exits. The Win32 window and message loop
   arrive in Phase 4.
-- COM verification is done with the standalone probe once it exists:
+- The virtual-desktop backend currently supports build 22621 and later (Win11_ variant) only. Older
+  builds return `ApiError::NotSupported` until the Win11, Win10, and Win10LTSC modules are ported.
+- COM verification uses the standalone probe:
 
   ```powershell
   cargo run --example probe
+  cargo run --example probe -- index 0x1234
+  cargo run --example probe -- pinned 0x1234
+  cargo run --example probe -- switch 1
   ```
+
+  Run the read-only commands first. `move` and `pin` change real window state.
 
 - Do not declare work complete while `cargo fmt --check` or `cargo clippy -D warnings` fails.
 - Do not run the GUI while the C# application is running: both implementations pin themselves to all
@@ -130,13 +137,16 @@ Guidance:
 - `src/Config/` - settings model, registry storage, saved pager position.
 - `rust/ARCHITECTURE.md` - migration architecture and behavioral contract.
 - `rust/MIGRATION.md` - phase status, verification log, and open questions.
-- `rust/src/` - Rust implementation (scaffold: settings, COM apartment, single instance).
-- `rust/examples/probe/` - standalone virtual-desktop COM probe (planned).
+- `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API).
+- `rust/src/desktop/` - safe `VirtualDesktopApi` plus the per-build COM backends.
+- `rust/examples/probe/` - standalone virtual-desktop COM probe.
 
 ## Notes
 
 - Virtual-desktop COM interfaces are undocumented and version-sensitive. Test interop changes on the
   supported Windows versions rather than assuming one layout.
+- The desktop API is apartment-threaded. Initialize `micro_task_pager::com::Apartment` on the thread
+  that will use it and keep all `desktop` calls on that thread.
 - Windows belonging to the pager process are intentionally excluded from the pager.
 - The Rust implementation must preserve the behavior described in `rust/ARCHITECTURE.md` section 9.
   Intentional deviations from the C# implementation are listed in section 10 there.

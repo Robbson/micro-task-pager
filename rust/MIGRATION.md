@@ -13,7 +13,7 @@ section instead.
 | Phase | Status | Started | Completed | Notes |
 |---|---|---|---|---|
 | 1. Scaffold | In progress | 2026-10-30 | | Crate, toolchain, settings, single instance done; manifest and logging pending |
-| 2. Virtual desktop subsystem | Not started | | | Probe and COM tests come first |
+| 2. Virtual desktop subsystem | In progress | 2026-10-30 | | Win11_ backend and probe work on build 26200; older variants and supervisor pending |
 | 3. Window model | Not started | | | |
 | 4. Main window and rendering | Not started | | | |
 | 5. Always-on behavior | Not started | | | |
@@ -21,7 +21,7 @@ section instead.
 
 ## Phase 1: Scaffold
 
-- [x] Cargo crate in `rust/` with pinned toolchain and `rustfmt`/`clippy`.
+- [x] Cargo crate in `rust/` with toolchain channel and `rustfmt`/`clippy`.
 - [x] `rust/.gitignore` for `target/`.
 - [x] Single-instance mutex with the release mutex name.
 - [x] COM STA initialization guard.
@@ -32,6 +32,21 @@ section instead.
 - [ ] Replace the temporary console entry point with the Win32 message loop (Phase 4).
 - [x] `cargo fmt`, `cargo clippy -D warnings`, `cargo build`, and `cargo test` pass.
 
+## Phase 2: Virtual Desktop Subsystem
+
+- [x] Safe `VirtualDesktopApi` trait and error model.
+- [x] COM apartment assumption documented; the probe initializes STA.
+- [x] Win11_ interface definitions, activation through the immersive shell, and view/desktop wiring.
+- [x] Probe read-only: count, current index, desktop GUIDs, and window-to-desktop index.
+- [x] Probe pin state through `IApplicationViewCollection`, `IApplicationView`, and
+      `IVirtualDesktopPinnedApps`.
+- [x] Probe `switch` verified in both directions.
+- [ ] Probe `move` and `pin` mutations on a throwaway window.
+- [ ] Win11 21H2 module.
+- [ ] Win10 and Win10LTSC modules.
+- [ ] Supervisor that recreates the COM objects after a failure.
+- [ ] Verified matrix for every supported build.
+
 ## Decision log
 
 | Date | Decision | Rationale | Reference |
@@ -41,6 +56,7 @@ section instead.
 | 2026-10-30 | One safe virtual-desktop API plus per-build vtable modules | The C# variants duplicate logic; only the layouts differ | ARCHITECTURE §6.1 |
 | 2026-10-30 | Use `windows` 0.62 and the 0.100 native-app crates where applicable | The umbrella `windows` crate has not moved to 0.100 | ARCHITECTURE §5.1 |
 | 2026-10-30 | Use the `stable` toolchain channel for now | The installed `1.99.1` rustup toolchain is missing `cargo.exe`; stable is also 1.99.1 | Open question below |
+| 2026-10-30 | Implement the Win11_ backend and probe first | The current machine runs build 26200; validate the vtable strategy before porting older variants | Phase 2 |
 
 ## Verified Windows builds
 
@@ -48,7 +64,7 @@ Record every build on which the probe runs. Do not infer results from a differen
 
 | Build | Edition | Selected variant | Probe result | Date | Notes |
 |---|---|---|---|---|---|
-| | | | | | |
+| 26200 | Windows 11 25H2 | Win11_ | Count 2, current index, desktop GUIDs, window-to-desktop index, pin state, and switch 0 -> 1 -> 0 work | 2026-10-30 | `move` and `pin` mutations not exercised; older builds not tested |
 
 ## Open questions
 
@@ -68,6 +84,7 @@ narrative.
 | Date | Phase | Evidence |
 |---|---|---|
 | 2026-10-30 | 1 | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`, `cargo test` pass on stable 1.99.1; 4 unit tests; `cargo run` reads the existing `HKCU\SOFTWARE\MicroTaskPager` values and prints them |
+| 2026-10-30 | 2 | Probe on build 26200: count 2, two desktop GUIDs, VS Code HWND maps to desktop 0, pin state read, switch 0 -> 1 -> 0; fmt, clippy, and tests pass |
 
 ## How to use this document
 

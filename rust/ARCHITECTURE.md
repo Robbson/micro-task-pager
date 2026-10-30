@@ -315,6 +315,9 @@ These details are easy to get wrong and are not visible in the C# declarations:
   Win11_ additionally inserts `SwitchDesktopAndMoveForegroundView` after `SwitchDesktop`.
   Never share one vtable definition across build families.
 - `IVirtualDesktop::GetName` and `GetWallpaperPath` return `HSTRING` on Win11 and Win11_ only.
+- C# declarations that return `bool` without `[PreserveSig]` are native `HRESULT` plus an out `BOOL`
+  (`IsAppIdPinned`, `IsViewPinned`, `IsRemote`). Declare them with the out parameter; treating them as
+  a native `BOOL` return reads garbage.
 - `IObjectArray::GetAt(index, riid, &mut out)` takes an IID and returns a raw interface pointer. Release
   the array and every object retrieved from it.
 - `IVirtualDesktopManager::GetWindowDesktopId` returns GUIDs that can be `APP_ON_ALL_DESKTOPS` or

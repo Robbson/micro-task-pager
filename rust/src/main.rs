@@ -1,6 +1,4 @@
-mod com;
-mod settings;
-mod single_instance;
+use micro_task_pager::{com, settings, single_instance};
 
 use single_instance::Acquisition;
 
