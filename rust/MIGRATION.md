@@ -107,6 +107,7 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Prune desktop-lookup failure counters using every window that reaches the lookup | The C# code prunes against successful windows only, so a failing window loses its counter each snapshot and never reaches the blacklist | ARCHITECTURE §10 |
 | 2026-10-30 | Use GDI `DrawIconEx` instead of converting every `HICON` to a bitmap | Fewer GDI objects and no manual icon-bitmap lifetime; the pager redraws only on changes |
 | 2026-10-30 | Pre-blend the separator color | `FillRect` has no alpha, so the GDI color is the result of blending C#'s translucent light blue over the default background |
+| 2026-10-30 | Use the common-controls image-list drag image for window drags | Matches the usual Windows ghost icon and avoids implementing OLE drag source/target interfaces |
 | 2026-10-30 | Use screen cursor coordinates while dragging the pager | Client coordinates change as the window moves, which caused a feedback loop and flicker |
 | 2026-10-30 | Drop topmost and suspend its timer reassertion while the context menu is open | A topmost pager otherwise covers its own popup menu |
 | 2026-10-30 | Keep unsafe confined to FFI modules instead of adopting `winsafe` | `winsafe` is a UI wrapper, not a safe abstraction for undocumented shell COM; the official `windows` crate is the right binding |
@@ -138,6 +139,7 @@ narrative.
 | 2026-10-30 | 3 | Probe `snapshot` on build 26200: 16 filtered windows, desktop mapping, z-order, active window, icon present for every window, and a stable hash; fmt, clippy, docs, and 14 tests pass |
 | 2026-10-30 | 4 | Pager window on build 26200 rendered both modes (screenshots), click switched 0 -> 1 -> 0, Shift+wheel/menu toggle persisted, position save/default/restore worked, system DPI awareness = 1, version resource present, fmt/clippy/docs and 17 tests pass |
 | 2026-10-30 | 4 | User-test fixes: pager drag follows the screen cursor exactly (+20,+10 test), desktop 1 content renders at absolute coordinates, context menu shows Position above the pager and dismisses cleanly; 18 tests pass |
+| 2026-10-30 | 4 | Window drag shows a semi-transparent image-list ghost icon with the normal arrow cursor; drag end releases the image-list lock and the pager stays responsive |
 
 ## Code map and glossary
 

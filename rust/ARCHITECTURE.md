@@ -564,8 +564,9 @@ These are intentional fixes or simplifications. Document any additional deviatio
 - Pre-blend the desktop separator color because GDI `FillRect` has no alpha channel.
 - Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
 - Replace OLE drag-and-drop with an internal mouse-capture drag: the payload is only a window handle
-  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. Use a hand cursor
-  for window drags and the four-way move cursor only for dragging the pager itself.
+  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. Show a
+  semi-transparent icon drag image with the common-controls image-list drag API and keep the normal
+  arrow cursor; the four-way move cursor is reserved for dragging the pager itself.
 - Keep the vertical-monitor layout limitation for v1.
 
 ## 11. Migration Strategy

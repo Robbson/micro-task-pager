@@ -19,10 +19,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostQuitMessage, RegisterClassW, SW_SHOWNOACTIVATE,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetForegroundWindow, SetLayeredWindowAttributes,
     SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, TPM_LEFTALIGN, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, TranslateMessage, WM_CLOSE, WM_COMMAND,
-    WM_DESTROY, WM_DISPLAYCHANGE, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_PAINT, WM_RBUTTONUP, WM_TIMER, WNDCLASSW,
-    WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, TranslateMessage, WM_CAPTURECHANGED, WM_CLOSE,
+    WM_COMMAND, WM_DESTROY, WM_DISPLAYCHANGE, WM_ERASEBKGND, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_PAINT, WM_RBUTTONUP, WM_TIMER,
+    WNDCLASSW, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
 use windows::core::{Error as CoreError, PCWSTR, w};
 
@@ -105,7 +105,9 @@ pub fn run(app: App) -> Result<(), Box<dyn Error>> {
 
         let _ = KillTimer(Some(hwnd), TIMER_PRIMARY);
         let _ = KillTimer(Some(hwnd), TIMER_SECONDARY);
-        drop(Box::from_raw(app_ptr));
+        let mut app = Box::from_raw(app_ptr);
+        app.cancel_drag();
+        drop(app);
     }
 
     Ok(())
@@ -151,12 +153,12 @@ unsafe extern "system" fn wndproc(
             LRESULT(0)
         }
         WM_LBUTTONUP => {
-            unsafe {
-                let _ = ReleaseCapture();
-            }
             if let Some(app) = app {
                 let (x, y) = client_point(lparam);
                 app.on_mouse_up(x, y);
+            }
+            unsafe {
+                let _ = ReleaseCapture();
             }
             LRESULT(0)
         }
@@ -171,12 +173,12 @@ unsafe extern "system" fn wndproc(
             LRESULT(0)
         }
         WM_MBUTTONUP => {
-            unsafe {
-                let _ = ReleaseCapture();
-            }
             if let Some(app) = app {
                 let (x, y) = client_point(lparam);
                 app.on_mouse_up(x, y);
+            }
+            unsafe {
+                let _ = ReleaseCapture();
             }
             LRESULT(0)
         }
@@ -207,6 +209,12 @@ unsafe extern "system" fn wndproc(
         WM_COMMAND => {
             if let Some(app) = app {
                 app.on_command((wparam.0 & 0xFFFF) as u32);
+            }
+            LRESULT(0)
+        }
+        WM_CAPTURECHANGED => {
+            if let Some(app) = app {
+                app.cancel_drag();
             }
             LRESULT(0)
         }

@@ -16,9 +16,14 @@
 
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::InvalidateRect;
+use windows::Win32::UI::Controls::{
+    HIMAGELIST, ILC_COLOR32, ILC_MASK, ImageList_BeginDrag, ImageList_Create, ImageList_Destroy,
+    ImageList_DragEnter, ImageList_DragLeave, ImageList_DragMove, ImageList_EndDrag,
+    ImageList_ReplaceIcon,
+};
 use windows::Win32::UI::HiDpi::GetDpiForSystem;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW, IDC_HAND, IDC_SIZEALL,
+    GetCursorPos, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW, IDC_SIZEALL,
     LoadCursorW, MB_ICONINFORMATION, MB_OK, MessageBoxW, PostMessageW, SM_CXDRAG, SM_CYDRAG,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetForegroundWindow,
     SetWindowPos, WM_CLOSE,
@@ -54,6 +59,7 @@ enum DragState {
         start_x: i32,
         start_y: i32,
         active: bool,
+        image_list: Option<HIMAGELIST>,
     },
 }
 
@@ -223,6 +229,7 @@ impl App {
             start_x: x,
             start_y: y,
             active: false,
+            image_list: None,
         });
     }
 
@@ -259,7 +266,9 @@ impl App {
         let drag_threshold_x = unsafe { GetSystemMetrics(SM_CXDRAG) }.max(1);
         let drag_threshold_y = unsafe { GetSystemMetrics(SM_CYDRAG) }.max(1);
 
+        let mut activate = None;
         if let Some(DragState::Window {
+            hwnd,
             start_x,
             start_y,
             active,
@@ -270,9 +279,98 @@ impl App {
             && ((x - *start_x).abs() > drag_threshold_x || (y - *start_y).abs() > drag_threshold_y)
         {
             *active = true;
-            // The pager uses the four-way move cursor; a window drag uses a
-            // hand so the two gestures are visually distinguishable.
-            set_cursor(IDC_HAND);
+            activate = Some(*hwnd);
+        }
+
+        if let Some(hwnd) = activate {
+            self.start_drag_image(hwnd, x, y);
+        } else if matches!(
+            &self.drag,
+            Some(DragState::Window {
+                active: true,
+                image_list: Some(_),
+                ..
+            })
+        ) {
+            unsafe {
+                let _ = ImageList_DragMove(x, y);
+            }
+        }
+    }
+
+    /// Creates the semi-transparent ghost icon shown next to the cursor while a
+    /// window is dragged.
+    ///
+    /// `ImageList_BeginDrag`/`ImageList_DragEnter` are the same mechanism used
+    /// by the common list controls. The image list owns a copy of the icon, so
+    /// it must stay alive until `ImageList_EndDrag`.
+    fn start_drag_image(&mut self, hwnd: HWND, x: i32, y: i32) {
+        let Some(icon) = self
+            .snapshot
+            .windows
+            .iter()
+            .find(|window| window.hwnd == hwnd)
+            .and_then(|window| window.icon)
+        else {
+            return;
+        };
+
+        let size = render::scale(16, self.dpi).max(16);
+        let image_list = unsafe { ImageList_Create(size, size, ILC_COLOR32 | ILC_MASK, 1, 1) };
+        if image_list.0 == 0 {
+            return;
+        }
+
+        let index = unsafe { ImageList_ReplaceIcon(image_list, -1, icon.handle()) };
+        if index < 0 {
+            unsafe {
+                let _ = ImageList_Destroy(Some(image_list));
+            }
+            return;
+        }
+
+        if !unsafe { ImageList_BeginDrag(image_list, 0, size / 2, size / 2) }.as_bool() {
+            unsafe {
+                let _ = ImageList_Destroy(Some(image_list));
+            }
+            return;
+        }
+
+        if !unsafe { ImageList_DragEnter(self.hwnd, x, y) }.as_bool() {
+            unsafe {
+                ImageList_EndDrag();
+                let _ = ImageList_Destroy(Some(image_list));
+            }
+            return;
+        }
+
+        if let Some(DragState::Window {
+            image_list: slot, ..
+        }) = &mut self.drag
+        {
+            *slot = Some(image_list);
+        } else {
+            self.destroy_drag_image(image_list);
+        }
+    }
+
+    fn destroy_drag_image(&self, image_list: HIMAGELIST) {
+        unsafe {
+            let _ = ImageList_DragLeave(self.hwnd);
+            ImageList_EndDrag();
+            let _ = ImageList_Destroy(Some(image_list));
+        }
+    }
+
+    /// Ends any drag in progress and releases the image-list lock. Called when
+    /// capture is lost or the window is closing.
+    pub fn cancel_drag(&mut self) {
+        if let Some(DragState::Window {
+            image_list: Some(image_list),
+            ..
+        }) = self.drag.take()
+        {
+            self.destroy_drag_image(image_list);
         }
     }
 
@@ -286,19 +384,27 @@ impl App {
             Some(DragState::Window {
                 hwnd,
                 origin_desktop,
-                active: true,
+                active,
+                image_list,
                 ..
             }) => {
-                if let Some(target) = self.layout.desktop_at(x)
-                    && target != origin_desktop
-                    && let Err(error) = self.desktop.move_window_to(hwnd, target)
-                {
-                    logging::error(format!("moving window failed: {error}"));
-                } else {
+                if let Some(image_list) = image_list {
+                    self.destroy_drag_image(image_list);
+                }
+
+                if active {
+                    if let Some(target) = self.layout.desktop_at(x)
+                        && target != origin_desktop
+                        && let Err(error) = self.desktop.move_window_to(hwnd, target)
+                    {
+                        logging::error(format!("moving window failed: {error}"));
+                    }
                     self.refresh(true);
+                } else {
+                    self.click_at(x, y);
                 }
             }
-            _ => self.click_at(x, y),
+            None => self.click_at(x, y),
         }
     }
 
