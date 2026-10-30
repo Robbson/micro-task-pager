@@ -14,7 +14,7 @@ section instead.
 |---|---|---|---|---|
 | 1. Scaffold | Complete | 2026-10-30 | 2026-10-30 | Core scaffold done; remaining items re-scoped to Phase 2 and Phase 4 |
 | 2. Virtual desktop subsystem | Complete | 2026-10-30 | 2026-10-30 | Win10/Win11 layouts, supervisor, logging, and probe implemented; older-build verification postponed |
-| 3. Window model | Not started | | | |
+| 3. Window model | Complete | 2026-10-30 | 2026-10-30 | Enumeration, filters, icons, z-order, failure handling, and snapshot hash implemented |
 | 4. Main window and rendering | Not started | | | |
 | 5. Always-on behavior | Not started | | | |
 | 6. Parity and deployment | Not started | | | |
@@ -53,6 +53,18 @@ Implementation is complete. Verification on Windows 10, Win10LTSC, and Windows 1
 postponed until suitable images are available; it is tracked in the Postponed section and does not
 block Phase 3.
 
+## Phase 3: Window Model
+
+- [x] Immutable `WindowInfo` / `WindowSnapshot` model, sorted by window handle.
+- [x] `EnumWindows` filtering: shell window, invisible windows, empty titles, class blacklist, own
+      process, blacklisted handles.
+- [x] Desktop index per window with failure counters and a blacklist.
+- [x] Z-order, foreground/active state, title, class, process ID, and rectangle.
+- [x] Icon fallback chain (`WM_GETICON`, class icon, `IDI_APPLICATION`) plus a per-window cache.
+- [x] Snapshot hash for change detection.
+- [x] Probe `snapshot` command verified on build 26200.
+- [ ] Renderer consumes the snapshot (Phase 4).
+
 ## Phase 4: Main Window and Rendering
 
 Moved out of Phase 1 because each item depends on the window or monitor layout.
@@ -86,6 +98,8 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Use a small in-house file logger | Avoids a dependency and matches the existing log directory and 14-day retention | ARCHITECTURE §3 |
 | 2026-10-30 | Close Phase 1 with re-scoped items instead of finishing it first | Manifest, icon, message loop, and view-mode reshape depend on Phase 4; only logging was pulled into Phase 2 | Phase 1 |
 | 2026-10-30 | Postpone older-build verification | No Windows 10 or older Windows 11 images are available; code is in place and the matrix can be filled later | Postponed section |
+| 2026-10-30 | Derive z-order from `EnumWindows` order | Avoids the C# O(n²) `GetWindow` walk; relative order is equivalent |
+| 2026-10-30 | Prune desktop-lookup failure counters using every window that reaches the lookup | The C# code prunes against successful windows only, so a failing window loses its counter each snapshot and never reaches the blacklist | ARCHITECTURE §10 |
 
 ## Verified Windows builds
 
@@ -112,6 +126,7 @@ narrative.
 |---|---|---|
 | 2026-10-30 | 1 | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`, `cargo test` pass on stable 1.99.1; 4 unit tests; `cargo run` reads the existing `HKCU\SOFTWARE\MicroTaskPager` values and prints them |
 | 2026-10-30 | 2 | Probe on build 26200: count 2, two desktop GUIDs, VS Code HWND maps to desktop 0, pin state read, switch 0 -> 1 -> 0; probe-owned window moved 0 -> 1 -> 0 and pinned/unpinned; fmt, clippy, and 11 tests pass |
+| 2026-10-30 | 3 | Probe `snapshot` on build 26200: 16 filtered windows, desktop mapping, z-order, active window, icon present for every window, and a stable hash; fmt, clippy, docs, and 14 tests pass |
 
 ## Code map and glossary
 
@@ -130,6 +145,8 @@ documentation mirrors this table.
 | `src/desktop/com/core.rs` | Shared COM interface definitions and the generic backend. |
 | `src/desktop/com/win10.rs` | Win10 layout (build 10240–21999). |
 | `src/desktop/com/win11.rs` | Win11 layout (build 22000 and later). |
+| `src/windows/mod.rs` | Window enumeration, filtering, snapshot model, and change hash. |
+| `src/windows/icons.rs` | Icon fallback chain and per-window icon cache. |
 | `examples/probe/main.rs` | Standalone probe; not part of the pager binary. |
 
 Terms that appear in the code:
@@ -142,6 +159,10 @@ Terms that appear in the code:
 | Backend / layout | The actual COM implementation for a Windows build family. There are two layouts instead of four C# variants because the used vtables are identical inside each pair. |
 | Probe | A separate binary built by Cargo from `examples/probe` (`cargo run --example probe`). It exercises the COM layer without starting the pager UI. |
 | HWND | An opaque Windows window handle. The probe accepts it in decimal or `0x` hexadecimal. |
+| Snapshot | An immutable view of desktops and windows at one moment. The renderer will draw from it, and its `hash` tells the UI whether a repaint is needed. |
+| Z-order | Stacking order. In the snapshot, larger values are closer to the top. |
+| Failure counter / blacklist | A window whose desktop lookup keeps failing is skipped after 10 attempts, mostly to avoid snapped-window helper windows spamming the log. |
+| HICON | A borrowed icon handle supplied by the shell. It must not be destroyed by the pager. |
 | AUMID | Application User Model ID. Windows uses it to pin an application to all virtual desktops. The probe sets one so pin/unpin can be tested safely. |
 | vtable | A table of function pointers that makes up a COM object. The `#[repr(C)]` structs in `core.rs` mirror the operating system's table layout. |
 

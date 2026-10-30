@@ -90,6 +90,7 @@ cargo test
 
   ```powershell
   cargo run --example probe
+  cargo run --example probe -- snapshot
   cargo run --example probe -- index 0x1234
   cargo run --example probe -- pinned 0x1234
   cargo run --example probe -- switch 1
@@ -148,9 +149,11 @@ Guidance:
 - `src/Config/` - settings model, registry storage, saved pager position.
 - `rust/ARCHITECTURE.md` - migration architecture and behavioral contract.
 - `rust/MIGRATION.md` - phase status, verification log, and open questions.
-- `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API).
+- `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
+  model).
 - `rust/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
   restart supervisor.
+- `rust/src/windows/` - window enumeration, filtering, snapshot model, and icon cache.
 - `rust/examples/probe/` - standalone virtual-desktop COM probe.
 
 ## Notes

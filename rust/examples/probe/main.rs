@@ -29,6 +29,7 @@ use std::time::Duration;
 use micro_task_pager::com::Apartment;
 use micro_task_pager::desktop::{self, PinOutcome, VirtualDesktopApi};
 use micro_task_pager::logging;
+use micro_task_pager::windows::WindowSnapshotter;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::CreateSolidBrush;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -69,6 +70,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     match args.as_slice() {
         [] => status(&api),
         [command] if command == "status" => status(&api),
+        [command] if command == "snapshot" => snapshot(&api),
         [command, hwnd] if command == "index" => index(&api, hwnd),
         [command, index] if command == "switch" => switch(&api, index),
         [command, hwnd, index] if command == "move" => move_window(&api, hwnd, index),
@@ -98,6 +100,38 @@ fn status(api: &dyn VirtualDesktopApi) -> Result<(), Box<dyn Error>> {
 
     for (index, id) in ids.iter().enumerate() {
         println!("desktop[{index}]: {id:?}");
+    }
+
+    Ok(())
+}
+
+fn snapshot(api: &dyn VirtualDesktopApi) -> Result<(), Box<dyn Error>> {
+    let mut snapshotter = WindowSnapshotter::new();
+    let snapshot = snapshotter.capture(api)?;
+
+    println!(
+        "desktop_count: {} current: {} windows: {} hash: {:016x}",
+        snapshot.desktop_count,
+        snapshot.current_desktop,
+        snapshot.windows.len(),
+        snapshot.hash
+    );
+
+    for window in &snapshot.windows {
+        println!(
+            "  hwnd={:?} desktop={} z={} active={} icon={} rect={}x{}+{},{} title={:?} class={:?}",
+            window.hwnd,
+            window.desktop_index,
+            window.z_order,
+            window.is_active,
+            window.icon.is_some(),
+            window.width(),
+            window.height(),
+            window.rect.left,
+            window.rect.top,
+            window.title,
+            window.class_name
+        );
     }
 
     Ok(())
@@ -291,6 +325,7 @@ fn usage() {
     eprintln!("usage:");
     eprintln!("  probe                      print build, desktop count, current index, and ids");
     eprintln!("  probe status               same as no arguments");
+    eprintln!("  probe snapshot             enumerate windows and print the phase 3 snapshot");
     eprintln!("  probe index <hwnd>         print the desktop index of a window");
     eprintln!("  probe switch <index>       switch to a desktop");
     eprintln!("  probe move <hwnd> <index>  move a window to a desktop");

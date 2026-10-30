@@ -20,3 +20,4 @@ pub mod desktop;
 pub mod logging;
 pub mod settings;
 pub mod single_instance;
+pub mod windows;

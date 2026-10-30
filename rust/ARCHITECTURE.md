@@ -119,9 +119,9 @@ The pager is only useful if it is always present. The current app implements thi
 - Skip windows owned by the pager process.
 - Skip windows whose virtual desktop cannot be determined. Failures are counted per handle and the
   handle is blacklisted after 10 failures (snapped-window helper windows trigger this).
-- Read title, class, process ID, rectangle, foreground state, and z-order. Z-order is computed by
-  repeatedly following `GetWindow(GW_HWNDNEXT)`, so the value is the distance from the bottom of the
-  z-order and ascending order draws back to front.
+- Read title, class, process ID, rectangle, foreground state, and z-order. The C# code computes
+  z-order by following `GetWindow(GW_HWNDNEXT)`; the Rust port derives the same relative order from
+  `EnumWindows` and normalizes it so larger values are closer to the top.
 - Read the icon via `WM_GETICON` (`ICON_SMALL2`), then `GCL_HICON`, then `IDI_APPLICATION`. Icons are
   cached per `(hwnd, hIcon)` and pruned when the window disappears.
 
@@ -548,6 +548,11 @@ These are intentional fixes or simplifications. Document any additional deviatio
 - Do not apply `PointToClient` to coordinates that are already client-space.
 - Use `SendMessageTimeoutW` for `WM_GETICON` instead of a potentially blocking `SendMessage`.
 - Compute foreground/active state once per snapshot instead of once per window.
+- Prune desktop-lookup failure counters using every window that reaches the lookup. The C# code prunes
+  against successfully added windows only, so a failing window loses its counter on every snapshot and
+  never reaches the blacklist.
+- Derive z-order from `EnumWindows` order and normalize it after enumeration, instead of walking
+  `GetWindow(GW_HWNDNEXT)` for every window. The relative order is the same.
 - Do not call COM during `WM_PAINT`; paint from the cached snapshot.
 - Replace OLE drag-and-drop with an internal mouse-capture drag: the payload is only a window handle
   and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary.
