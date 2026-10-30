@@ -502,7 +502,7 @@ namespace MicroTaskPager.GUI
 
             settingsWindow.PreviewChanged += s => PreviewSettings(s);
 
-            DialogResult result = settingsWindow.ShowDialog();
+            DialogResult result = settingsWindow.ShowDialog(this);
             if (result == DialogResult.OK)
             {
                 ApplySettings(settingsWindow.Settings, true); // save and reset to new settings

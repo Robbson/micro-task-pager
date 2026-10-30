@@ -1,254 +1,516 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Windows.Forms;
 using MicroTaskPager.Config;
-using DrawingColor = System.Drawing.Color;
-using DrawingPoint = System.Drawing.Point;
-using DrawingRectangle = System.Drawing.Rectangle;
-using DrawingSize = System.Drawing.Size;
 
 namespace MicroTaskPager.GUI
 {
+    // Settings dialog built entirely in code. All rows are created through a few helpers so that
+    // layout, revert buttons, "Defaults" handling and live preview behave identically everywhere.
     public partial class AppSettingsWindow : Form
     {
         private const int PlacementGap = 8;
+        private const int MinPagerContentHeight = 16;
 
         private readonly AppSettings _defaults = new AppSettings();
         private readonly AppSettings _settingsBefore;
-        private AppSettings _previewSettings;
+        private readonly AppSettings _working;
+        private readonly List<RowBinding> _rows = new List<RowBinding>();
+        private readonly ToolTip _toolTip = new ToolTip();
+        private readonly Timer _previewTimer = new Timer { Interval = 80 };
 
-        private DrawingColor _desktopBackgroundColor;
-        private DrawingColor _desktopBorderColor;
-        private DrawingColor _activeDesktopBorderColor;
-        private DrawingColor _windowBackgroundColor;
-        private DrawingColor _activeWindowBackgroundColor;
-        private DrawingColor _windowBorderColor;
-        private DrawingColor _activeWindowBorderColor;
-
+        private TabControl _tabs;
+        private TextBox _primaryDelayBox;
+        private TextBox _secondaryDelayBox;
         private Rectangle _placementOwnerBounds;
-        private bool _hasPlacementOwner = false;
-
-        // Tab page & scroll panels
-        private TabControl tabControl;
-        private TabPage tabPageLayout;
-        private TabPage tabPageTheme;
-        private TabPage tabPageMisc;
-        private Panel scrollLayout;
-        private Panel scrollTheme;
-        private Panel scrollMisc;
-
-        // Layout tab controls
-        private ComboBox cmbViewModeDefault;
-        private NumericUpDown numericPagerHeight;
-        private NumericUpDown numericIconPaddingX;
-        private NumericUpDown numericIconPaddingY;
-
-        // Theme tab controls
-        private TrackBar sldBackgroundOpacity;
-        private Label txtBackgroundOpacityValue;
-        private ComboBox cmbDesktopBorderStyle;
-        private Panel previewBackgroundColor;
-        private Panel previewDesktopColor;
-        private Panel previewActiveDesktopBorderColor;
-        private Panel previewWindowColor;
-        private Panel previewActiveWindowColor;
-        private Panel previewWindowBorderColor;
-        private Panel previewActiveWindowBorderColor;
-
-        // Revert buttons
-        private Button btnRevertViewModeDefault;
-        private Button btnRevertPagerHeight;
-        private Button btnRevertIconPaddingX;
-        private Button btnRevertIconPaddingY;
-        private Button btnRevertBackgroundOpacity;
-        private Button btnRevertDesktopBorderStyle;
-        private Button btnRevertBackgroundColor;
-        private Button btnRevertDesktopColor;
-        private Button btnRevertActiveDesktopBorderColor;
-        private Button btnRevertWindowColor;
-        private Button btnRevertWindowBorderColor;
-        private Button btnRevertActiveWindowBorderColor;
-        private Button btnRevertActiveWindowColor;
-
-        // Misc tab controls
-        private TextBox txtPrimaryDelay;
-        private TextBox txtSecondaryDelay;
-        private CheckBox chkShowAppInTaskbar;
-        private Button btnRevertPrimaryDelay;
-        private Button btnRevertSecondaryDelay;
-        private Button btnRevertShowAppInTaskbar;
-        private FlowLayoutPanel buttonFlowLayoutPanel;
-        private Button btnSave;
-        private Button btnCancel;
+        private bool _hasPlacementOwner;
+        private bool _initializing = true;
+        private bool _suppressEvents;
+        private bool _closing;
 
         public AppSettingsWindow(AppSettings settings, Rectangle ownerBounds)
         {
-            InitializeComponent();
-
             _settingsBefore = AppSettings.Clone(settings);
-            _previewSettings = AppSettings.Clone(settings);
+            _working = AppSettings.Clone(settings);
 
-            // Populate view mode combo
-            cmbViewModeDefault.Items.Add("Preview");
-            cmbViewModeDefault.Items.Add("MicroTaskbar");
-            cmbViewModeDefault.SelectedIndex = (int)settings.ViewModeDefault;
-
-            numericPagerHeight.Value = settings.PagerHeight;
-            numericIconPaddingX.Value = settings.IconPaddingX;
-            numericIconPaddingY.Value = settings.IconPaddingY;
-
-            sldBackgroundOpacity.Value = (int)(Math.Max(0.25, Math.Min(1.0, settings.BackgroundOpacity)) * 100);
-            txtBackgroundOpacityValue.Text = FormatOpacity(sldBackgroundOpacity.Value / 100.0);
-
-            cmbDesktopBorderStyle.Items.Add("Box");
-            cmbDesktopBorderStyle.Items.Add("Underline");
-            cmbDesktopBorderStyle.SelectedIndex = (int)settings.DesktopBorderStyle;
-
-            _desktopBackgroundColor = settings.DesktopBackgroundColor;
-            _desktopBorderColor = settings.DesktopBorderColor;
-            _activeDesktopBorderColor = settings.ActiveDesktopBorderColor;
-            _windowBackgroundColor = settings.WindowBackgroundColor;
-            _activeWindowBackgroundColor = settings.ActiveWindowBackgroundColor;
-            _windowBorderColor = settings.WindowBorderColor;
-            _activeWindowBorderColor = settings.ActiveWindowBorderColor;
-
-            txtPrimaryDelay.Text = settings.PrimaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-            txtSecondaryDelay.Text = settings.SecondaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-            chkShowAppInTaskbar.Checked = settings.ShowAppInTaskbar;
+            InitializeComponent();
 
             _placementOwnerBounds = ownerBounds;
             _hasPlacementOwner = true;
 
-            RefreshColorPreviews();
-            UpdateRevertButtons();
+            _previewTimer.Tick += (s, e) =>
+            {
+                _previewTimer.Stop();
+                FlushPreview();
+            };
+
+            _initializing = false;
+            RefreshRevertButtons();
         }
 
         public event Action<AppSettings> PreviewChanged;
 
-        public AppSettings Settings => _previewSettings;
+        public AppSettings Settings { get; private set; }
 
-        private void RefreshColorPreviews()
+        protected override void OnLoad(EventArgs e)
         {
-            if (previewBackgroundColor != null) previewBackgroundColor.BackColor = _desktopBackgroundColor;
-            if (previewDesktopColor != null) previewDesktopColor.BackColor = _desktopBorderColor;
-            if (previewActiveDesktopBorderColor != null) previewActiveDesktopBorderColor.BackColor = _activeDesktopBorderColor;
-            if (previewWindowColor != null) previewWindowColor.BackColor = _windowBackgroundColor;
-            if (previewActiveWindowColor != null) previewActiveWindowColor.BackColor = _activeWindowBackgroundColor;
-            if (previewWindowBorderColor != null) previewWindowBorderColor.BackColor = _windowBorderColor;
-            if (previewActiveWindowBorderColor != null) previewActiveWindowBorderColor.BackColor = _activeWindowBorderColor;
-        }
+            base.OnLoad(e);
 
-        private void UpdateRevertButtons()
-        {
-            if (!_hasPlacementOwner) return;
-
-            if (tabControl.SelectedTab == tabPageLayout)
+            if (_hasPlacementOwner)
             {
-                UpdateRevertVisibility(btnRevertViewModeDefault, cmbViewModeDefault.SelectedIndex != (int)_settingsBefore.ViewModeDefault);
-                UpdateRevertVisibility(btnRevertPagerHeight, numericPagerHeight.Value != _settingsBefore.PagerHeight);
-                UpdateRevertVisibility(btnRevertIconPaddingX, numericIconPaddingX.Value != _settingsBefore.IconPaddingX);
-                UpdateRevertVisibility(btnRevertIconPaddingY, numericIconPaddingY.Value != _settingsBefore.IconPaddingY);
-            }
-            else if (tabControl.SelectedTab == tabPageTheme)
-            {
-                double currentOpacity = sldBackgroundOpacity.Value / 100.0;
-                UpdateRevertVisibility(btnRevertBackgroundOpacity, Math.Abs(currentOpacity - _settingsBefore.BackgroundOpacity) > 0.0001);
-                UpdateRevertVisibility(btnRevertDesktopBorderStyle, cmbDesktopBorderStyle.SelectedIndex != (int)_settingsBefore.DesktopBorderStyle);
-                UpdateRevertVisibility(btnRevertBackgroundColor, _desktopBackgroundColor.ToArgb() != _settingsBefore.DesktopBackgroundColor.ToArgb());
-                UpdateRevertVisibility(btnRevertDesktopColor, _desktopBorderColor.ToArgb() != _settingsBefore.DesktopBorderColor.ToArgb());
-                UpdateRevertVisibility(btnRevertActiveDesktopBorderColor, _activeDesktopBorderColor.ToArgb() != _settingsBefore.ActiveDesktopBorderColor.ToArgb());
-                UpdateRevertVisibility(btnRevertWindowColor, _windowBackgroundColor.ToArgb() != _settingsBefore.WindowBackgroundColor.ToArgb());
-                int activeWinArgb = (_activeWindowBackgroundColor.A << 24) | (_activeWindowBackgroundColor.R << 16) | (_activeWindowBackgroundColor.G << 8) | _activeWindowBackgroundColor.B;
-                int beforeWinArgb = (_settingsBefore.ActiveWindowBackgroundColor.A << 24) | (_settingsBefore.ActiveWindowBackgroundColor.R << 16) | (_settingsBefore.ActiveWindowBackgroundColor.G << 8) | _settingsBefore.ActiveWindowBackgroundColor.B;
-                UpdateRevertVisibility(btnRevertActiveWindowColor, activeWinArgb != beforeWinArgb);
-                UpdateRevertVisibility(btnRevertWindowBorderColor, _windowBorderColor.ToArgb() != _settingsBefore.WindowBorderColor.ToArgb());
-                UpdateRevertVisibility(btnRevertActiveWindowBorderColor, _activeWindowBorderColor.ToArgb() != _settingsBefore.ActiveWindowBorderColor.ToArgb());
-            }
-            else if (tabControl.SelectedTab == tabPageMisc)
-            {
-                bool primaryDifferent = !int.TryParse(txtPrimaryDelay.Text, out int d) || d != _settingsBefore.PrimaryUpdateDelay;
-                UpdateRevertVisibility(btnRevertPrimaryDelay, primaryDifferent);
-                bool secondaryDifferent = !int.TryParse(txtSecondaryDelay.Text, out int d2) || d2 != _settingsBefore.SecondaryUpdateDelay;
-                UpdateRevertVisibility(btnRevertSecondaryDelay, secondaryDifferent);
-                UpdateRevertVisibility(btnRevertShowAppInTaskbar, chkShowAppInTaskbar.Checked != _settingsBefore.ShowAppInTaskbar);
+                Location = FindPlacement(_placementOwnerBounds, Size);
             }
         }
 
-        private static void UpdateRevertVisibility(Button button, bool isVisible)
+        protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            button.Visible = isVisible;
+            // A queued preview must not be applied after the dialog was cancelled.
+            _closing = true;
+            _previewTimer.Stop();
+            base.OnFormClosing(e);
         }
 
-        private static DrawingColor PickColor(DrawingColor initial)
+        protected override void Dispose(bool disposing)
         {
-            using (var dlg = new ColorDialog())
+            if (disposing)
             {
-                dlg.FullOpen = true;
-                dlg.Color = initial;
-                return dlg.ShowDialog() == DialogResult.OK ? dlg.Color : initial;
+                _previewTimer.Dispose();
+                _toolTip.Dispose();
             }
+
+            base.Dispose(disposing);
         }
 
-        private void UpdateColorsTab()
+        // ------------------------------------------------------------------------------------
+        // Row plumbing
+        // ------------------------------------------------------------------------------------
+
+        private static int AddTableRow(TableLayoutPanel table)
         {
-            RefreshColorPreviews();
-            UpdateRevertButtons();
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            table.RowCount = table.RowStyles.Count;
+            return table.RowCount - 1;
+        }
+
+        private void AddRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string labelText,
+            string toolTipText,
+            Control editor,
+            Action<AppSettings> load,
+            Func<bool> isModified)
+        {
+            int row = AddTableRow(table);
+
+            var label = new Label
+            {
+                Text = labelText,
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(6, 9, 6, 6),
+            };
+
+            if (!string.IsNullOrEmpty(toolTipText))
+            {
+                _toolTip.SetToolTip(label, toolTipText);
+            }
+
+            editor.Anchor = AnchorStyles.Left;
+            editor.Margin = new Padding(3, 5, 3, 5);
+
+            var revert = new Button
+            {
+                Text = "\u21BA",
+                Size = new Size(28, 24),
+                Location = new Point(0, 2),
+                Visible = isModified(),
+            };
+            _toolTip.SetToolTip(revert, "Revert to default");
+            revert.Click += (s, e) =>
+            {
+                Suppress(() => load(_settingsBefore));
+                RefreshRevertButtons();
+                RequestPreview();
+            };
+
+            // The host keeps the revert slot reserved even while the button is hidden,
+            // otherwise WinForms would reflow the whole row on every visibility change.
+            var revertHost = new Panel
+            {
+                Size = new Size(32, 28),
+                Margin = new Padding(4, 4, 0, 4),
+                Anchor = AnchorStyles.Left,
+            };
+            revertHost.Controls.Add(revert);
+
+            table.Controls.Add(label, 0, row);
+            table.Controls.Add(editor, 1, row);
+            table.Controls.Add(revertHost, 2, row);
+
+            _rows.Add(new RowBinding(page, revert, load, isModified));
+        }
+
+        private void AddSpanningControl(TableLayoutPanel table, Control control)
+        {
+            int row = AddTableRow(table);
+            control.Dock = DockStyle.Fill;
+            table.Controls.Add(control, 0, row);
+            table.SetColumnSpan(control, 3);
+        }
+
+        private void AddComboRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string label,
+            string toolTip,
+            string[] items,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 180,
+            };
+            editor.Items.AddRange(items);
+            editor.SelectedIndex = get(_working);
+            editor.SelectedIndexChanged += (s, e) =>
+            {
+                set(_working, editor.SelectedIndex);
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                label,
+                toolTip,
+                editor,
+                s => editor.SelectedIndex = get(s),
+                () => editor.SelectedIndex != get(_settingsBefore));
+        }
+
+        private void AddNumericRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string label,
+            string toolTip,
+            int min,
+            int max,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new NumericUpDown
+            {
+                Minimum = min,
+                Maximum = max,
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+                Value = Math.Max(min, Math.Min(max, get(_working))),
+            };
+            editor.ValueChanged += (s, e) =>
+            {
+                set(_working, (int)editor.Value);
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                label,
+                toolTip,
+                editor,
+                s => editor.Value = Math.Max(min, Math.Min(max, get(s))),
+                () => (int)editor.Value != get(_settingsBefore));
+        }
+
+        private TextBox AddTextRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string label,
+            string toolTip,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new TextBox
+            {
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+            };
+            editor.Text = get(_working).ToString(CultureInfo.InvariantCulture);
+            editor.TextChanged += (s, e) =>
+            {
+                if (int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+                {
+                    set(_working, value);
+                }
+
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                label,
+                toolTip,
+                editor,
+                s => editor.Text = get(s).ToString(CultureInfo.InvariantCulture),
+                () => !int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+                    || value != get(_settingsBefore));
+
+            return editor;
+        }
+
+        private void AddCheckBoxRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string label,
+            string toolTip,
+            Func<AppSettings, bool> get,
+            Action<AppSettings, bool> set)
+        {
+            var editor = new CheckBox
+            {
+                AutoSize = true,
+                Checked = get(_working),
+            };
+            editor.CheckedChanged += (s, e) =>
+            {
+                set(_working, editor.Checked);
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                label,
+                toolTip,
+                editor,
+                s => editor.Checked = get(s),
+                () => editor.Checked != get(_settingsBefore));
+        }
+
+        private void AddColorRow(
+            TableLayoutPanel table,
+            TabPage page,
+            string label,
+            Func<AppSettings, Color> get,
+            Action<AppSettings, Color> set)
+        {
+            var preview = new Panel
+            {
+                Size = new Size(32, 24),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = get(_working),
+                Margin = new Padding(0, 4, 6, 0),
+            };
+
+            var choose = new Button
+            {
+                Text = "Choose...",
+                Size = new Size(80, 24),
+                Margin = new Padding(0, 4, 0, 0),
+            };
+            choose.Click += (s, e) =>
+            {
+                Color picked = PickColor(get(_working));
+                if (picked.ToArgb() == get(_working).ToArgb())
+                {
+                    return;
+                }
+
+                set(_working, picked);
+                preview.BackColor = picked;
+                OnEditorChanged();
+            };
+
+            var host = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(preview);
+            host.Controls.Add(choose);
+
+            AddRow(
+                table,
+                page,
+                label,
+                null,
+                host,
+                s =>
+                {
+                    set(_working, get(s));
+                    preview.BackColor = get(s);
+                },
+                () => get(_working).ToArgb() != get(_settingsBefore).ToArgb());
+        }
+
+        private void AddOpacityRow(TableLayoutPanel table, TabPage page)
+        {
+            var trackBar = new TrackBar
+            {
+                Minimum = 25,
+                Maximum = 100,
+                TickFrequency = 5,
+                LargeChange = 10,
+                SmallChange = 1,
+                Value = Math.Max(25, Math.Min(100, (int)Math.Round(_working.BackgroundOpacity * 100))),
+                AutoSize = false,
+                Width = 140,
+                Height = 32,
+                Margin = new Padding(0, 6, 4, 0),
+            };
+
+            var valueLabel = new Label
+            {
+                AutoSize = true,
+                Text = FormatOpacity(trackBar.Value / 100.0),
+                Margin = new Padding(4, 14, 0, 0),
+            };
+
+            var host = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(trackBar);
+            host.Controls.Add(valueLabel);
+
+            trackBar.ValueChanged += (s, e) =>
+            {
+                _working.BackgroundOpacity = trackBar.Value / 100.0;
+                valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                "App Background Opacity",
+                null,
+                host,
+                s =>
+                {
+                    trackBar.Value = Math.Max(25, Math.Min(100, (int)Math.Round(s.BackgroundOpacity * 100)));
+                    valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
+                    _working.BackgroundOpacity = trackBar.Value / 100.0;
+                },
+                () => Math.Abs((trackBar.Value / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001);
+        }
+
+        // ------------------------------------------------------------------------------------
+        // State changes
+        // ------------------------------------------------------------------------------------
+
+        private void OnEditorChanged()
+        {
+            if (_initializing || _suppressEvents)
+            {
+                return;
+            }
+
+            RefreshRevertButtons();
             RequestPreview();
+        }
+
+        private void Suppress(Action action)
+        {
+            bool previous = _suppressEvents;
+            _suppressEvents = true;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                _suppressEvents = previous;
+            }
+        }
+
+        private void RefreshRevertButtons()
+        {
+            foreach (RowBinding row in _rows)
+            {
+                row.Revert.Visible = row.IsModified();
+            }
         }
 
         private void RequestPreview()
         {
-            var s = BuildSettingsFromControls();
-            if (s != null)
+            if (_initializing || _suppressEvents)
             {
-                PreviewChanged?.Invoke(s);
+                return;
+            }
+
+            // Coalesce rapid changes (e.g. holding a NumericUpDown arrow) so the pager is not
+            // rebuilt and retopmosted for every single increment.
+            _previewTimer.Stop();
+            _previewTimer.Start();
+        }
+
+        private void FlushPreview()
+        {
+            if (_closing || _initializing || _suppressEvents)
+            {
+                return;
+            }
+
+            AppSettings preview = TryBuildSettings(false);
+            if (preview != null)
+            {
+                PreviewChanged?.Invoke(preview);
             }
         }
 
-        private AppSettings BuildSettingsFromControls()
+        private AppSettings TryBuildSettings(bool showValidationErrors)
         {
-            if (!TryParsePositiveInt(txtPrimaryDelay.Text, 1, out int primaryDelay))
+            if (!int.TryParse(
+                    GetPrimaryDelayText(),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int primaryDelay)
+                || primaryDelay < 1)
             {
-                ShowValidationError("Primary Update Delay must be at least 1 ms.");
+                if (showValidationErrors)
+                {
+                    ShowValidationError("Primary Update Delay must be at least 1 ms.");
+                }
+
                 return null;
             }
 
-            if (!TryParsePositiveInt(txtSecondaryDelay.Text, 100, out int secondaryDelay))
+            if (!int.TryParse(
+                    GetSecondaryDelayText(),
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int secondaryDelay)
+                || secondaryDelay < 100)
             {
-                ShowValidationError("Secondary Update Delay must be at least 100 ms.");
+                if (showValidationErrors)
+                {
+                    ShowValidationError("Secondary Update Delay must be at least 100 ms.");
+                }
+
                 return null;
             }
 
-            double opacity = sldBackgroundOpacity.Value / 100.0;
-            opacity = Math.Max(0.25, Math.Min(1.0, opacity));
-
-            return new AppSettings
-            {
-                ViewModeDefault = (ViewMode)(cmbViewModeDefault.SelectedIndex <= 0 ? 0 : 1),
-                RendererViewModes = _previewSettings.RendererViewModes,
-                PagerHeight = (int)numericPagerHeight.Value,
-                IconPaddingX = (int)numericIconPaddingX.Value,
-                IconPaddingY = (int)numericIconPaddingY.Value,
-                BackgroundOpacity = opacity,
-                DesktopBorderStyle = (Config.DesktopBorderStyle)(cmbDesktopBorderStyle.SelectedIndex <= 0 ? 0 : 1),
-                DesktopBackgroundColor = _desktopBackgroundColor,
-                DesktopBorderColor = _desktopBorderColor,
-                ActiveDesktopBorderColor = _activeDesktopBorderColor,
-                WindowBackgroundColor = _windowBackgroundColor,
-                ActiveWindowBackgroundColor = _activeWindowBackgroundColor,
-                WindowBorderColor = _windowBorderColor,
-                ActiveWindowBorderColor = _activeWindowBorderColor,
-                PrimaryUpdateDelay = primaryDelay,
-                SecondaryUpdateDelay = secondaryDelay,
-                ShowAppInTaskbar = chkShowAppInTaskbar.Checked,
-            };
+            AppSettings result = AppSettings.Clone(_working);
+            result.PrimaryUpdateDelay = primaryDelay;
+            result.SecondaryUpdateDelay = secondaryDelay;
+            return result;
         }
 
-        private bool TryParsePositiveInt(string input, int min, out int value)
-        {
-            return int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) && value >= min;
-        }
+        private string GetPrimaryDelayText() => _primaryDelayBox.Text;
+
+        private string GetSecondaryDelayText() => _secondaryDelayBox.Text;
 
         private void ShowValidationError(string message)
         {
@@ -260,799 +522,335 @@ namespace MicroTaskPager.GUI
             return opacity.ToString("0.00", CultureInfo.InvariantCulture);
         }
 
-        // ===================== Event Handlers =====================
-
-        private void ResetToDefaults_Click(object sender, EventArgs e)
+        private Color PickColor(Color initial)
         {
-            if (tabControl.SelectedTab == tabPageLayout)
+            using (var dialog = new ColorDialog())
             {
-                cmbViewModeDefault.SelectedIndex = _defaults.ViewModeDefault <= 0 ? 0 : 1;
-                numericPagerHeight.Value = _defaults.PagerHeight;
-                numericIconPaddingX.Value = _defaults.IconPaddingX;
-                numericIconPaddingY.Value = _defaults.IconPaddingY;
+                dialog.FullOpen = true;
+                dialog.Color = initial;
+                return dialog.ShowDialog() == DialogResult.OK ? dialog.Color : initial;
             }
-            else if (tabControl.SelectedTab == tabPageTheme)
+        }
+
+        private void Save_Click(object sender, EventArgs e)
+        {
+            AppSettings settings = TryBuildSettings(true);
+            if (settings == null)
             {
-                sldBackgroundOpacity.Value = (int)(Math.Max(0.25, Math.Min(1.0, _defaults.BackgroundOpacity)) * 100);
-                txtBackgroundOpacityValue.Text = FormatOpacity(sldBackgroundOpacity.Value / 100.0);
-                cmbDesktopBorderStyle.SelectedIndex = _defaults.DesktopBorderStyle <= 0 ? 0 : 1;
-                _desktopBackgroundColor = _defaults.DesktopBackgroundColor;
-                _desktopBorderColor = _defaults.DesktopBorderColor;
-                _activeDesktopBorderColor = _defaults.ActiveDesktopBorderColor;
-                _windowBackgroundColor = _defaults.WindowBackgroundColor;
-                _activeWindowBackgroundColor = _defaults.ActiveWindowBackgroundColor;
-                _windowBorderColor = _defaults.WindowBorderColor;
-                _activeWindowBorderColor = _defaults.ActiveWindowBorderColor;
-                RefreshColorPreviews();
-            }
-            else if (tabControl.SelectedTab == tabPageMisc)
-            {
-                txtPrimaryDelay.Text = _defaults.PrimaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-                txtSecondaryDelay.Text = _defaults.SecondaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-                chkShowAppInTaskbar.Checked = _defaults.ShowAppInTaskbar;
+                return;
             }
 
-            RefreshColorPreviews();
-            UpdateRevertButtons();
-        }
-
-        private void TabControl_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-        }
-
-        private void ViewModeDefaultChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void RevertViewModeDefault_Click(object sender, EventArgs e)
-        {
-            cmbViewModeDefault.SelectedIndex = _settingsBefore.ViewModeDefault <= 0 ? 0 : 1;
-            UpdateRevertButtons();
-        }
-
-        private void PagerHeightChanged(object sender, EventArgs e)
-        {
-            var height = numericPagerHeight.Value - numericIconPaddingY.Value;
-            if (height < 16)
-            {
-                numericPagerHeight.Value += 16 - height;
-            }
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void RevertPagerHeight_Click(object sender, EventArgs e)
-        {
-            numericPagerHeight.Value = _settingsBefore.PagerHeight;
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void IconPaddingXChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void IconPaddingYChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void RevertIconPaddingX_Click(object sender, EventArgs e)
-        {
-            numericIconPaddingX.Value = _settingsBefore.IconPaddingX;
-            UpdateRevertButtons();
-        }
-
-        private void RevertIconPaddingY_Click(object sender, EventArgs e)
-        {
-            numericIconPaddingY.Value = _settingsBefore.IconPaddingY;
-            UpdateRevertButtons();
-        }
-
-        private void BackgroundOpacityChanged(object sender, EventArgs e)
-        {
-            txtBackgroundOpacityValue.Text = FormatOpacity(sldBackgroundOpacity.Value / 100.0);
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void RevertBackgroundOpacity_Click(object sender, EventArgs e)
-        {
-            sldBackgroundOpacity.Value = (int)(Math.Max(0.25, Math.Min(1.0, _settingsBefore.BackgroundOpacity)) * 100);
-            txtBackgroundOpacityValue.Text = FormatOpacity(sldBackgroundOpacity.Value / 100.0);
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void DesktopBorderStyleChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void RevertDesktopBorderStyle_Click(object sender, EventArgs e)
-        {
-            cmbDesktopBorderStyle.SelectedIndex = _settingsBefore.DesktopBorderStyle <= 0 ? 0 : 1;
-            UpdateRevertButtons();
-            RequestPreview();
-        }
-
-        private void ChooseDesktopBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _desktopBackgroundColor = PickColor(_desktopBackgroundColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertDesktopBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _desktopBackgroundColor = _settingsBefore.DesktopBackgroundColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseDesktopBorderColor_Click(object sender, EventArgs e)
-        {
-            _desktopBorderColor = PickColor(_desktopBorderColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertDesktopBorderColor_Click(object sender, EventArgs e)
-        {
-            _desktopBorderColor = _settingsBefore.DesktopBorderColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseActiveDesktopBorderColor_Click(object sender, EventArgs e)
-        {
-            _activeDesktopBorderColor = PickColor(_activeDesktopBorderColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertActiveDesktopBorderColor_Click(object sender, EventArgs e)
-        {
-            _activeDesktopBorderColor = _settingsBefore.ActiveDesktopBorderColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseWindowBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _windowBackgroundColor = PickColor(_windowBackgroundColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertWindowBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _windowBackgroundColor = _settingsBefore.WindowBackgroundColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseActiveWindowBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _activeWindowBackgroundColor = PickColor(_activeWindowBackgroundColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertActiveWindowBackgroundColor_Click(object sender, EventArgs e)
-        {
-            _activeWindowBackgroundColor = _settingsBefore.ActiveWindowBackgroundColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseWindowBorderColor_Click(object sender, EventArgs e)
-        {
-            _windowBorderColor = PickColor(_windowBorderColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertWindowBorderColor_Click(object sender, EventArgs e)
-        {
-            _windowBorderColor = _settingsBefore.WindowBorderColor;
-            UpdateColorsTab();
-        }
-
-        private void ChooseActiveWindowBorderColor_Click(object sender, EventArgs e)
-        {
-            _activeWindowBorderColor = PickColor(_activeWindowBorderColor);
-            UpdateColorsTab();
-        }
-
-        private void RevertActiveWindowBorderColor_Click(object sender, EventArgs e)
-        {
-            _activeWindowBorderColor = _settingsBefore.ActiveWindowBorderColor;
-            UpdateColorsTab();
-        }
-
-        private void MiscTextInputChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-        }
-
-        private void MiscBooleanInputChanged(object sender, EventArgs e)
-        {
-            UpdateRevertButtons();
-        }
-
-        private void RevertPrimaryDelay_Click(object sender, EventArgs e)
-        {
-            txtPrimaryDelay.Text = _settingsBefore.PrimaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-            UpdateRevertButtons();
-        }
-
-        private void RevertSecondaryDelay_Click(object sender, EventArgs e)
-        {
-            txtSecondaryDelay.Text = _settingsBefore.SecondaryUpdateDelay.ToString(CultureInfo.InvariantCulture);
-            UpdateRevertButtons();
-        }
-
-        private void RevertShowAppInTaskbar_Click(object sender, EventArgs e)
-        {
-            chkShowAppInTaskbar.Checked = _settingsBefore.ShowAppInTaskbar;
-            UpdateRevertButtons();
-        }
-
-        private void btnSave_Click(object sender, EventArgs e)
-        {
-            var settings = BuildSettingsFromControls();
-            if (settings == null) return;
-            _previewSettings = settings;
+            Settings = settings;
             DialogResult = DialogResult.OK;
             Close();
         }
 
-        private void btnCancel_Click(object sender, EventArgs e)
+        private void Cancel_Click(object sender, EventArgs e)
         {
             DialogResult = DialogResult.Cancel;
             Close();
         }
 
+        private void Defaults_Click(object sender, EventArgs e)
+        {
+            TabPage page = _tabs.SelectedTab;
+            foreach (RowBinding row in _rows)
+            {
+                if (row.Page == page)
+                {
+                    Suppress(() => row.Load(_defaults));
+                }
+            }
+
+            RefreshRevertButtons();
+            RequestPreview();
+        }
+
+        // ------------------------------------------------------------------------------------
+        // UI construction
+        // ------------------------------------------------------------------------------------
+
         private void InitializeComponent()
         {
             SuspendLayout();
 
-            // --- Form setup ---
+            // Pixel layout is authored at 96 DPI; let WinForms scale it like AboutDialog does.
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
             Text = "Micro Task Pager Settings";
-            Size = new System.Drawing.Size(460, 625);
+            ClientSize = new Size(520, 640);
             StartPosition = FormStartPosition.Manual;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            AcceptButton = btnSave;
-            CancelButton = btnCancel;
 
-            // --- TabControl ---
-            tabControl = new TabControl();
-            tabPageLayout = new TabPage("Layout");
-            tabPageTheme = new TabPage("Theme");
-            tabPageMisc = new TabPage("Misc");
+            // The pager itself is topmost. Keeping the modal settings dialog topmost as well
+            // prevents the pager from being raised above it and stealing the foreground while
+            // the preview is updated.
+            TopMost = true;
+            Padding = new Padding(10, 10, 10, 0);
 
-            scrollLayout = new Panel();
-            scrollLayout.Dock = DockStyle.Fill;
-            scrollLayout.AutoScroll = true;
-            tabPageLayout.Controls.Add(scrollLayout);
-
-            scrollTheme = new Panel();
-            scrollTheme.Dock = DockStyle.Fill;
-            scrollTheme.AutoScroll = true;
-            tabPageTheme.Controls.Add(scrollTheme);
-
-            scrollMisc = new Panel();
-            scrollMisc.Dock = DockStyle.Fill;
-            scrollMisc.AutoScroll = true;
-            tabPageMisc.Controls.Add(scrollMisc);
-
-            tabControl.Controls.Add(tabPageLayout);
-            tabControl.Controls.Add(tabPageTheme);
-            tabControl.Controls.Add(tabPageMisc);
-            tabControl.Location = new Point(12, 12);
-            tabControl.Size = new System.Drawing.Size(436, 540);
-            tabControl.TabIndex = 0;
-            tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
-
-            // --- Buttons (Defaults, Save, Cancel) ---
-            btnSave = new Button();
-            btnSave.Text = "Save";
-            btnSave.Size = new System.Drawing.Size(100, 25);
-            btnSave.Margin = new Padding(0, 10, 8, 0);
-            btnSave.Dock = DockStyle.Right;
-            btnSave.Click += btnSave_Click;
-
-            btnCancel = new Button();
-            btnCancel.Text = "Cancel";
-            btnCancel.Size = new System.Drawing.Size(100, 25);
-            btnCancel.Margin = new Padding(0, 10, 0, 0);
-            btnCancel.Dock = DockStyle.Right;
-            btnCancel.Click += btnCancel_Click;
-
-            var btnDefaults = new Button();
-            btnDefaults.Text = "Defaults";
-            btnDefaults.Size = new System.Drawing.Size(100, 25);
-            btnDefaults.Margin = new Padding(0, 10, 8, 0);
-            btnDefaults.Dock = DockStyle.Right;
-            btnDefaults.Click += (s, e) => ResetToDefaults_Click(s, e);
-
-            buttonFlowLayoutPanel = new FlowLayoutPanel();
-            buttonFlowLayoutPanel.Location = new Point(12, 555);
-            buttonFlowLayoutPanel.Size = new System.Drawing.Size(436, 30);
-            buttonFlowLayoutPanel.AutoSize = false;
-            buttonFlowLayoutPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonFlowLayoutPanel.Controls.Add(btnDefaults);
-            buttonFlowLayoutPanel.Controls.Add(btnSave);
-            buttonFlowLayoutPanel.Controls.Add(btnCancel);
-
-            // ============================ LAYOUT TAB ============================
-            // GroupBox: Rendering
+            _tabs = new TabControl
             {
-                var grpRendering = new GroupBox();
-                grpRendering.Text = "Rendering";
-                grpRendering.Location = new Point(8, 8);
-                grpRendering.Size = new System.Drawing.Size(420, 100);
+                Dock = DockStyle.Fill,
+            };
 
-                var lblViewModeDefault = new Label();
-                lblViewModeDefault.Text = "View Mode Default";
-                lblViewModeDefault.AutoSize = true;
-                lblViewModeDefault.Location = new Point(15, 20);
+            TabPage layoutPage = CreatePage("Layout");
+            TabPage themePage = CreatePage("Theme");
+            TabPage miscPage = CreatePage("Misc");
 
-                cmbViewModeDefault = new ComboBox();
-                cmbViewModeDefault.DropDownStyle = ComboBoxStyle.DropDownList;
-                cmbViewModeDefault.Location = new Point(15, 40);
-                cmbViewModeDefault.Width = 180;
-                cmbViewModeDefault.SelectedIndexChanged += ViewModeDefaultChanged;
+            _tabs.TabPages.Add(layoutPage);
+            _tabs.TabPages.Add(themePage);
+            _tabs.TabPages.Add(miscPage);
 
-                btnRevertViewModeDefault = new Button();
-                btnRevertViewModeDefault.Text = "\u21BA";
-                btnRevertViewModeDefault.Size = new System.Drawing.Size(28, 24);
-                btnRevertViewModeDefault.Location = new Point(200, 40);
-                btnRevertViewModeDefault.Click += RevertViewModeDefault_Click;
+            BuildLayoutPage(layoutPage);
+            BuildThemePage(themePage);
+            BuildMiscPage(miscPage);
 
-                var lblPagerHeight = new Label();
-                lblPagerHeight.Text = "Pager Height";
-                lblPagerHeight.AutoSize = true;
-                lblPagerHeight.Location = new Point(15, 70);
-                var ttPagerHeight = new ToolTip();
-                ttPagerHeight.SetToolTip(lblPagerHeight, "The pager width is automatically calculated from this value and from the size\nof all available screen space as well as the amount of virtual desktops.");
-
-                numericPagerHeight = new NumericUpDown();
-                numericPagerHeight.Minimum = 1;
-                numericPagerHeight.Maximum = 9999;
-                numericPagerHeight.Increment = 1;
-                numericPagerHeight.Location = new Point(15, 90);
-                numericPagerHeight.Size = new System.Drawing.Size(150, 22);
-                numericPagerHeight.ValueChanged += PagerHeightChanged;
-
-                btnRevertPagerHeight = new Button();
-                btnRevertPagerHeight.Text = "\u21BA";
-                btnRevertPagerHeight.Size = new System.Drawing.Size(28, 24);
-                btnRevertPagerHeight.Location = new Point(200, 90);
-                btnRevertPagerHeight.Click += RevertPagerHeight_Click;
-
-                grpRendering.Controls.AddRange(new Control[] { lblViewModeDefault, cmbViewModeDefault, btnRevertViewModeDefault, lblPagerHeight, numericPagerHeight, btnRevertPagerHeight });
-                scrollLayout.Controls.Add(grpRendering);
-            }
-
-            // GroupBox: Icons Settings
+            var buttons = new FlowLayoutPanel
             {
-                var grpIcons = new GroupBox();
-                grpIcons.Text = "Icons Settings";
-                grpIcons.Location = new Point(8, 115);
-                grpIcons.Size = new System.Drawing.Size(420, 80);
-
-                var lblIconPaddingX = new Label();
-                lblIconPaddingX.Text = "Icon Padding X";
-                lblIconPaddingX.AutoSize = true;
-                lblIconPaddingX.Location = new Point(15, 20);
-                var ttIconPaddingX = new ToolTip();
-                ttIconPaddingX.SetToolTip(lblIconPaddingX, "Negative values are supported as well so less space is taken and the icons look stacked.");
-
-                numericIconPaddingX = new NumericUpDown();
-                numericIconPaddingX.Minimum = -9999;
-                numericIconPaddingX.Maximum = 9999;
-                numericIconPaddingX.Increment = 1;
-                numericIconPaddingX.Location = new Point(15, 40);
-                numericIconPaddingX.Size = new System.Drawing.Size(150, 22);
-                numericIconPaddingX.ValueChanged += IconPaddingXChanged;
-
-                btnRevertIconPaddingX = new Button();
-                btnRevertIconPaddingX.Text = "\u21BA";
-                btnRevertIconPaddingX.Size = new System.Drawing.Size(28, 24);
-                btnRevertIconPaddingX.Location = new Point(170, 40);
-                btnRevertIconPaddingX.Click += RevertIconPaddingX_Click;
-
-                var lblIconPaddingY = new Label();
-                lblIconPaddingY.Text = "Icon Padding Y";
-                lblIconPaddingY.AutoSize = true;
-                lblIconPaddingY.Location = new Point(15, 60);
-                var ttIconPaddingY = new ToolTip();
-                ttIconPaddingY.SetToolTip(lblIconPaddingY, "Negative values are supported as well in case of a very small pager height\nlike 40px which is usually the size of the Windows Taskbar.");
-
-                numericIconPaddingY = new NumericUpDown();
-                numericIconPaddingY.Minimum = -9999;
-                numericIconPaddingY.Maximum = 9999;
-                numericIconPaddingY.Increment = 1;
-                numericIconPaddingY.Location = new Point(15, 80);
-                numericIconPaddingY.Size = new System.Drawing.Size(150, 22);
-                numericIconPaddingY.ValueChanged += IconPaddingYChanged;
-
-                btnRevertIconPaddingY = new Button();
-                btnRevertIconPaddingY.Text = "\u21BA";
-                btnRevertIconPaddingY.Size = new System.Drawing.Size(28, 24);
-                btnRevertIconPaddingY.Location = new Point(170, 80);
-                btnRevertIconPaddingY.Click += RevertIconPaddingY_Click;
-
-                grpIcons.Controls.AddRange(new Control[] { lblIconPaddingX, numericIconPaddingX, btnRevertIconPaddingX, lblIconPaddingY, numericIconPaddingY, btnRevertIconPaddingY });
-                scrollLayout.Controls.Add(grpIcons);
-            }
-
-            // ============================ THEME TAB ============================
-            // GroupBox: General
-            {
-                var grpGeneral = new GroupBox();
-                grpGeneral.Text = "General";
-                grpGeneral.Location = new Point(8, 8);
-                grpGeneral.Width = 420;
-
-                var lblOpacity = new Label();
-                lblOpacity.Text = "App Background Opacity";
-                lblOpacity.AutoSize = true;
-                lblOpacity.Location = new Point(15, 20);
-
-                sldBackgroundOpacity = new TrackBar();
-                sldBackgroundOpacity.Minimum = 25;
-                sldBackgroundOpacity.Maximum = 100;
-                sldBackgroundOpacity.TickFrequency = 5;
-                sldBackgroundOpacity.LargeChange = 10;
-                sldBackgroundOpacity.Size = new System.Drawing.Size(100, 45);
-                sldBackgroundOpacity.Location = new Point(15, 45);
-                sldBackgroundOpacity.ValueChanged += BackgroundOpacityChanged;
-
-                txtBackgroundOpacityValue = new Label();
-                txtBackgroundOpacityValue.Text = "1.00";
-                txtBackgroundOpacityValue.Location = new Point(120, 48);
-                txtBackgroundOpacityValue.Size = new System.Drawing.Size(40, 20);
-
-                btnRevertBackgroundOpacity = new Button();
-                btnRevertBackgroundOpacity.Text = "\u21BA";
-                btnRevertBackgroundOpacity.Size = new System.Drawing.Size(28, 24);
-                btnRevertBackgroundOpacity.Location = new Point(168, 45);
-                btnRevertBackgroundOpacity.Click += RevertBackgroundOpacity_Click;
-
-                grpGeneral.Controls.AddRange(new Control[] { lblOpacity, sldBackgroundOpacity, txtBackgroundOpacityValue, btnRevertBackgroundOpacity });
-                scrollTheme.Controls.Add(grpGeneral);
-            }
-
-            // GroupBox: Desktops
-            {
-                var grpDesktops = new GroupBox();
-                grpDesktops.Text = "Desktops";
-                grpDesktops.Location = new Point(8, 65);
-                grpDesktops.Width = 420;
-
-                // Row 0: Border Style
-                var lblDesktopBorderStyle = new Label();
-                lblDesktopBorderStyle.Text = "Border Style";
-                lblDesktopBorderStyle.AutoSize = true;
-                lblDesktopBorderStyle.Location = new Point(15, 20);
-
-                cmbDesktopBorderStyle = new ComboBox();
-                cmbDesktopBorderStyle.DropDownStyle = ComboBoxStyle.DropDownList;
-                cmbDesktopBorderStyle.Location = new Point(15, 40);
-                cmbDesktopBorderStyle.Width = 180;
-                cmbDesktopBorderStyle.SelectedIndexChanged += DesktopBorderStyleChanged;
-
-                btnRevertDesktopBorderStyle = new Button();
-                btnRevertDesktopBorderStyle.Text = "\u21BA";
-                btnRevertDesktopBorderStyle.Size = new System.Drawing.Size(28, 24);
-                btnRevertDesktopBorderStyle.Location = new Point(220, 40);
-                btnRevertDesktopBorderStyle.Click += RevertDesktopBorderStyle_Click;
-
-                // Row 1: Background Color
-                var lblBgColor = new Label();
-                lblBgColor.Text = "Background Color";
-                lblBgColor.AutoSize = true;
-                lblBgColor.Location = new Point(15, 70);
-
-                previewBackgroundColor = new Panel();
-                previewBackgroundColor.Size = new System.Drawing.Size(32, 24);
-                previewBackgroundColor.Location = new Point(150, 68);
-                previewBackgroundColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseBg = new Button();
-                btnChooseBg.Text = "Choose...";
-                btnChooseBg.Size = new System.Drawing.Size(72, 24);
-                btnChooseBg.Location = new Point(190, 68);
-                btnChooseBg.Click += ChooseDesktopBackgroundColor_Click;
-
-                btnRevertBackgroundColor = new Button();
-                btnRevertBackgroundColor.Text = "\u21BA";
-                btnRevertBackgroundColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertBackgroundColor.Location = new Point(270, 68);
-                btnRevertBackgroundColor.Click += RevertDesktopBackgroundColor_Click;
-
-                // Row 2: Border Color
-                var lblDsBorder = new Label();
-                lblDsBorder.Text = "Border Color";
-                lblDsBorder.AutoSize = true;
-                lblDsBorder.Location = new Point(15, 100);
-
-                previewDesktopColor = new Panel();
-                previewDesktopColor.Size = new System.Drawing.Size(32, 24);
-                previewDesktopColor.Location = new Point(150, 98);
-                previewDesktopColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseBorder = new Button();
-                btnChooseBorder.Text = "Choose...";
-                btnChooseBorder.Size = new System.Drawing.Size(72, 24);
-                btnChooseBorder.Location = new Point(190, 98);
-                btnChooseBorder.Click += ChooseDesktopBorderColor_Click;
-
-                btnRevertDesktopColor = new Button();
-                btnRevertDesktopColor.Text = "\u21BA";
-                btnRevertDesktopColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertDesktopColor.Location = new Point(270, 98);
-                btnRevertDesktopColor.Click += RevertDesktopBorderColor_Click;
-
-                // Row 3: Active Border Color
-                var lblActiveDsBorder = new Label();
-                lblActiveDsBorder.Text = "Border Color (Active)";
-                lblActiveDsBorder.AutoSize = true;
-                lblActiveDsBorder.Location = new Point(15, 130);
-
-                previewActiveDesktopBorderColor = new Panel();
-                previewActiveDesktopBorderColor.Size = new System.Drawing.Size(32, 24);
-                previewActiveDesktopBorderColor.Location = new Point(150, 128);
-                previewActiveDesktopBorderColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseActiveBorder = new Button();
-                btnChooseActiveBorder.Text = "Choose...";
-                btnChooseActiveBorder.Size = new System.Drawing.Size(72, 24);
-                btnChooseActiveBorder.Location = new Point(190, 128);
-                btnChooseActiveBorder.Click += ChooseActiveDesktopBorderColor_Click;
-
-                btnRevertActiveDesktopBorderColor = new Button();
-                btnRevertActiveDesktopBorderColor.Text = "\u21BA";
-                btnRevertActiveDesktopBorderColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertActiveDesktopBorderColor.Location = new Point(270, 128);
-                btnRevertActiveDesktopBorderColor.Click += RevertActiveDesktopBorderColor_Click;
-
-                grpDesktops.Controls.AddRange(new Control[]
-                {
-                    lblDesktopBorderStyle, cmbDesktopBorderStyle, btnRevertDesktopBorderStyle,
-                    lblBgColor, previewBackgroundColor, btnChooseBg, btnRevertBackgroundColor,
-                    lblDsBorder, previewDesktopColor, btnChooseBorder, btnRevertDesktopColor,
-                    lblActiveDsBorder, previewActiveDesktopBorderColor, btnChooseActiveBorder, btnRevertActiveDesktopBorderColor,
-                });
-                scrollTheme.Controls.Add(grpDesktops);
-            }
-
-            // GroupBox: Preview Windows
-            {
-                var grpWindows = new GroupBox();
-                grpWindows.Text = "Preview Windows";
-                grpWindows.Location = new Point(8, 355);
-                grpWindows.Width = 420;
-
-                // Row 0: Background Color
-                var lblWinBg = new Label();
-                lblWinBg.Text = "Background Color";
-                lblWinBg.AutoSize = true;
-                lblWinBg.Location = new Point(15, 20);
-
-                previewWindowColor = new Panel();
-                previewWindowColor.Size = new System.Drawing.Size(32, 24);
-                previewWindowColor.Location = new Point(150, 18);
-                previewWindowColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseWinBg = new Button();
-                btnChooseWinBg.Text = "Choose...";
-                btnChooseWinBg.Size = new System.Drawing.Size(72, 24);
-                btnChooseWinBg.Location = new Point(190, 18);
-                btnChooseWinBg.Click += ChooseWindowBackgroundColor_Click;
-
-                btnRevertWindowColor = new Button();
-                btnRevertWindowColor.Text = "\u21BA";
-                btnRevertWindowColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertWindowColor.Location = new Point(270, 18);
-                btnRevertWindowColor.Click += RevertWindowBackgroundColor_Click;
-
-                // Row 1: Border Color
-                var lblWinBorder = new Label();
-                lblWinBorder.Text = "Border Color";
-                lblWinBorder.AutoSize = true;
-                lblWinBorder.Location = new Point(15, 50);
-
-                previewWindowBorderColor = new Panel();
-                previewWindowBorderColor.Size = new System.Drawing.Size(32, 24);
-                previewWindowBorderColor.Location = new Point(150, 48);
-                previewWindowBorderColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseWinBorder = new Button();
-                btnChooseWinBorder.Text = "Choose...";
-                btnChooseWinBorder.Size = new System.Drawing.Size(72, 24);
-                btnChooseWinBorder.Location = new Point(190, 48);
-                btnChooseWinBorder.Click += ChooseWindowBorderColor_Click;
-
-                btnRevertWindowBorderColor = new Button();
-                btnRevertWindowBorderColor.Text = "\u21BA";
-                btnRevertWindowBorderColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertWindowBorderColor.Location = new Point(270, 48);
-                btnRevertWindowBorderColor.Click += RevertWindowBorderColor_Click;
-
-                // Row 2: Active Border Color
-                var lblWinActiveBorder = new Label();
-                lblWinActiveBorder.Text = "Border Color (Active)";
-                lblWinActiveBorder.AutoSize = true;
-                lblWinActiveBorder.Location = new Point(15, 80);
-
-                previewActiveWindowBorderColor = new Panel();
-                previewActiveWindowBorderColor.Size = new System.Drawing.Size(32, 24);
-                previewActiveWindowBorderColor.Location = new Point(150, 78);
-                previewActiveWindowBorderColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseWinActiveBorder = new Button();
-                btnChooseWinActiveBorder.Text = "Choose...";
-                btnChooseWinActiveBorder.Size = new System.Drawing.Size(72, 24);
-                btnChooseWinActiveBorder.Location = new Point(190, 78);
-                btnChooseWinActiveBorder.Click += ChooseActiveWindowBorderColor_Click;
-
-                btnRevertActiveWindowBorderColor = new Button();
-                btnRevertActiveWindowBorderColor.Text = "\u21BA";
-                btnRevertActiveWindowBorderColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertActiveWindowBorderColor.Location = new Point(270, 78);
-                btnRevertActiveWindowBorderColor.Click += RevertActiveWindowBorderColor_Click;
-
-                grpWindows.Controls.AddRange(new Control[]
-                {
-                    lblWinBg, previewWindowColor, btnChooseWinBg, btnRevertWindowColor,
-                    lblWinBorder, previewWindowBorderColor, btnChooseWinBorder, btnRevertWindowBorderColor,
-                    lblWinActiveBorder, previewActiveWindowBorderColor, btnChooseWinActiveBorder, btnRevertActiveWindowBorderColor,
-                });
-                scrollTheme.Controls.Add(grpWindows);
-            }
-
-            // GroupBox: Active Windows
-            {
-                var grpIconsActive = new GroupBox();
-                grpIconsActive.Text = "Active Windows";
-                grpIconsActive.Location = new Point(8, 505);
-                grpIconsActive.Width = 420;
-
-                var lblActiveBg = new Label();
-                lblActiveBg.Text = "Background Color (Active)";
-                lblActiveBg.AutoSize = true;
-                lblActiveBg.Location = new Point(15, 20);
-
-                previewActiveWindowColor = new Panel();
-                previewActiveWindowColor.Size = new System.Drawing.Size(32, 24);
-                previewActiveWindowColor.Location = new Point(150, 18);
-                previewActiveWindowColor.BorderStyle = BorderStyle.FixedSingle;
-
-                var btnChooseActiveBg = new Button();
-                btnChooseActiveBg.Text = "Choose...";
-                btnChooseActiveBg.Size = new System.Drawing.Size(72, 24);
-                btnChooseActiveBg.Location = new Point(190, 18);
-                btnChooseActiveBg.Click += ChooseActiveWindowBackgroundColor_Click;
-
-                btnRevertActiveWindowColor = new Button();
-                btnRevertActiveWindowColor.Text = "\u21BA";
-                btnRevertActiveWindowColor.Size = new System.Drawing.Size(28, 24);
-                btnRevertActiveWindowColor.Location = new Point(270, 18);
-                btnRevertActiveWindowColor.Click += RevertActiveWindowBackgroundColor_Click;
-
-                grpIconsActive.Controls.AddRange(new Control[] { lblActiveBg, previewActiveWindowColor, btnChooseActiveBg, btnRevertActiveWindowColor });
-                scrollTheme.Controls.Add(grpIconsActive);
-            }
-
-            // ============================ MISC TAB ============================
-            // GroupBox: Performance
-            {
-                var grpPerformance = new GroupBox();
-                grpPerformance.Text = "Performance";
-                grpPerformance.Location = new Point(8, 8);
-                grpPerformance.Size = new System.Drawing.Size(420, 130);
-
-                var lblPrimaryDelay = new Label();
-                lblPrimaryDelay.Text = "Primary Update Delay (ms)";
-                lblPrimaryDelay.AutoSize = true;
-                lblPrimaryDelay.Location = new Point(15, 20);
-                var ttPrimaryDelay = new ToolTip();
-                ttPrimaryDelay.SetToolTip(lblPrimaryDelay, "Delay for the main refresh cycle.\nAffects how often the currently opened windows\n(on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.");
-
-                txtPrimaryDelay = new TextBox();
-                txtPrimaryDelay.Size = new System.Drawing.Size(150, 22);
-                txtPrimaryDelay.Location = new Point(15, 40);
-                txtPrimaryDelay.TextChanged += MiscTextInputChanged;
-
-                btnRevertPrimaryDelay = new Button();
-                btnRevertPrimaryDelay.Text = "\u21BA";
-                btnRevertPrimaryDelay.Size = new System.Drawing.Size(28, 24);
-                btnRevertPrimaryDelay.Location = new Point(170, 40);
-                btnRevertPrimaryDelay.Click += RevertPrimaryDelay_Click;
-
-                var lblSecondaryDelay = new Label();
-                lblSecondaryDelay.Text = "Secondary Update Delay (ms)";
-                lblSecondaryDelay.AutoSize = true;
-                lblSecondaryDelay.Location = new Point(15, 70);
-                var ttSecondaryDelay = new ToolTip();
-                ttSecondaryDelay.SetToolTip(lblSecondaryDelay, "Delay for background/secondary updates.\nAffects how often the app window is checked for being covered by another one,\nthis includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing,\nthat's why this delay should be higher than the primary one.");
-
-                txtSecondaryDelay = new TextBox();
-                txtSecondaryDelay.Size = new System.Drawing.Size(150, 22);
-                txtSecondaryDelay.Location = new Point(15, 90);
-                txtSecondaryDelay.TextChanged += MiscTextInputChanged;
-
-                btnRevertSecondaryDelay = new Button();
-                btnRevertSecondaryDelay.Text = "\u21BA";
-                btnRevertSecondaryDelay.Size = new System.Drawing.Size(28, 24);
-                btnRevertSecondaryDelay.Location = new Point(170, 90);
-                btnRevertSecondaryDelay.Click += RevertSecondaryDelay_Click;
-
-                grpPerformance.Controls.AddRange(new Control[] { lblPrimaryDelay, txtPrimaryDelay, btnRevertPrimaryDelay, lblSecondaryDelay, txtSecondaryDelay, btnRevertSecondaryDelay });
-                scrollMisc.Controls.Add(grpPerformance);
-            }
-
-            // GroupBox: App Pinning
-            {
-                var grpPinning = new GroupBox();
-                grpPinning.Text = "App Pinning";
-                grpPinning.Location = new Point(8, 145);
-                grpPinning.Width = 420;
-
-                var lblShowInTaskbar = new Label();
-                lblShowInTaskbar.Text = "Show App In Taskbar";
-                lblShowInTaskbar.AutoSize = true;
-                lblShowInTaskbar.Location = new Point(15, 20);
-
-                chkShowAppInTaskbar = new CheckBox();
-                chkShowAppInTaskbar.CheckedChanged += MiscBooleanInputChanged;
-
-                btnRevertShowAppInTaskbar = new Button();
-                btnRevertShowAppInTaskbar.Text = "\u21BA";
-                btnRevertShowAppInTaskbar.Size = new System.Drawing.Size(28, 24);
-                btnRevertShowAppInTaskbar.Location = new Point(170, 18);
-                btnRevertShowAppInTaskbar.Click += RevertShowAppInTaskbar_Click;
-
-                var lblNote = new Label();
-                lblNote.Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).";
-                lblNote.AutoSize = false;
-                lblNote.Width = 390;
-                lblNote.Top = 50;
-                lblNote.Left = 15;
-                lblNote.ForeColor = SystemColors.GrayText;
-                lblNote.TextAlign = ContentAlignment.MiddleLeft;
-
-                var panelNoteContainer = new Panel();
-                panelNoteContainer.BorderStyle = BorderStyle.FixedSingle;
-                panelNoteContainer.Size = new System.Drawing.Size(400, 50);
-                panelNoteContainer.Left = 15;
-                panelNoteContainer.Top = 48;
-                panelNoteContainer.Controls.Add(lblNote);
-
-                grpPinning.Controls.AddRange(new Control[] { lblShowInTaskbar, chkShowAppInTaskbar, btnRevertShowAppInTaskbar, panelNoteContainer });
-                scrollMisc.Controls.Add(grpPinning);
-            }
-
-            // Add tab control and button bar to the form
-            Controls.Add(tabControl);
-            Controls.Add(buttonFlowLayoutPanel);
-
-            // Position the form next to the owner if available
-            if (_hasPlacementOwner)
-            {
-                var size = this.Size;
-                DrawingPoint pt = FindPlacement(_placementOwnerBounds, size);
-                Location = new System.Drawing.Point(pt.X, pt.Y);
-            }
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.RightToLeft,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Padding = new Padding(0, 8, 0, 0),
+            };
+
+            var cancel = new Button { Text = "Cancel", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
+            cancel.Click += Cancel_Click;
+
+            var save = new Button { Text = "Save", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
+            save.Click += Save_Click;
+
+            var defaults = new Button { Text = "Defaults", Width = 100, Height = 28, Margin = new Padding(0) };
+            _toolTip.SetToolTip(defaults, "Reset for current tab only");
+            defaults.Click += Defaults_Click;
+
+            buttons.Controls.Add(cancel);
+            buttons.Controls.Add(save);
+            buttons.Controls.Add(defaults);
+
+            AcceptButton = save;
+            CancelButton = cancel;
+
+            Controls.Add(_tabs);
+            Controls.Add(buttons);
 
             ResumeLayout(false);
         }
 
-        #region Placement helpers (WinForms equivalent of WPF version)
-        private static DrawingPoint FindPlacement(DrawingRectangle owner, DrawingSize size)
+        private TabPage CreatePage(string title)
+        {
+            var page = new TabPage(title);
+            var scroll = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+            };
+
+            var stack = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                ColumnCount = 1,
+                Padding = new Padding(2),
+            };
+            stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            scroll.Controls.Add(stack);
+            page.Controls.Add(scroll);
+            page.Tag = stack;
+            return page;
+        }
+
+        private TableLayoutPanel BeginGroup(TabPage page, string title)
+        {
+            var stack = (TableLayoutPanel)page.Tag;
+            var group = new GroupBox
+            {
+                Text = title,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top,
+                Margin = new Padding(6, 4, 6, 4),
+            };
+
+            var table = new TableLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Top,
+                ColumnCount = 3,
+                Padding = new Padding(10, 10, 10, 10),
+            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 36));
+
+            group.Controls.Add(table);
+
+            int row = AddTableRow(stack);
+            stack.Controls.Add(group, 0, row);
+
+            return table;
+        }
+
+        private void BuildLayoutPage(TabPage page)
+        {
+            TableLayoutPanel rendering = BeginGroup(page, "Rendering");
+
+            AddComboRow(
+                rendering,
+                page,
+                "View Mode Default",
+                "Only affects newly created desktops and their screens.",
+                new[] { "Preview", "MicroTaskbar" },
+                s => (int)s.ViewModeDefault,
+                (s, v) => s.ViewModeDefault = (ViewMode)v);
+
+            AddPagerHeightRow(rendering, page);
+
+            TableLayoutPanel icons = BeginGroup(page, "Icons Settings");
+
+            AddNumericRow(
+                icons,
+                page,
+                "Icon Padding X",
+                "Negative values are supported as well so less space is taken and the icons look stacked.",
+                -9999,
+                9999,
+                s => s.IconPaddingX,
+                (s, v) => s.IconPaddingX = v);
+
+            AddNumericRow(
+                icons,
+                page,
+                "Icon Padding Y",
+                "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar.",
+                -9999,
+                9999,
+                s => s.IconPaddingY,
+                (s, v) => s.IconPaddingY = v);
+        }
+
+        private void AddPagerHeightRow(TableLayoutPanel table, TabPage page)
+        {
+            var editor = new NumericUpDown
+            {
+                Minimum = MinPagerContentHeight,
+                Maximum = 9999,
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+            };
+            editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, _working.PagerHeight));
+
+            editor.ValueChanged += (s, e) =>
+            {
+                int value = (int)editor.Value;
+                int minimum = _working.IconPaddingY + MinPagerContentHeight;
+                if (value < minimum)
+                {
+                    value = (int)Math.Min(editor.Maximum, minimum);
+                    Suppress(() => editor.Value = value);
+                }
+
+                _working.PagerHeight = value;
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                "Pager Height",
+                "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
+                editor,
+                s => editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, s.PagerHeight)),
+                () => (int)editor.Value != _settingsBefore.PagerHeight);
+        }
+
+        private void BuildThemePage(TabPage page)
+        {
+            TableLayoutPanel general = BeginGroup(page, "General");
+            AddOpacityRow(general, page);
+
+            TableLayoutPanel desktops = BeginGroup(page, "Desktops");
+            AddComboRow(desktops, page, "Border Style", null, new[] { "Box", "Underline" }, s => (int)s.DesktopBorderStyle,
+                (s, v) => s.DesktopBorderStyle = (Config.DesktopBorderStyle)v);
+            AddColorRow(desktops, page, "Background Color", s => s.DesktopBackgroundColor,
+                (s, c) => s.DesktopBackgroundColor = c);
+            AddColorRow(desktops, page, "Border Color", s => s.DesktopBorderColor,
+                (s, c) => s.DesktopBorderColor = c);
+            AddColorRow(desktops, page, "Border Color (Active)", s => s.ActiveDesktopBorderColor,
+                (s, c) => s.ActiveDesktopBorderColor = c);
+
+            TableLayoutPanel windows = BeginGroup(page, "Preview Windows");
+            AddColorRow(windows, page, "Background Color", s => s.WindowBackgroundColor, (s, c) => s.WindowBackgroundColor = c);
+            AddColorRow(windows, page, "Border Color", s => s.WindowBorderColor, (s, c) => s.WindowBorderColor = c);
+            AddColorRow(windows, page, "Border Color (Active)", s => s.ActiveWindowBorderColor, (s, c) => s.ActiveWindowBorderColor = c);
+            AddColorRow(windows, page, "Background Color (Active)", s => s.ActiveWindowBackgroundColor, (s, c) => s.ActiveWindowBackgroundColor = c);
+        }
+
+        private void BuildMiscPage(TabPage page)
+        {
+            TableLayoutPanel performance = BeginGroup(page, "Performance");
+
+            _primaryDelayBox = AddTextRow(
+                performance,
+                page,
+                "Primary Update Delay (ms)",
+                "Delay for the main refresh cycle. Affects how often the currently opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.",
+                s => s.PrimaryUpdateDelay,
+                (s, v) => s.PrimaryUpdateDelay = v);
+
+            _secondaryDelayBox = AddTextRow(
+                performance,
+                page,
+                "Secondary Update Delay (ms)",
+                "Delay for background/secondary updates. Affects how often the app window is checked for being covered by another one, this includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing, that's why this delay should be higher than the primary one.",
+                s => s.SecondaryUpdateDelay,
+                (s, v) => s.SecondaryUpdateDelay = v);
+
+            TableLayoutPanel pinning = BeginGroup(page, "App Pinning");
+
+            AddCheckBoxRow(
+                pinning,
+                page,
+                "Show App In Taskbar",
+                null,
+                s => s.ShowAppInTaskbar,
+                (s, v) => s.ShowAppInTaskbar = v);
+
+            var note = new Label
+            {
+                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
+                AutoSize = true,
+                MaximumSize = new Size(420, 0),
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(8, 4, 8, 4),
+            };
+
+            var noteBox = new Panel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BorderStyle = BorderStyle.FixedSingle,
+                Padding = new Padding(8),
+                Margin = new Padding(6, 12, 6, 4),
+            };
+            noteBox.Controls.Add(note);
+
+            AddSpanningControl(pinning, noteBox);
+        }
+
+        // ------------------------------------------------------------------------------------
+        // Placement helpers
+        // ------------------------------------------------------------------------------------
+
+        private Point FindPlacement(Rectangle owner, Size size)
         {
             return TryPlaceRight(owner, size)
                 ?? TryPlaceLeft(owner, size)
@@ -1061,76 +859,94 @@ namespace MicroTaskPager.GUI
                 ?? CenterOverOwner(owner, size);
         }
 
-        private static DrawingPoint? TryPlaceRight(DrawingRectangle owner, DrawingSize size)
+        private Point? TryPlaceRight(Rectangle owner, Size size)
         {
             int x = owner.Right + PlacementGap;
-            foreach (var screen in Screen.AllScreens)
+            foreach (Screen screen in Screen.AllScreens)
             {
-                var area = screen.WorkingArea;
+                Rectangle area = screen.WorkingArea;
                 if (x >= area.Left && x + size.Width <= area.Right && size.Height <= area.Height)
                 {
                     int y = Math.Max(area.Top, Math.Min(owner.Top, area.Bottom - size.Height));
-                    return new DrawingPoint(x, y);
+                    return new Point(x, y);
                 }
             }
 
             return null;
         }
 
-        private static DrawingPoint? TryPlaceLeft(DrawingRectangle owner, DrawingSize size)
+        private Point? TryPlaceLeft(Rectangle owner, Size size)
         {
             int x = owner.Left - PlacementGap - size.Width;
-            foreach (var screen in Screen.AllScreens)
+            foreach (Screen screen in Screen.AllScreens)
             {
-                var area = screen.WorkingArea;
+                Rectangle area = screen.WorkingArea;
                 if (x >= area.Left && x + size.Width <= area.Right && size.Height <= area.Height)
                 {
                     int y = Math.Max(area.Top, Math.Min(owner.Top, area.Bottom - size.Height));
-                    return new DrawingPoint(x, y);
+                    return new Point(x, y);
                 }
             }
 
             return null;
         }
 
-        private static DrawingPoint? TryPlaceBelow(DrawingRectangle owner, DrawingSize size)
+        private Point? TryPlaceBelow(Rectangle owner, Size size)
         {
             int y = owner.Bottom + PlacementGap;
-            foreach (var screen in Screen.AllScreens)
+            foreach (Screen screen in Screen.AllScreens)
             {
-                var area = screen.WorkingArea;
+                Rectangle area = screen.WorkingArea;
                 if (y >= area.Top && y + size.Height <= area.Bottom && size.Width <= area.Width)
                 {
                     int x = Math.Max(area.Left, Math.Min(owner.Left, area.Right - size.Width));
-                    return new DrawingPoint(x, y);
+                    return new Point(x, y);
                 }
             }
 
             return null;
         }
 
-        private static DrawingPoint? TryPlaceAbove(DrawingRectangle owner, DrawingSize size)
+        private Point? TryPlaceAbove(Rectangle owner, Size size)
         {
             int y = owner.Top - PlacementGap - size.Height;
-            foreach (var screen in Screen.AllScreens)
+            foreach (Screen screen in Screen.AllScreens)
             {
-                var area = screen.WorkingArea;
+                Rectangle area = screen.WorkingArea;
                 if (y >= area.Top && y + size.Height <= area.Bottom && size.Width <= area.Width)
                 {
                     int x = Math.Max(area.Left, Math.Min(owner.Left, area.Right - size.Width));
-                    return new DrawingPoint(x, y);
+                    return new Point(x, y);
                 }
             }
-            
+
             return null;
         }
 
-        private static DrawingPoint CenterOverOwner(DrawingRectangle owner, DrawingSize size)
+        private Point CenterOverOwner(Rectangle owner, Size size)
         {
-            return new DrawingPoint(
+            return new Point(
                 owner.Left + ((owner.Width - size.Width) / 2),
                 owner.Top + ((owner.Height - size.Height) / 2));
         }
-        #endregion
+
+        private sealed class RowBinding
+        {
+            public RowBinding(TabPage page, Button revert, Action<AppSettings> load, Func<bool> isModified)
+            {
+                Page = page;
+                Revert = revert;
+                Load = load;
+                IsModified = isModified;
+            }
+
+            public TabPage Page { get; }
+
+            public Button Revert { get; }
+
+            public Action<AppSettings> Load { get; }
+
+            public Func<bool> IsModified { get; }
+        }
     }
 }
