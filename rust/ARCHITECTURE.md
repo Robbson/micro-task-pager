@@ -1,10 +1,15 @@
 # Rust Migration – Architecture and Development Guidelines
 
+Status: working draft. The status column in section 3 and the decisions in section 15 define the
+current direction; everything else is a candidate or deferred.
+
 ## 1. Project Overview
 
 This project is a migration of an existing C#/.NET Windows Forms application to native Rust.
 
-The application is a **Virtual Desktop Pager for Windows**. Its primary purpose is managing Windows virtual desktops and providing a visual overview of them, including window previews and application icons.
+The application is a **Virtual Desktop Pager for Windows**. Its primary purpose is managing Windows
+virtual desktops and providing a persistent visual overview of them, including window layout and
+application icons.
 
 The application is heavily Windows-specific and does not need to be cross-platform.
 
@@ -20,293 +25,650 @@ The main goals of the migration are:
 
 Microsoft's official `windows-rs` ecosystem should be preferred wherever practical.
 
-## 2. Existing Application Characteristics
+The existing C# implementation is the behavioral reference. When in doubt, read the C# code rather
+than guessing what the application does.
 
-The existing application has two main UI areas:
+### 1.1 Non-Goals for v1
 
-### Main Form
+- A settings window or any settings UI framework.
+- DWM live thumbnails or screen capture.
+- Direct2D/GPU rendering, unless a dedicated spike shows it is needed.
+- Per-monitor DPI V2.
+- ARM64.
+- Desktop creation, removal, or renaming.
+- Installer, auto-update, and code signing.
 
-The MainForm.cs and the Desktop.cs as well as the ScreenRenderer.cs are largely custom-rendered using GDI.
-They display virtual desktops, window previews, application icons and other visual elements.
+## 2. What the Existing Application Actually Does
 
-Painting is relatively simple and primarily consists of:
+This section describes the behavior that has to survive the migration. It is the most important
+part of this document.
 
-- Filled rectangles.
-- Bitmaps.
-- Application icons.
-- Window previews.
-- Custom layout and visual state representation.
+### 2.1 Main Window
 
-The application does not rely heavily on standard WinForms controls.
+`MainForm.cs` is a single borderless, always-on-top window with no control box:
 
-### Settings Panel
+- The pager is one window; virtual desktops are drawn inside it, not as child windows.
+- Its width is the sum of all desktop widths; its height is the configured pager height scaled by DPI.
+- Default position is bottom-center of the primary screen's working area. The user can move it with
+  the middle mouse button or Shift + left mouse button, and can save, restore, or reset the position
+  from the context menu (stored in the registry).
+- Right-click opens a context menu: Toggle View Mode, Position (Restore/Save/Default), Settings,
+  About, Exit. The Settings entry is dropped in v1 (see section 8); Exit must remain, because the
+  window has no system menu.
+- Background opacity is the window's alpha (`Form.Opacity`), i.e. a layered window.
+- The process is **system DPI aware**, not per-monitor aware (see section 7.6).
 
-The settings panel is comparatively small and independent of the main rendering functionality.
-It is a good candidate for modernization using native Windows UI technologies.
-The settings model and application configuration must remain independent of the UI implementation.
+### 2.2 View Modes
 
-### Windows Virtual Desktop Management
+Each desktop is drawn as a row of one renderer per physical monitor. Each renderer independently uses
+one of two modes, remembered per desktop/screen:
 
-The most technically challenging component is the management of Windows virtual desktops.
-The application relies on undocumented Windows Shell COM interfaces, particularly internal Virtual Desktop Manager interfaces.
-These interfaces may change between Windows releases and feature updates.
-Supporting multiple Windows versions is therefore an important architectural consideration.
+**Preview** is a *scaled geometry map*, not a live screen image. For every visible window on the
+desktop and monitor it:
 
----
+1. Takes the window rectangle in screen coordinates and subtracts the monitor origin.
+2. Scales the rectangle into pager space.
+3. Fills it with a solid color (active/inactive) and draws the application icon centered in it.
+4. Draws a border.
+
+Windows are drawn in z-order (back to front). Clicking a miniature selects that window. There is **no
+DWM thumbnail and no screen capture** anywhere in the current implementation, and the migrated v1 must
+not introduce one (see section 3).
+
+**Micro Taskbar** draws a centered grid of application icons for the desktop/monitor. It computes
+columns and rows from the available size and icon padding, and reserves the last cell for a `+N`
+overflow label when not all windows fit. Active windows get a highlighted tile background.
+
+### 2.3 Settings and Persistence
+
+Settings are not a separate model today: `AppSettings` is loaded from and saved to
+`HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager` (`AppSettingsStore.cs`). The pager position is stored under
+the same key (`RegistryAccess.cs`). The settings dialog is built programmatically with WinForms; the
+project enables `UseWPF` and a few files carry unused `System.Windows.*` imports, but no WPF UI exists.
+
+### 2.4 Virtual Desktop Management
+
+The application uses undocumented shell COM interfaces. The public `IVirtualDesktopManager` is not
+sufficient. The required capabilities are:
+
+- Count desktops, get the current desktop, get a desktop by index.
+- Switch to a desktop.
+- Move a window (more precisely, its `IApplicationView`) to a desktop.
+- Map a desktop object to its index and a window handle to its desktop.
+- Pin the pager process/application to all desktops via `IVirtualDesktopPinnedApps`.
+
+The C# implementation contains four version-specific variants under `src/Core/API/` (`Win10`,
+`Win10LTSC`, `Win11`, `Win11_`). These variants differ in vtable layout, not in application logic.
+
+### 2.5 Always-On Behavior
+
+The pager is only useful if it is always present. The current app implements this with:
+
+- Pinning itself to all virtual desktops (only possible when the app appears in the taskbar; a failed
+  auto-pin at startup is expected and tolerated).
+- `HWND_TOPMOST` plus a 500 ms watchdog: if `WindowFromPoint` at the pager's center returns another
+  window, the pager re-shows itself with `ShowWindowAsync(SW_SHOWNOACTIVATE)` and re-applies topmost.
+- A single-instance mutex so two pagers cannot fight over topmost and pinning.
+
+### 2.6 Window Model
+
+`WindowManager.GetOpenWindows()` enumerates top-level windows and filters them:
+
+- Skip the shell window, invisible windows, windows without a title, and the
+  `Windows.UI.Core.CoreWindow` class (Start menu).
+- Skip windows owned by the pager process.
+- Skip windows whose virtual desktop cannot be determined. Failures are counted per handle and the
+  handle is blacklisted after 10 failures (snapped-window helper windows trigger this).
+- Read title, class, process ID, rectangle, foreground state, and z-order. Z-order is computed by
+  repeatedly following `GetWindow(GW_HWNDNEXT)`, so the value is the distance from the bottom of the
+  z-order and ascending order draws back to front.
+- Read the icon via `WM_GETICON` (`ICON_SMALL2`), then `GCL_HICON`, then `IDI_APPLICATION`. Icons are
+  cached per `(hwnd, hIcon)` and pruned when the window disappears.
+
+### 2.7 Last Active Window per Desktop
+
+`ActiveWindowTracker` installs a `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)` hook and remembers the last
+real foreground window for each desktop. When the user switches back to a desktop, the pager restores
+that window, retrying once after 150 ms because the desktop switch animation can still be in progress.
+
+### 2.8 Refresh Model
+
+There is no render loop. Two polling loops (200 ms primary, 500 ms secondary) build a window snapshot,
+compute a change-detection hash, and invalidate the window only when the hash changes. Desktop count
+and monitor configuration are checked on the slower loop and cause a full rebuild of all desktop and
+COM objects.
 
 ## 3. Technology Stack
 
-After a first look, the currently preferred technology stack seems to be:
+| Area | Technology | Status |
+|---|---|---|
+| Programming language | Rust (stable, MSVC toolchain) | decided |
+| Windows API bindings | `windows` / `windows-rs` | decided |
+| Low-level Windows bindings | `windows-sys` only where necessary | decided |
+| COM interoperability | `windows-core` | decided |
+| Main window | Native Win32 (`RegisterClassExW`, `CreateWindowExW`, message loop) | decided |
+| Main rendering (v1) | GDI into a double-buffered memory DC behind a `Painter` trait | decided |
+| Main rendering (later) | Direct2D via `windows-canvas` | deferred, spike required |
+| Window previews | Scaled window rectangles + shell icons (no DWM) | decided |
+| Live thumbnails | DWM Thumbnail API | deferred, not planned for v1 |
+| Application icons | `WM_GETICON` / `GCL_HICON` / `LoadIcon` | decided |
+| Settings UI | none in v1; `winsafe` / `windows-reactor` are not used | not planned |
+| Settings storage | Windows registry, C#-compatible | decided |
+| Windows version detection | `windows-version` crate or `RtlGetVersion` | candidate |
+| Logging | `tracing` + rolling file appender (or `log` + `flexi_logger`) | candidate |
+| Build system | Cargo | decided |
+| Testing | `cargo test` for pure logic, `examples/probe` for COM | decided |
 
-| Area | Technology |
-|---|---|
-| Programming language | Rust |
-| Windows API bindings | `windows` / `windows-rs` |
-| Low-level Windows bindings | `windows-sys` where necessary |
-| COM interoperability | `windows-core` |
-| Main window | Native Win32 |
-| Main rendering | Direct2D via `windows-canvas` |
-| Settings UI | `winsafe` with classic Win32 controls because `windows-reactor` for WinUI 3 isn't stable yet |
-| Window previews | DWM Thumbnail API |
-| Application icons | Windows Shell APIs |
-| Build system | Cargo |
-
-Use official Microsoft Rust libraries whenever possible.
-Avoid introducing large third-party GUI frameworks unless there is a compelling technical reason.
+Do not add a third-party GUI framework. In v1 the application needs exactly one window, one context
+menu, and GDI drawing; `winsafe`, `windows-reactor`, `egui`, and similar crates are unnecessary.
 
 ## 4. Repository Structure
 
-The Rust implementation should live in a separate directory inside the existing Git repository.
-The existing C# implementation can remain available during the migration.
-Start with a single Rust crate. Split it into multiple crates only when there is a concrete architectural benefit.
+The Rust implementation lives in `rust/` inside the existing Git repository. The C# implementation
+remains available during migration and is the reference for behavior.
 
----
+Start with a single Cargo crate. Split it into multiple crates only when there is a concrete
+architectural benefit (for example, if the COM probe becomes reusable). Suggested module layout:
+
+```
+rust/
+  Cargo.toml
+  rust-toolchain.toml           # pinned channel + rustfmt/clippy
+  src/
+    main.rs                     # process setup, single instance, message loop
+    app.rs                      # application state and state transitions
+    window.rs                   # Win32 window, wndproc, context menu
+    input.rs                    # hit testing, drag handling
+    settings.rs                 # model, defaults, registry import/export
+    logging.rs
+    desktop/
+      mod.rs                    # safe virtual-desktop API trait
+      com/win10.rs
+      com/win10_ltsc.rs
+      com/win11.rs
+      com/win11_24h2.rs
+    windows/
+      mod.rs                    # window enumeration and snapshot
+      icons.rs
+    render/
+      mod.rs                    # Painter trait and layout model
+      gdi.rs
+  examples/
+    probe/                      # standalone COM verification binary
+```
 
 ## 5. Windows API Integration
 
 ### 5.1 windows-rs
 
-Use Microsoft's official `windows` crate as the primary Windows API binding.
+Use Microsoft's official `windows` crate as the primary binding. Enable only the features that are
+used, for example:
 
-It provides access to classic Win32 functionality, including:
-- Window creation and management.
-- Window procedures.
-- Message loops.
-- Win32 controls.
-- GDI.
-- DWM.
-- Shell APIs.
-- COM.
-- Windows Runtime APIs.
+- `Win32_Foundation`
+- `Win32_System_Com`, `Win32_System_LibraryLoader`, `Win32_System_Registry`, `Win32_System_Threading`
+- `Win32_UI_WindowsAndMessaging`
+- `Win32_UI_Shell`
+- `Win32_UI_Accessibility` (`SetWinEventHook`, `UnhookWinEvent`)
+- `Win32_Graphics_Gdi`, `Win32_Graphics_Dwm` (only if DWM is used later)
+- `Win32_Storage_FileSystem` (logging)
 
-Use `windows-sys` only when lower-level bindings are necessary or preferable.
-Keep unsafe code localized and encapsulated behind safe Rust interfaces.
+Use `windows-sys` only when a lower-level binding is genuinely preferable. Keep `unsafe` localized
+behind safe Rust interfaces.
+
+Pin Microsoft crate versions explicitly in `Cargo.toml` (`windows = "0.100"`, etc.) and verify APIs
+against docs.rs or the crate source. Do not rely on remembered signatures.
 
 ### 5.2 Win32 Main Window
 
-The main application window should initially remain a classic Win32 window. Other opinions?
+The main window remains a classic Win32 window. Required messages:
 
-Implement the required functionality using:
+- `WM_CREATE`, `WM_DESTROY`, `WM_CLOSE`
+- `WM_PAINT`, `WM_SIZE`, `WM_DPICHANGED` (even if only logged in v1)
+- `WM_TIMER` for the primary/secondary refresh ticks
+- `WM_APP + n` for state changes posted from hooks or other threads
+- mouse messages (`WM_LBUTTONDOWN`, `WM_LBUTTONUP`, `WM_MOUSEMOVE`, `WM_MOUSEWHEEL`,
+  `WM_MBUTTONDOWN`, `WM_RBUTTONUP`) and `TrackPopupMenu` for the context menu
 
-- `RegisterClassExW`
-- `CreateWindowExW`
-- `DefWindowProcW`
-- `GetMessageW`
-- `DispatchMessageW`
-- `WM_CREATE`
-- `WM_SIZE`
-- `WM_COMMAND`
-- `WM_PAINT`
-- `WM_DESTROY`
+The window procedure stays small. It forwards to an `App`/`WindowState` object; it does not contain
+window enumeration, COM calls, or drawing logic.
 
-The window procedure should remain relatively small.
-Separate application logic, event handling and rendering from the actual Win32 message dispatch.
+### 5.3 Threading and Message Model
 
----
+- Initialize COM once on the UI thread with `CoInitializeEx(COINIT_APARTMENTTHREADED)`.
+- **All** shell and virtual-desktop COM calls happen on that thread. The C# app achieves this by
+  marshaling background loops back with `Invoke`; in Rust, remove the background threads entirely.
+- Use `WM_TIMER` ticks to enumerate windows, query desktops, and invalidate. Optionally use a second
+  timer for the slower watchdog. Do not use a permanent render loop.
+- `SetWinEventHook` with `WINEVENT_OUTOFCONTEXT` delivers callbacks on the installing thread's message
+  loop, which is the UI thread. Keep hook callbacks free of blocking COM calls where possible; store
+  the handle and let the next tick use it.
+- Do not block the UI thread with `SendMessage` to other processes. Use `SendMessageTimeoutW` with a
+  short timeout for `WM_GETICON`.
+- If a helper thread is ever added, communicate with the UI thread via `PostMessage(WM_APP + n)` and
+  a small queue. Never touch application state or COM interfaces from two threads.
 
-## 6. Virtual Desktop Management
+### 5.4 FFI Safety Rules
 
-This is the most important and Windows-specific subsystem.
-The application uses undocumented Windows Shell COM interfaces to manage virtual desktops.
-Relevant interfaces include:
+- No `unwrap`/`expect`/panics inside `extern "system"` callbacks (wndproc, WinEvent hook). A panic must
+  not unwind across the FFI boundary; if a boundary can panic, wrap it in `catch_unwind`.
+- Every Win32 handle and COM pointer gets an RAII wrapper (`HWND`, `HICON`, `HBITMAP`, `HBRUSH`,
+  `HFONT`, `HMENU`, mutex handle, `IUnknown`-derived pointer).
+- Check `HRESULT` explicitly. Do not convert a failed COM call into a default value.
+- Document the safety contract of every `unsafe` block: which pointer must be valid, which thread it
+  belongs to, and what owns it.
 
-- `IVirtualDesktopManager`
-- `IVirtualDesktopManagerInternal`
-- `IVirtualDesktop`
-- `IVirtualDesktopNotification`
-- `IVirtualDesktopNotificationService`
+## 6. Virtual Desktop Subsystem
 
-The public `IVirtualDesktopManager` interface is documented, but several capabilities required by a full virtual desktop pager are only available through undocumented internal interfaces which can be found in die Core/API Folder of the C# implementation.
+### 6.1 Structure: One Safe API, Four Thin Layout Modules
 
-Do not assume that every required internal COM interface is available through Microsoft's generated Windows bindings.
-Do not scatter version-specific COM definitions throughout the application.
-Use separate implementation modules for supported Windows versions.
+Do not port the C# file structure. The four C# files duplicate roughly 300 lines of wrapper logic each.
+Use instead:
 
-## 7. Rendering: Direct2D Instead of GDI
+- One safe trait, for example:
 
-The existing GDI rendering implementation should be evaluated for migration to Direct2D.
-The preferred Rust library is Microsoft's `windows-canvas` crate.
-It provides a higher-level Rust graphics abstraction built around Windows graphics technologies.
-Direct2D is particularly suitable for this application because the rendering requirements are relatively simple:
+  ```rust
+  pub trait VirtualDesktopApi {
+      fn count(&self) -> Result<u32, ApiError>;
+      fn current_index(&self) -> Result<u32, ApiError>;
+      fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError>;
+      fn switch_to(&self, index: u32) -> Result<(), ApiError>;
+      fn move_window_to(&self, hwnd: HWND, index: u32) -> Result<(), ApiError>;
+      fn pin_application(&self, hwnd: HWND) -> Result<(), ApiError>;
+  }
+  ```
 
-- Filled rectangles.
-- Bitmap rendering.
-- Application icons.
-- Window previews.
-- Scaling and clipping.
-- Basic visual effects.
+- One implementation of that trait using the selected version module.
+- Four small modules containing only GUIDs, `#[repr(C)]` vtable layouts, and the `QueryService` wiring
+  for their Windows build. No application logic in these modules.
+- Selection happens once at startup based on the build number, behind `OnceLock`/`LazyLock`.
 
-### 7.1 GDI to Direct2D Mapping
+Use the generated `windows::Win32::UI::Shell::IVirtualDesktopManager` for the documented interface.
+Hand-define only the internal interfaces.
 
-| Existing GDI operation | Direct2D equivalent |
+### 6.2 COM Interop Notes
+
+These details are easy to get wrong and are not visible in the C# declarations:
+
+- Class factories are activated with `CLSIDFromString` + `CoCreateInstance`, or created through
+  `IServiceProvider10::QueryService` on the immersive shell instance. `QueryService` takes the service
+  GUID and the requested interface IID.
+- `IApplicationView` is declared `InterfaceType(ComInterfaceType.InterfaceIsIInspectable)` in all four
+  C# variants. Its vtable starts with `IUnknown`, then `IInspectable`
+  (`GetIids`, `GetRuntimeClassName`, `GetTrustLevel`), and only then `SetFocus`. Treating it as a plain
+  `IUnknown`-derived interface shifts every method.
+- `IVirtualDesktop` and `IVirtualDesktopManagerInternal` have different GUIDs *and* different vtables
+  per build family. Win10/Win10LTSC use `IVirtualDesktop` `FF72FFDD-BE7E-43FC-9C03-AD81681E88E4` with
+  only `IsViewVisible`/`GetId`; Win11/Win11_ use `3F07F4BE-B107-441A-AF0F-39D82529072C` with
+  `GetName`/`GetWallpaperPath`/`IsRemote` appended. Win10/Win10LTSC use internal manager GUID
+  `F31574D6-B682-4CDC-BD56-1827860ABEC6` and omit methods such as `MoveDesktop`, `SetDesktopName`, and
+  `GetDesktopSwitchIncludeExcludeViews`; Win11/Win11_ use `53F5CA0B-158F-4124-900C-057158060B27`.
+  Win11_ additionally inserts `SwitchDesktopAndMoveForegroundView` after `SwitchDesktop`.
+  Never share one vtable definition across build families.
+- `IVirtualDesktop::GetName` and `GetWallpaperPath` return `HSTRING` on Win11 and Win11_ only.
+- `IObjectArray::GetAt(index, riid, &mut out)` takes an IID and returns a raw interface pointer. Release
+  the array and every object retrieved from it.
+- `IVirtualDesktopManager::GetWindowDesktopId` returns GUIDs that can be `APP_ON_ALL_DESKTOPS` or
+  `WINDOW_ON_ALL_DESKTOPS`; those windows belong to the current desktop for pager purposes.
+- Prefer `GetDesktopIndex` by comparing desktop GUIDs over `FindDesktop`, which has produced
+  `0x800706F4` in practice.
+
+### 6.3 Version Selection
+
+| Build | Variant | Notes |
+|---|---|---|
+| `<= 17763` | `Win10LTSC` | Windows 10 LTSC / 1809-era layout |
+| `17764 – 21999` | `Win10` | Windows 10 1903 and later |
+| `22000 – 22620` | `Win11` | Windows 11 21H2 layout |
+| `>= 22621` | `Win11_` | selected by the current code; see note |
+
+Note: the variant name suggests `Win11_` covers 24H2 and later, while `VirtualDesktopAPI.cs` selects it
+for build `>= 22621` (22H2). The real boundary must be verified on actual builds before the Rust port
+relies on it. Record the verified matrix here and in the code.
+
+Version detection should use `windows-version` or `RtlGetVersion`, not registry parsing. Keep the
+build-number thresholds in one place.
+
+### 6.4 Failure Handling
+
+The C# app catches an exception during painting and recreates both COM singletons; window enumeration
+feeds a per-handle failure counter. Model this explicitly:
+
+- `ApiError` with variants for `NotSupported`, `Com(HRESULT)`, `DesktopNotFound`, `WindowNotFound`,
+  `Timeout`.
+- A supervisor that drops and recreates the COM objects on `RPC_E_*`, `E_FAIL`, `CO_E_*`, or repeated
+  failures. Recreating the singleton is behavior, not an implementation detail.
+- Keep the "blacklist a window after 10 desktop-index failures" rule; it prevents log spam from snapped
+  window helper windows.
+- Unsupported Windows builds fail with a clear, user-visible message, not a panic.
+
+## 7. Rendering
+
+### 7.1 v1: GDI
+
+The current output is a few dozen filled rectangles, application icons, one-pixel borders, and one text
+string per overflow tile. A GDI renderer into an off-screen memory DC (`CreateCompatibleDC` +
+`CreateCompatibleBitmap`), blitted once per `WM_PAINT` with `BitBlt`, is a 1:1 behavioral match,
+double-buffered, and has no device-loss story.
+
+Use this for v1, and keep rendering independent of application logic:
+
+- The renderer receives an immutable `ViewModel` (desktops, screens, window rectangles, icons, colors,
+  active state) and produces drawing calls. It does not call COM, enumerate windows, or read settings.
+- No COM calls and no window enumeration inside `WM_PAINT`.
+- Reuse GDI objects (pens, brushes, fonts) for the process lifetime; do not create them per frame.
+- Cache icon bitmaps per `(hwnd, hicon)` and prune them in the snapshot step.
+
+### 7.2 Painter Abstraction
+
+Define a small trait so a different backend can be added without touching layout code:
+
+```rust
+pub trait Painter {
+    fn fill_rect(&mut self, rect: Rect, color: Color);
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: i32);
+    fn draw_icon(&mut self, icon: &Icon, center: Point);
+    fn draw_text_centered(&mut self, text: &str, rect: Rect, color: Color);
+    fn push_clip(&mut self, rect: Rect);
+    fn pop_clip(&mut self);
+}
+```
+
+`GdiPainter` is the only backend in v1. The trait also makes layout testable without a window.
+
+### 7.3 Direct2D: Deferred
+
+`windows-canvas` is real and usable (0.100.0, September 2026) but very young: two releases, a high MSRV,
+and a small user base. More importantly, it does not solve the hard part of this application:
+
+- The window uses per-window alpha (`BackgroundOpacity`). That means a layered window. Direct2D on a
+  plain HWND swap chain does not give per-pixel alpha for free; it requires a composition surface or
+  `UpdateLayeredWindow`.
+- The workload does not need GPU acceleration. Repainting happens on state changes, not continuously.
+
+Therefore: do not make Phase 4 depend on Direct2D. If it is added later, spike these first:
+
+1. Hosting a Direct2D surface in a plain Win32 HWND (render target or swap chain).
+2. Layered-window alpha.
+3. `HICON`/`HBITMAP` to a Direct2D bitmap (WIC).
+4. Text rendering for the `+N` label.
+5. System DPI mapping.
+6. Device-loss recovery.
+
+Only then replace `GdiPainter` with `D2DPainter` behind the same trait.
+
+### 7.4 GDI to Direct2D Mapping (reference only)
+
+| GDI operation | Direct2D equivalent |
 |---|---|
 | `FillRect` | `FillRectangle` |
-| `Rectangle` | `DrawRectangle` |
-| `BitBlt` | `DrawBitmap` |
+| `FrameRect` / `Rectangle` | `DrawRectangle` |
+| `BitBlt` (memory DC to window) | `DrawBitmap` / present |
 | `CreateSolidBrush` | `CreateSolidColorBrush` |
 | `StretchBlt` | `DrawBitmap` with destination rectangle |
+| `DrawText` | `DrawTextLayout` |
 
-### 7.2 Rendering Architecture
+### 7.5 Opacity and Layering
 
-Keep rendering independent of application logic.
-The renderer should receive the current application state and translate it into drawing operations.
-Avoid mixing COM calls, desktop management and drawing code.
+`BackgroundOpacity` is applied to the whole window, including icons and text. In Win32, implement it
+with `WS_EX_LAYERED` and `SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)`. Do not implement
+opacity by pre-multiplying every color; that produces different results and breaks icon rendering.
 
-Use GPU resources efficiently:
+### 7.6 DPI
 
-- Reuse brushes.
-- Cache bitmaps.
-- Avoid unnecessary resource recreation.
-- Handle device loss.
-- Recreate device-dependent resources when necessary.
+The current process is **system DPI aware** (`app.manifest`), and all layout is computed in physical
+pixels from a single scale factor (`GetDpiForSystem` / 96). Keep this for v1:
 
-### 7.3 Window Integration
+- Read the system DPI once at startup; do not react to `WM_DPICHANGED` beyond logging.
+- Keep the pager height, paddings, borders, icon size, and font size as logical values multiplied by
+  the scale factor.
+- Document that per-monitor V2 support is out of scope for v1. It affects every coordinate, hit test,
+  and icon size and is a separate project.
 
-Initially, use a classic Win32 HWND for the main window.
-Investigate hosting a Direct2D rendering surface through an appropriate swap chain.
-Do not introduce WinUI merely to obtain hardware-accelerated rendering.
-A traditional Win32 window with Direct2D rendering is a valid and potentially simpler architecture.
-Use demand-driven rendering rather than a permanent render loop if the application does not require continuous animation.
+### 7.7 Multi-Monitor Layout
 
-The application should redraw when its visual state changes.
+Desktops are columns. Within a desktop, one renderer per physical monitor, ordered left-to-right and
+then top-to-bottom. The current app has a known limitation with vertically arranged monitors; v1 keeps
+the same limitation and documents it rather than redesigning the layout model.
 
+## 8. Settings and Persistence
 
-## 8. Settings UI: WinUI 3 with windows-reactor
+### 8.1 No Settings Window in v1
 
-The settings panel is relatively small and independent of the main rendering implementation.
-Currently it's a built programmatic win form so we should stick to a similar approach when using `winsafe`
+The settings dialog is out of scope. There is no decision to make about `winsafe` versus
+`windows-reactor` versus WinUI 3, because none of them is used. Once the dialog is gone, the C#
+project no longer needs `UseWPF` or the unused `System.Windows.*` imports; that is a worthwhile
+cleanup on the reference implementation as well.
 
-### 8.1 Separate Settings Window
+"DEFAULTS only" does not mean "no configuration". The application still needs:
 
-Keep the settings model independent.
-The actual model should be derived from the existing application's configuration requirements.
+- A `Settings` struct with the current defaults.
+- A registry reader so existing users keep their pager height, colors, and per-screen view modes, and
+  so the C# and Rust builds agree during migration.
+- Registry writes for the two behaviors that already persist without the dialog: pager position
+  (Save) and the per-screen view-mode toggle.
 
+The context menu remains: Toggle View Mode, Position (Restore/Save/Default), About, Exit. It must not
+contain a Settings entry until a settings window exists.
 
-## 9. Migration Strategy
+### 8.2 Registry Compatibility
 
-Do not rewrite the entire application at once.
-Use an incremental migration.
+Path: `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`. Keep the existing value names and types during the
+migration:
 
-### Phase 1: Repository and Build Setup
+| Value | Type | Default |
+|---|---|---|
+| `ViewModeDefault` | `REG_DWORD` | `1` (MicroTaskbar) |
+| `RendererViewModes` | `REG_BINARY` | empty (one byte per desktop/screen) |
+| `DesktopBorderStyle` | `REG_DWORD` | `0` (Box) |
+| `BackgroundOpacity` | `REG_SZ` | `"1"` (stored as a string by C#) |
+| `PagerHeight` | `REG_DWORD` | `40` |
+| `IconPaddingX`, `IconPaddingY` | `REG_DWORD` | `0` |
+| `DesktopBackgroundColor` | `REG_DWORD` | ARGB `0xFF404040` |
+| `DesktopBorderColor` | `REG_DWORD` | ARGB `0xFF202020` |
+| `ActiveDesktopBorderColor` | `REG_DWORD` | ARGB `0xFFADD8E6` (light blue) |
+| `WindowBackgroundColor` | `REG_DWORD` | ARGB `0xFF808080` (gray) |
+| `ActiveWindowBackgroundColor` | `REG_DWORD` | ARGB `0xFFC0C0C0` (silver) |
+| `WindowBorderColor` | `REG_DWORD` | ARGB `0xFFC0C0C0` (silver) |
+| `ActiveWindowBorderColor` | `REG_DWORD` | ARGB `0xFFFFFFFF` (white) |
+| `PrimaryUpdateDelay` | `REG_DWORD` | `200` |
+| `SecondaryUpdateDelay` | `REG_DWORD` | `500` |
+| `ShowAppInTaskbar` | `REG_DWORD` | `1` |
+| `PagerLocationX`, `PagerLocationY` | `REG_DWORD` | absent (use default position) |
 
-- Initialize a Cargo project in the `rust/` directory.
-- Configure the required Windows API features.
-- Establish a working Rust development and debugging environment.
-- Keep the existing C# application intact.
+Read tolerantly: accept both DWORD and string where a value may have been written by a different
+version. Write the same types C# writes, so both implementations can share the key.
+
+### 8.3 Settings Model
+
+Keep the model independent of any UI:
+
+- `Color` as a plain `u32` ARGB value or a small `Rgba` struct.
+- View modes as `Vec<Vec<ViewMode>>` (desktop, screen), not a flat list. The C# flat index
+  (`desktop + screen`) collides when a desktop spans multiple monitors; fix this in the model and
+  translate only when importing/exporting the flat registry binary.
+- Defaults implemented as `Default`, not scattered constants.
+
+## 9. Behavioral Parity Checklist
+
+Use this as the acceptance list. Every item should be verified against the C# build.
+
+- [ ] Single instance (mutex) with a user-visible message on second start.
+- [ ] Borderless, topmost, non-resizable pager sized from desktop count and pager height.
+- [ ] Default position bottom-center above the taskbar; restore saved position; save/reset from menu.
+- [ ] Drag the pager with middle mouse button or Shift + left mouse button.
+- [ ] One renderer per physical monitor per desktop; per-screen view mode.
+- [ ] Preview mode: scaled window rectangles, z-order, active highlighting, centered icon, borders.
+- [ ] Micro Taskbar mode: icon grid, wrapping, `+N` overflow tile, active highlight.
+- [ ] Left-click on another desktop switches to it.
+- [ ] Left-click on the active desktop focuses the clicked window.
+- [ ] Drag a miniature/icon onto another desktop moves the window there.
+- [ ] Right-click menu with Toggle View Mode, Position, About, Exit.
+- [ ] Mouse wheel (with Shift) toggles the view mode under the cursor and persists it.
+- [ ] Window enumeration filters (shell window, invisible, empty title, CoreWindow, own process,
+      unresolvable desktop) with failure blacklist.
+- [ ] Icon fallback chain and icon cache.
+- [ ] Window z-order and foreground/active state in the snapshot.
+- [ ] Last-active-window restore on desktop switch, with one retry after 150 ms.
+- [ ] Pin the app to all desktops when it appears in the taskbar; tolerate pin failure.
+- [ ] Re-show and re-apply topmost when the pager is covered.
+- [ ] Detect desktop count changes and monitor configuration changes; rebuild state and COM objects.
+- [ ] Continue running when a COM call fails; recreate the COM objects.
+- [ ] Registry import/export compatible with the C# app.
+- [ ] Logs in `%LOCALAPPDATA%\MicroTaskPager\logs`, rotated, retained for 14 days.
+- [ ] System DPI scaling of height, padding, borders, icons, and fonts.
+
+## 10. Known Deviations from the C# Implementation
+
+These are intentional fixes or simplifications. Document any additional deviation as it is made.
+
+- Scale preview rectangle height with the height factor, not the width factor (the C# code multiplies
+  both by the width percentage).
+- Use `(desktop, screen)` view-mode indexing instead of the flat, colliding index.
+- Hit-test using each renderer's actual mode, not the global default mode.
+- Do not apply `PointToClient` to coordinates that are already client-space.
+- Use `SendMessageTimeoutW` for `WM_GETICON` instead of a potentially blocking `SendMessage`.
+- Compute foreground/active state once per snapshot instead of once per window.
+- Do not call COM during `WM_PAINT`; paint from the cached snapshot.
+- Replace OLE drag-and-drop with an internal mouse-capture drag: the payload is only a window handle
+  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary.
+- Keep the vertical-monitor layout limitation for v1.
+
+## 11. Migration Strategy
+
+Do not rewrite the entire application at once. Use an incremental migration.
+
+### Phase 1: Scaffold
+
+- Initialize a Cargo crate in `rust/`, pin the toolchain, add `.gitignore` for `target/`.
+- Add the application manifest, icon, version resource, single-instance mutex.
+- Implement logging and the settings model, defaults, and registry import.
+- Configure the minimal `windows` features.
 
 ### Phase 2: Virtual Desktop Subsystem
 
 Prioritize the technically most challenging component.
 
-- Investigate the existing C# COM implementation.
-- Port the COM interfaces to Rust.
-- Implement version-specific compatibility modules.
-- Build a standalone test application.
-- Verify functionality on all supported Windows builds.
+- Port the internal COM interfaces and the `QueryService` wiring.
+- Build the `examples/probe` binary: count, current, index of window, switch, move, pin.
+- Verify each supported Windows build and record the matrix.
+- Implement the supervisor and error model.
+- Do not build the UI before this works reliably.
 
-Do not proceed with a complete UI migration until the core virtual desktop functionality works reliably.
+### Phase 3: Window Model
 
-### Phase 3: Window Metadata and Previews
-
-- Port window enumeration.
-- Port application icon retrieval.
-- Implement DWM thumbnail management.
-- Establish a stable data model for windows and previews.
+- Window enumeration and all filters.
+- Desktop index per window, failure counter, blacklist.
+- Z-order, foreground state, titles, classes.
+- Icon retrieval, caching, pruning.
+- Immutable snapshot + change-detection hash.
 
 ### Phase 4: Main Window and Rendering
 
-- Implement the native Win32 main window.
-- Establish the message loop.
-- Integrate `windows-canvas`.
-- Port the existing GDI drawing operations to Direct2D.
-- Verify DPI behavior and rendering performance.
+- Win32 window, message loop, timers.
+- `Painter` trait, `GdiPainter`, double buffering, layered opacity.
+- Preview and Micro Taskbar layout.
+- Hit testing, click to switch/focus, internal drag to move a window.
+- Context menu.
 
-### Phase 5: Settings UI
+### Phase 5: Always-On Behavior
 
-- Implement the independent settings model.
-- Create the settings window.
-- Preserve existing configuration compatibility.
+- Pin to all desktops.
+- Topmost and covered-window watchdog.
+- Foreground WinEvent hook and last-active-window restore.
+- Desktop count and monitor configuration change handling with COM restart.
 
-### Phase 6: Final Migration
+### Phase 6: Parity and Deployment
 
-- Verify functional parity with the original C# implementation.
-- Test resource management and application shutdown.
-- Verify Windows version compatibility.
-- Test deployment without a .NET runtime dependency.
-- Remove the old C# implementation when the Rust implementation is sufficiently mature.
+- Walk the checklist in section 9 against the C# build.
+- Check shutdown, handle/COM leaks, and log output.
+- Verify on all supported Windows builds.
+- Test deployment without a .NET runtime.
+- Keep the C# implementation until parity is proven; remove it only on explicit instruction.
 
----
+Settings UI, Direct2D, live thumbnails, per-monitor DPI, and ARM64 are not phases of this migration.
 
-## 10. General Rust Development Guidelines
+## 12. Testing and Verification
 
-The following principles should be followed throughout development:
+There is no test project in the C# repository. The Rust port should not repeat that.
+
+- Unit-test pure logic: aspect-ratio scaling, Micro Taskbar grid and overflow computation,
+  change-detection hash, registry parsing (including missing/malformed values), settings defaults.
+- Keep a `probe` example binary for COM and version-matrix verification; it is the practical
+  integration test on each Windows build.
+- Add `#[ignore]`d integration tests for mutation paths, gated by an environment variable, so they
+  never move real windows during a normal `cargo test`.
+- Add screenshot comparison or at least a deterministic layout test for both view modes using a fake
+  `Painter`.
+- Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` before declaring work
+  complete.
+
+## 13. Deployment and Packaging
+
+- x64 MSVC build; no .NET runtime, no installer.
+- `#![windows_subsystem = "windows"]` so no console window appears.
+- Embed the icon and a version resource.
+- Keep the application manifest with `asInvoker` and system DPI awareness.
+- Keep the C# mutex name (`micro-task-pager-win-app`) for release builds so the two implementations
+  cannot run simultaneously and fight over topmost/pinning. Use a different name for development
+  builds if side-by-side comparison is needed.
+- Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
+- Decide early whether the Rust binary replaces `MicroTaskPager.exe` or ships under a different name;
+  the release archive layout depends on it.
+
+## 14. General Rust Development Guidelines
 
 1. Prefer safe Rust APIs over direct FFI.
 2. Keep `unsafe` blocks small and document their safety requirements.
-3. Encapsulate all undocumented COM interfaces.
+3. Encapsulate all undocumented COM interfaces behind the safe `VirtualDesktopApi` trait.
 4. Avoid leaking raw Windows handles across application layers.
-5. Use RAII wrappers for GDI, COM and other Windows resources.
-6. Handle HRESULT errors explicitly.
-7. Respect COM apartment and thread-affinity requirements.
+5. Use RAII wrappers for GDI, COM, and other Windows resources.
+6. Handle `HRESULT` errors explicitly; no silent fallbacks.
+7. Respect COM apartment and thread-affinity requirements; use one STA thread.
 8. Avoid unnecessary dependencies.
-9. Keep application logic independent of UI frameworks.
+9. Keep application logic independent of the window and the renderer.
 10. Write compatibility tests for undocumented Windows APIs.
 11. Do not assume Windows implementation details remain stable across updates.
 12. Prefer native Windows functionality over unnecessary abstractions.
+13. No panics across FFI boundaries.
+14. Keep the settings model and the rendering model free of Win32 types where practical.
 
-## 11. Important Architectural Decisions
+## 15. Important Architectural Decisions
 
-The following decisions are the initial architectural direction, not irreversible requirements:
-
-| Decision | Initial direction |
+| Decision | Direction |
 |---|---|
 | Repository layout | Separate `rust/` directory |
 | Rust project | Single Cargo crate initially |
 | Main window | Classic Win32 |
-| Main rendering | Direct2D via `windows-canvas` |
-| Settings UI | Win32 controls via `winsafe` |
-| Virtual desktops | Custom version-specific COM bindings |
-| Window previews | DWM Thumbnail API |
+| Rendering v1 | GDI behind a `Painter` trait |
+| Rendering later | Direct2D via `windows-canvas`, only after a spike |
+| Window previews | Scaled geometries + shell icons |
+| Live thumbnails | Not in v1 |
+| Settings UI | Not in v1; `winsafe` and `windows-reactor` not used |
+| Settings storage | C#-compatible registry values |
+| Virtual desktops | One safe API + per-build vtable modules |
+| Threading | Single STA UI thread, `WM_TIMER` driven |
 | Application icons | Windows Shell APIs |
 | Application state | Pure Rust |
-| .NET dependency | Remove completely in final implementation |
+| .NET dependency | Removed in the final implementation |
 
-## 12. Instructions for AI Coding Assistants
+## 16. Instructions for AI Coding Assistants
 
 When assisting with this project:
 
-- Read this architecture document before proposing structural changes.
+- Read this architecture document and `AGENTS.md` before proposing structural changes.
 - Prefer Microsoft's official Rust crates.
-- Verify current crate APIs against their actual documentation and source code.
-- Do not invent APIs, methods, COM interfaces or VTable layouts.
-- Pay particular attention to undocumented Windows interfaces.
-- Never assume that a COM interface definition is identical across Windows builds.
+- Verify current crate APIs against their actual documentation and source code; pin versions.
+- Do not invent APIs, methods, COM interfaces, or vtable layouts.
+- Pay particular attention to undocumented Windows interfaces; never assume a COM interface definition
+  is identical across Windows builds.
 - Explain all required `unsafe` operations and their safety assumptions.
 - Keep version-specific Windows compatibility code isolated.
+- Do not add a settings UI, DWM thumbnails, or Direct2D unless explicitly asked.
 - Avoid unnecessary architectural complexity.
 - Prefer small, independently testable implementation steps.
-- Preserve existing application behavior unless explicitly instructed otherwise.
+- Preserve existing application behavior unless a deviation is listed in section 10 or explicitly
+  requested.
+- When porting existing C# functionality, use the existing implementation as the behavioral reference.
 
-When porting existing C# functionality, use the existing implementation as the behavioral reference.
-
-The primary objective is a reliable, maintainable, fully native Windows application implemented in Rust, not merely a line-by-line translation of the original C# code.
+The primary objective is a reliable, maintainable, fully native Windows application implemented in
+Rust, not merely a line-by-line translation of the original C# code.
