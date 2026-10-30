@@ -31,7 +31,7 @@ const MK_SHIFT: usize = 0x0004;
 
 use crate::app::{
     App, CMD_ABOUT, CMD_EXIT, CMD_POSITION_DEFAULT, CMD_POSITION_RESTORE, CMD_POSITION_SAVE,
-    CMD_TOGGLE_VIEW, TIMER_PRIMARY, TIMER_SECONDARY,
+    CMD_TOGGLE_VIEW, TIMER_PRIMARY, TIMER_RESTORE, TIMER_SECONDARY,
 };
 
 const WINDOW_CLASS: PCWSTR = w!("MicroTaskPagerWindow");
@@ -59,10 +59,16 @@ pub fn run(app: App) -> Result<(), Box<dyn Error>> {
         let (x, y) = app.initial_position();
         let width = app.layout.width.max(1);
         let height = app.layout.height.max(1);
+        let mut ex_style = WS_EX_TOPMOST | WS_EX_LAYERED;
+        if app.settings.show_app_in_taskbar {
+            // Pinning to all desktops only works for applications that appear
+            // in the taskbar.
+            ex_style |= WS_EX_APPWINDOW;
+        }
         let app_ptr = Box::into_raw(Box::new(app));
 
         let hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_APPWINDOW,
+            ex_style,
             WINDOW_CLASS,
             WINDOW_TITLE,
             WS_POPUP | WS_VISIBLE,
@@ -96,6 +102,8 @@ pub fn run(app: App) -> Result<(), Box<dyn Error>> {
 
         let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         let _ = InvalidateRect(Some(hwnd), None, false);
+        app.start_tracking();
+        app.try_pin();
 
         let mut message = MSG::default();
         while GetMessageW(&mut message, None, 0, 0).as_bool() {
@@ -105,6 +113,7 @@ pub fn run(app: App) -> Result<(), Box<dyn Error>> {
 
         let _ = KillTimer(Some(hwnd), TIMER_PRIMARY);
         let _ = KillTimer(Some(hwnd), TIMER_SECONDARY);
+        let _ = KillTimer(Some(hwnd), TIMER_RESTORE);
         let mut app = Box::from_raw(app_ptr);
         app.cancel_drag();
         drop(app);

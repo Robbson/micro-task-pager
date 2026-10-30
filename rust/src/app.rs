@@ -22,15 +22,18 @@ use windows::Win32::UI::Controls::{
     ImageList_ReplaceIcon,
 };
 use windows::Win32::UI::HiDpi::GetDpiForSystem;
+use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW, IDC_SIZEALL,
-    LoadCursorW, MB_ICONINFORMATION, MB_OK, MessageBoxW, PostMessageW, SM_CXDRAG, SM_CYDRAG,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetForegroundWindow,
-    SetWindowPos, WM_CLOSE,
+    GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW,
+    IDC_SIZEALL, KillTimer, LoadCursorW, MB_ICONINFORMATION, MB_OK, MessageBoxW, PostMessageW,
+    SM_CXDRAG, SM_CYDRAG, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SetCursor, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindowAsync, WM_CLOSE,
+    WindowFromPoint,
 };
 use windows::core::{PCWSTR, w};
 
 use crate::desktop::{self, SupervisedDesktop, VirtualDesktopApi};
+use crate::foreground::ForegroundTracker;
 use crate::logging;
 use crate::monitors::{self, MonitorInfo};
 use crate::render::{self, PagerLayout};
@@ -46,6 +49,7 @@ pub const CMD_EXIT: u32 = 6;
 
 pub const TIMER_PRIMARY: usize = 1;
 pub const TIMER_SECONDARY: usize = 2;
+pub const TIMER_RESTORE: usize = 3;
 
 enum DragState {
     Pager {
@@ -79,11 +83,24 @@ pub struct App {
     drag: Option<DragState>,
     menu_point: POINT,
     menu_open: bool,
+    startup_foreground: HWND,
+    foreground: Option<ForegroundTracker>,
+    is_app_pinned: bool,
+    restore_desktop: Option<u32>,
 }
 
 impl App {
     /// Opens the desktop API and captures the first snapshot.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        // Set a stable application ID before the first window exists. Pinning
+        // to all desktops works by application ID, not by window handle.
+        unsafe {
+            let _ = SetCurrentProcessExplicitAppUserModelID(w!("MicroTaskPager.Rust"));
+        }
+
+        // Capture the window that was active before the pager appears, so the
+        // foreground tracker can remember it for the current desktop.
+        let startup_foreground = unsafe { GetForegroundWindow() };
         let settings = Settings::load();
         let dpi = unsafe { GetDpiForSystem() };
         let dpi = if dpi == 0 { 96 } else { dpi };
@@ -123,12 +140,100 @@ impl App {
             drag: None,
             menu_point: POINT::default(),
             menu_open: false,
+            startup_foreground,
+            foreground: None,
+            is_app_pinned: false,
+            restore_desktop: None,
         })
     }
 
     /// Stores the window handle once `CreateWindowExW` has run.
     pub fn set_hwnd(&mut self, hwnd: HWND) {
         self.hwnd = hwnd;
+    }
+
+    /// Installs the foreground hook and remembers the window that was active
+    /// before the pager appeared.
+    pub fn start_tracking(&mut self) {
+        match ForegroundTracker::install(self.hwnd) {
+            Ok(tracker) => {
+                self.foreground = Some(tracker);
+                self.remember_foreground(self.startup_foreground);
+            }
+            Err(error) => logging::warn(format!("foreground hook failed: {error}")),
+        }
+    }
+
+    /// Pins the pager application to all desktops, if it appears in the taskbar.
+    pub fn try_pin(&mut self) {
+        if self.is_app_pinned || !self.settings.show_app_in_taskbar {
+            return;
+        }
+
+        match self.desktop.pin_application(self.hwnd) {
+            Ok(_) => {
+                self.is_app_pinned = true;
+                logging::info("pager application pinned to all desktops");
+            }
+            Err(error) => logging::warn(format!("pinning the pager failed: {error}")),
+        }
+    }
+
+    fn consume_foreground(&mut self) {
+        if let Some(hwnd) = ForegroundTracker::take_pending() {
+            self.remember_foreground(hwnd);
+        }
+    }
+
+    fn remember_foreground(&mut self, hwnd: HWND) {
+        let desktop = &self.desktop;
+        if let Some(tracker) = self.foreground.as_mut() {
+            tracker.remember(hwnd, desktop);
+        }
+    }
+
+    fn restore_last_active(&mut self, desktop_index: u32) {
+        self.restore_desktop = Some(desktop_index);
+        let desktop = &self.desktop;
+        if let Some(tracker) = self.foreground.as_mut() {
+            tracker.restore(desktop_index, desktop);
+        }
+
+        if !self.hwnd.0.is_null() {
+            unsafe {
+                SetTimer(Some(self.hwnd), TIMER_RESTORE, 150, None);
+            }
+        }
+    }
+
+    fn is_covered(&self) -> bool {
+        let mut rect = RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_err() {
+            return false;
+        }
+
+        let point = POINT {
+            x: (rect.left + rect.right) / 2,
+            y: (rect.top + rect.bottom) / 2,
+        };
+        let window = unsafe { WindowFromPoint(point) };
+
+        !window.0.is_null() && window != self.hwnd
+    }
+
+    fn restore_window(&self) {
+        unsafe {
+            let _ = ShowWindowAsync(self.hwnd, SW_SHOWNOACTIVATE);
+            let _ = SetWindowPos(
+                self.hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
     }
 
     /// Initial window position: saved location or bottom-center of the primary
@@ -145,7 +250,10 @@ impl App {
     /// Handles the primary and secondary timers.
     pub fn on_timer(&mut self, timer: usize) {
         match timer {
-            TIMER_PRIMARY => self.refresh(false),
+            TIMER_PRIMARY => {
+                self.consume_foreground();
+                self.refresh(false);
+            }
             TIMER_SECONDARY => {
                 let monitors = monitors::enumerate();
                 let monitors_changed = monitors != self.monitors;
@@ -160,7 +268,28 @@ impl App {
                         Err(error) => logging::warn(format!("desktop count failed: {error}")),
                     }
                 }
+
+                self.try_pin();
+                if !self.menu_open && self.is_covered() {
+                    self.restore_window();
+                }
                 self.reassert_topmost();
+            }
+            TIMER_RESTORE => {
+                if !self.hwnd.0.is_null() {
+                    unsafe {
+                        let _ = KillTimer(Some(self.hwnd), TIMER_RESTORE);
+                    }
+                }
+
+                if let Some(desktop_index) = self.restore_desktop.take()
+                    && self.snapshot.current_desktop == desktop_index
+                {
+                    let desktop = &self.desktop;
+                    if let Some(tracker) = self.foreground.as_mut() {
+                        tracker.restore(desktop_index, desktop);
+                    }
+                }
             }
             _ => {}
         }
@@ -457,6 +586,7 @@ impl App {
                 logging::error(format!("switching desktop failed: {error}"));
             } else {
                 self.refresh(true);
+                self.restore_last_active(hit.desktop_index);
             }
             return;
         }

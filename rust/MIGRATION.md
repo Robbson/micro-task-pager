@@ -16,7 +16,7 @@ section instead.
 | 2. Virtual desktop subsystem | Complete | 2026-10-30 | 2026-10-30 | Win10/Win11 layouts, supervisor, logging, and probe implemented; older-build verification postponed |
 | 3. Window model | Complete | 2026-10-30 | 2026-10-30 | Enumeration, filters, icons, z-order, failure handling, and snapshot hash implemented |
 | 4. Main window and rendering | Complete | 2026-10-30 | 2026-10-30 | Win32 window, monitor layout, GDI renderer, interactions, manifest, icon, and version resource implemented |
-| 5. Always-on behavior | Not started | | | |
+| 5. Always-on behavior | Complete | 2026-10-30 | 2026-10-30 | Pinning, topmost recovery, foreground hook, and last-active restore implemented |
 | 6. Parity and deployment | Not started | | | |
 
 ## Phase 1: Scaffold
@@ -77,7 +77,17 @@ block Phase 3.
 - [x] Application icon and version resource.
 - [x] Replaced the temporary console entry point with the Win32 message loop.
 - [x] Reshaped the flat `RendererViewModes` registry value into the per-desktop/screen model.
-- [ ] Always-on behavior (pinning, covered-window restore) is Phase 5.
+- [x] Always-on behavior moved to Phase 5 and implemented.
+
+## Phase 5: Always-On Behavior
+
+- [x] Stable Application User Model ID and pinning to all desktops when `ShowAppInTaskbar` is enabled.
+- [x] Retry pinning on the secondary timer until it succeeds; tolerate shell failures.
+- [x] Covered-window watchdog using `WindowFromPoint`, `ShowWindowAsync`, and topmost reassertion.
+- [x] `EVENT_SYSTEM_FOREGROUND` hook with an atomic handoff to the UI thread.
+- [x] Remember the last active window per desktop and restore it after a pager switch, with a 150 ms
+      retry for the switch animation.
+- [x] Respect `ShowAppInTaskbar` when choosing `WS_EX_APPWINDOW`.
 
 ## Postponed
 
@@ -108,6 +118,9 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Use GDI `DrawIconEx` instead of converting every `HICON` to a bitmap | Fewer GDI objects and no manual icon-bitmap lifetime; the pager redraws only on changes |
 | 2026-10-30 | Pre-blend the separator color | `FillRect` has no alpha, so the GDI color is the result of blending C#'s translucent light blue over the default background |
 | 2026-10-30 | Use the common-controls image-list drag image for window drags | Matches the usual Windows ghost icon and avoids implementing OLE drag source/target interfaces |
+| 2026-10-30 | Pin after the window is visible and retry on the secondary timer | Pinning needs an application view; the shell can reject an early attempt |
+| 2026-10-30 | Let the foreground hook store only the handle | The callback has no access to the desktop API; mapping on the next timer tick keeps COM on the UI thread |
+| 2026-10-30 | Use the pager center for the covered-window check | Matches the C# watchdog and is cheap enough for the 500 ms timer |
 | 2026-10-30 | Use screen cursor coordinates while dragging the pager | Client coordinates change as the window moves, which caused a feedback loop and flicker |
 | 2026-10-30 | Drop topmost and suspend its timer reassertion while the context menu is open | A topmost pager otherwise covers its own popup menu |
 | 2026-10-30 | Keep unsafe confined to FFI modules instead of adopting `winsafe` | `winsafe` is a UI wrapper, not a safe abstraction for undocumented shell COM; the official `windows` crate is the right binding |
@@ -140,6 +153,7 @@ narrative.
 | 2026-10-30 | 4 | Pager window on build 26200 rendered both modes (screenshots), click switched 0 -> 1 -> 0, Shift+wheel/menu toggle persisted, position save/default/restore worked, system DPI awareness = 1, version resource present, fmt/clippy/docs and 17 tests pass |
 | 2026-10-30 | 4 | User-test fixes: pager drag follows the screen cursor exactly (+20,+10 test), desktop 1 content renders at absolute coordinates, context menu shows Position above the pager and dismisses cleanly; 18 tests pass |
 | 2026-10-30 | 4 | Window drag shows a semi-transparent image-list ghost icon with the normal arrow cursor; drag end releases the image-list lock and the pager stays responsive |
+| 2026-10-30 | 5 | Pager pinned (`probe pinned` = true), visible on desktop 1 after an external switch, switched back through the pager; no hook or restore errors; 18 tests pass |
 
 ## Code map and glossary
 
@@ -157,6 +171,7 @@ documentation mirrors this table.
 | `src/single_instance.rs` | Named-mutex guard that prevents two pagers from running. |
 | `src/settings.rs` | Registry-compatible settings model, defaults, and position/view-mode writers. |
 | `src/logging.rs` | Daily file logger with 14-day retention. |
+| `src/foreground.rs` | Foreground WinEvent hook and last-active-window tracking per desktop. |
 | `src/desktop/mod.rs` | Public safe API (`VirtualDesktopApi`), errors, and `SupervisedDesktop`. |
 | `src/desktop/com/core.rs` | Shared COM interface definitions and the generic backend. |
 | `src/desktop/com/win10.rs` | Win10 layout (build 10240–21999). |
@@ -182,6 +197,10 @@ Terms that appear in the code:
 | Z-order | Stacking order. In the snapshot, larger values are closer to the top. |
 | Failure counter / blacklist | A window whose desktop lookup keeps failing is skipped after 10 attempts, mostly to avoid snapped-window helper windows spamming the log. |
 | HICON | A borrowed icon handle supplied by the shell. It must not be destroyed by the pager. |
+| Foreground hook | A `SetWinEventHook` callback that reports which window became active. |
+| Last active window | The real application window remembered for a desktop and restored when the pager switches back to it. |
+| Covered-window watchdog | A 500 ms check that re-shows the pager and reapplies topmost if another window covers its center. |
+| Pinning | Telling the shell to show the pager's application on every virtual desktop. It works by AUMID. |
 | `PagerLayout` | The computed geometry for one frame: desktop columns, screens, clickable cells, and the `+N` overflow tile. Drawing and hit testing both use it. |
 | `Painter` | A tiny drawing interface. `GdiPainter` implements it with Win32 GDI; layout code never calls GDI directly. |
 | GDI | The classic Win32 drawing API. The pager draws into a memory DC and blits once per paint. |

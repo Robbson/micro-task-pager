@@ -181,6 +181,7 @@ rust/
     app.rs                      # application state and state transitions
     com.rs                      # COM apartment guard
     single_instance.rs          # mutex acquisition and second-instance handling
+    foreground.rs               # foreground hook and last-active-window tracking
     window.rs                   # Win32 window, wndproc, context menu
     input.rs                    # hit testing, drag handling
     settings.rs                 # model, defaults, registry import/export

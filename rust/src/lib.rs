@@ -18,6 +18,7 @@
 pub mod app;
 pub mod com;
 pub mod desktop;
+pub mod foreground;
 pub mod logging;
 pub mod monitors;
 pub mod render;

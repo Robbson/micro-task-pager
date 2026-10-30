@@ -80,9 +80,9 @@ cargo test
 - `cargo run` builds and starts the pager GUI. `build.rs` compiles `app.rc` (icon and version) and
   embeds `app.manifest` through the MSVC linker flags.
 - The current GUI renders both view modes and supports click-to-switch, click-to-focus, pager dragging,
-  window dragging between desktops, Shift+wheel mode toggle, and the context menu. Pinning to all
-  desktops and covered-window restore are Phase 5, so the window currently appears on the active
-  desktop only.
+  window dragging between desktops, Shift+wheel mode toggle, and the context menu. It also pins itself
+  to all desktops when `ShowAppInTaskbar` is enabled, re-shows when covered, and restores the last
+  active window per desktop after a switch.
 - The virtual-desktop backend supports build 10240 and later. Builds below 22000 use the Win10 layout
   (covering Win10 and Win10LTSC); build 22000 and later use the Win11 layout. Older builds return
   `ApiError::NotSupported`.
