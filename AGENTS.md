@@ -67,6 +67,7 @@ Run Cargo commands from the `rust/` directory; the repository root is not a Carg
 
 ```powershell
 cargo build
+cargo build --release
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test
@@ -74,6 +75,11 @@ cargo test
 
 - The first build requires the MSVC build tools (`link.exe`) and a Windows SDK, including `rc.exe` for
   the icon/version resources and the manifest.
+- `rust/.cargo/config.toml` enables the static MSVC runtime. Cargo discovers that config from the
+  `rust/` working directory, so run Cargo there; the release executable has no Visual C++
+  redistributable dependency.
+- The release executable is `rust/target/release/micro-task-pager.exe`. A deployment folder may rename
+  it to `MicroTaskPager.exe`; the embedded icon/version/manifest stay intact.
 - Add unit tests next to the modules they cover. There is no separate test crate.
 - `rust-toolchain.toml` currently selects `stable`, which is 1.99.1. The exact `1.99.1` rustup
   toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.

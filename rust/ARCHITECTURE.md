@@ -643,14 +643,17 @@ There is no test project in the C# repository. The Rust port should not repeat t
 
 - x64 MSVC build; no .NET runtime, no installer.
 - `#![windows_subsystem = "windows"]` so no console window appears.
+- Statically link the MSVC runtime (`rust/.cargo/config.toml`) so the executable does not require the
+  Visual C++ redistributable.
 - Embed the icon and a version resource.
 - Keep the application manifest with `asInvoker` and system DPI awareness.
 - Keep the C# mutex name (`micro-task-pager-win-app`) for release builds so the two implementations
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
 - Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
-- Decide early whether the Rust binary replaces `MicroTaskPager.exe` or ships under a different name;
-  the release archive layout depends on it.
+- The release artifact is `rust/target/release/micro-task-pager.exe`. A distribution folder may rename
+  it to `MicroTaskPager.exe` as a drop-in replacement. The C# implementation stays in the repository
+  until older-build and multi-monitor parity are verified.
 
 ## 14. General Rust Development Guidelines
 

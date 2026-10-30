@@ -17,7 +17,7 @@ section instead.
 | 3. Window model | Complete | 2026-10-30 | 2026-10-30 | Enumeration, filters, icons, z-order, failure handling, and snapshot hash implemented |
 | 4. Main window and rendering | Complete | 2026-10-30 | 2026-10-30 | Win32 window, monitor layout, GDI renderer, interactions, manifest, icon, and version resource implemented |
 | 5. Always-on behavior | Complete | 2026-10-30 | 2026-10-30 | Pinning, topmost recovery, foreground hook, and last-active restore implemented |
-| 6. Parity and deployment | Not started | | | |
+| 6. Parity and deployment | Complete | 2026-10-30 | 2026-10-30 | Release build/deployment verified on 26200, single monitor; older builds and multi-monitor postponed; C# retained |
 
 ## Phase 1: Scaffold
 
@@ -89,6 +89,20 @@ block Phase 3.
       retry for the switch animation.
 - [x] Respect `ShowAppInTaskbar` when choosing `WS_EX_APPWINDOW`.
 
+## Phase 6: Parity and Deployment
+
+- [x] Walked the behavioral checklist in `ARCHITECTURE.md` §9 on build 26200, single monitor.
+- [x] Release build is x64 Windows GUI, uses a static MSVC runtime, and has no .NET or VC++
+      redistributable dependency.
+- [x] Embedded icon, version resource, and system-DPI manifest verified.
+- [x] Logs use `%LOCALAPPDATA%\MicroTaskPager\logs`; 14-day purge verified with an old file.
+- [x] Clean shutdown through `WM_CLOSE`; no lingering process and no startup error in the log.
+- [x] Deployment from a clean directory works.
+- [x] Pinning and cross-desktop visibility verified; covered-window recovery and last-active restore
+      are implemented and exercised manually.
+- [ ] Older Windows builds and multi-monitor layouts (postponed).
+- [ ] Remove the C# implementation (only after explicit user instruction and older-build parity).
+
 ## Postponed
 
 These items are not scheduled and do not block the next phase.
@@ -121,6 +135,8 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Pin after the window is visible and retry on the secondary timer | Pinning needs an application view; the shell can reject an early attempt |
 | 2026-10-30 | Let the foreground hook store only the handle | The callback has no access to the desktop API; mapping on the next timer tick keeps COM on the UI thread |
 | 2026-10-30 | Use the pager center for the covered-window check | Matches the C# watchdog and is cheap enough for the 500 ms timer |
+| 2026-10-30 | Statically link the MSVC runtime | The release executable must run without the Visual C++ redistributable |
+| 2026-10-30 | Keep the C# implementation for now | Older Windows builds and multi-monitor parity are still postponed; removal needs explicit instruction |
 | 2026-10-30 | Use screen cursor coordinates while dragging the pager | Client coordinates change as the window moves, which caused a feedback loop and flicker |
 | 2026-10-30 | Drop topmost and suspend its timer reassertion while the context menu is open | A topmost pager otherwise covers its own popup menu |
 | 2026-10-30 | Keep unsafe confined to FFI modules instead of adopting `winsafe` | `winsafe` is a UI wrapper, not a safe abstraction for undocumented shell COM; the official `windows` crate is the right binding |
@@ -154,6 +170,7 @@ narrative.
 | 2026-10-30 | 4 | User-test fixes: pager drag follows the screen cursor exactly (+20,+10 test), desktop 1 content renders at absolute coordinates, context menu shows Position above the pager and dismisses cleanly; 18 tests pass |
 | 2026-10-30 | 4 | Window drag shows a semi-transparent image-list ghost icon with the normal arrow cursor; drag end releases the image-list lock and the pager stays responsive |
 | 2026-10-30 | 5 | Pager pinned (`probe pinned` = true), visible on desktop 1 after an external switch, switched back through the pager; no hook or restore errors; 18 tests pass |
+| 2026-10-30 | 6 | Release exe: x64 Windows GUI, 680 KB, static CRT (no VCRUNTIME/UCRT), embedded 0.1.0.0 and system-DPI manifest; ran from a clean temp folder, pin true, 14-day log purge worked, `WM_CLOSE` exited cleanly; 18 tests pass |
 
 ## Code map and glossary
 
@@ -181,6 +198,7 @@ documentation mirrors this table.
 | `src/render/mod.rs` | Layout model, hit testing, drawing instructions, and `Painter` trait. |
 | `src/render/gdi.rs` | Double-buffered GDI backend. |
 | `app.rc`, `app.manifest`, `build.rs` | Icon, version resource, DPI/asInvoker manifest, and resource embedding. |
+| `.cargo/config.toml` | Static MSVC runtime for self-contained release builds. |
 | `examples/probe/main.rs` | Standalone probe; not part of the pager binary. |
 
 Terms that appear in the code:

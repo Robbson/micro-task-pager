@@ -1,0 +1,4 @@
+# Build a self-contained executable: static MSVC runtime, so the pager does not
+# require the Visual C++ redistributable on the target machine.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

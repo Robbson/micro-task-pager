@@ -37,3 +37,8 @@ unsafe_op_in_unsafe_fn = "deny"
 
 [build-dependencies]
 embed-resource = "3.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"
