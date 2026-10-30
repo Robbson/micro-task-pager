@@ -9,7 +9,7 @@ using System.Windows.Forms;
 using MicroTaskPager.Config;
 using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
-using BorderStyle = MicroTaskPager.Config.BorderStyle;
+using DesktopBorderStyle = MicroTaskPager.Config.DesktopBorderStyle;
 
 namespace MicroTaskPager.GUI.VirtualDesktop
 {
@@ -231,7 +231,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
             using (var desktopBorderBrush = new SolidBrush(desktopBorderColor))
             {
-                if (Form.Options.DesktopBorderStyle == BorderStyle.Box)
+                if (Form.Options.DesktopBorderStyle == DesktopBorderStyle.Box)
                 {
                     // GDI+ centers the pen stroke on the rectangle path. Inset the path by half the
                     // border width, otherwise the outer half falls outside the desktop bounds and the

@@ -16,7 +16,7 @@ using WpfPoint = System.Windows.Point;
 
 namespace MicroTaskPager.GUI
 {
-    public partial class AppSettingsWindow : System.Windows.Window
+    public partial class AppSettingsWindowOld : System.Windows.Window
     {
         private const int PlacementGap = 8;
 
@@ -33,7 +33,7 @@ namespace MicroTaskPager.GUI
 
         private DrawingRectangle? _placementOwnerBounds;
 
-        public AppSettingsWindow(AppSettings settings)
+        public AppSettingsWindowOld(AppSettings settings)
         {
             InitializeComponent();
 
@@ -313,7 +313,7 @@ namespace MicroTaskPager.GUI
                 BackgroundOpacity = sldBackgroundOpacity == null
                     ? Math.Max(0.25, Math.Min(1.0, _defaults.BackgroundOpacity))
                     : Math.Max(0.25, Math.Min(1.0, sldBackgroundOpacity.Value)),
-                DesktopBorderStyle = (BorderStyle)(cmbDesktopBorderStyle.SelectedIndex <= 0 ? 0 : 1),
+                DesktopBorderStyle = (DesktopBorderStyle)(cmbDesktopBorderStyle.SelectedIndex <= 0 ? 0 : 1),
                 DesktopBackgroundColor = _desktopBackgroundColor,
                 DesktopBorderColor = _desktopBorderColor,
                 ActiveDesktopBorderColor = _activeDesktopBorderColor,

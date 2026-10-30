@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Windows.Interop;
 using MicroTaskPager.Config;
 using MicroTaskPager.Core;
 using MicroTaskPager.Core.API;
@@ -499,14 +498,12 @@ namespace MicroTaskPager.GUI
         private void OpenSettingsDialog()
         {
             var originalSettings = AppSettings.Clone(Options);
-            var settingsWindow = new AppSettingsWindow(Options);
-            new WindowInteropHelper(settingsWindow) { Owner = Handle };
-            settingsWindow.PositionNextToOwner(Bounds);
+            var settingsWindow = new AppSettingsWindow(Options, Bounds);
 
             settingsWindow.PreviewChanged += s => PreviewSettings(s);
 
-            bool? result = settingsWindow.ShowDialog();
-            if (result == true)
+            DialogResult result = settingsWindow.ShowDialog();
+            if (result == DialogResult.OK)
             {
                 ApplySettings(settingsWindow.Settings, true); // save and reset to new settings
             }

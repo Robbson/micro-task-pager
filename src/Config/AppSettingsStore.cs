@@ -20,7 +20,7 @@ namespace MicroTaskPager.Config
                 {
                     ViewModeDefault = (ViewMode)ReadInt(key, "ViewModeDefault", (int)defaults.ViewModeDefault),
                     RendererViewModes = ReadViewModes(key, "RendererViewModes", defaults.RendererViewModes),
-                    DesktopBorderStyle = (BorderStyle)ReadInt(key, "DesktopBorderStyle", (int)defaults.DesktopBorderStyle),
+                    DesktopBorderStyle = (DesktopBorderStyle)ReadInt(key, "DesktopBorderStyle", (int)defaults.DesktopBorderStyle),
                     BackgroundOpacity = ReadDouble(key, "BackgroundOpacity", defaults.BackgroundOpacity),
                     PagerHeight = ReadInt(key, "PagerHeight", defaults.PagerHeight),
                     IconPaddingX = ReadInt(key, "IconPaddingX", defaults.IconPaddingX),
