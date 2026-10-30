@@ -155,7 +155,7 @@ COM objects.
 | Settings UI | none in v1; `winsafe` / `windows-reactor` are not used | not planned |
 | Settings storage | Windows registry, C#-compatible | decided |
 | Windows version detection | `windows-version` crate or `RtlGetVersion` | candidate |
-| Logging | `tracing` + rolling file appender (or `log` + `flexi_logger`) | candidate |
+| Logging | In-house file logger, daily file, 14-day retention | decided |
 | Build system | Cargo | decided |
 | Testing | `cargo test` for pure logic, `examples/probe` for COM | decided |
 
@@ -186,11 +186,11 @@ rust/
     settings.rs                 # model, defaults, registry import/export
     logging.rs
     desktop/
-      mod.rs                    # safe virtual-desktop API trait
+      mod.rs                    # safe virtual-desktop API and restart supervisor
+      com/mod.rs                # layout selection by build number
+      com/core.rs               # shared interfaces and generic backend
       com/win10.rs
-      com/win10_ltsc.rs
       com/win11.rs
-      com/win11_24h2.rs
     windows/
       mod.rs                    # window enumeration and snapshot
       icons.rs
@@ -280,17 +280,22 @@ Use instead:
   pub trait VirtualDesktopApi {
       fn count(&self) -> Result<u32, ApiError>;
       fn current_index(&self) -> Result<u32, ApiError>;
+      fn desktop_ids(&self) -> Result<Vec<GUID>, ApiError>;
       fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError>;
       fn switch_to(&self, index: u32) -> Result<(), ApiError>;
       fn move_window_to(&self, hwnd: HWND, index: u32) -> Result<(), ApiError>;
-      fn pin_application(&self, hwnd: HWND) -> Result<(), ApiError>;
+      fn is_application_pinned(&self, hwnd: HWND) -> Result<bool, ApiError>;
+      fn pin_application(&self, hwnd: HWND) -> Result<PinOutcome, ApiError>;
+      fn unpin_application(&self, hwnd: HWND) -> Result<(), ApiError>;
   }
   ```
 
-- One implementation of that trait using the selected version module.
-- Four small modules containing only GUIDs, `#[repr(C)]` vtable layouts, and the `QueryService` wiring
-  for their Windows build. No application logic in these modules.
-- Selection happens once at startup based on the build number, behind `OnceLock`/`LazyLock`.
+- One generic implementation of that trait using the selected layout module.
+- Two small layout modules containing only GUIDs, `#[repr(C)]` vtable prefixes, and the
+  `QueryService` wiring for their build family. No application logic in these modules. The C# code has
+  four variants, but the methods this application calls have identical GUIDs and vtable prefixes
+  within the Win10/Win10LTSC pair and within the Win11/Win11_ pair, so two layouts are sufficient.
+- Selection happens once at startup based on the build number, in one function.
 
 Use the generated `windows::Win32::UI::Shell::IVirtualDesktopManager` for the documented interface.
 Hand-define only the internal interfaces.
@@ -327,16 +332,17 @@ These details are easy to get wrong and are not visible in the C# declarations:
 
 ### 6.3 Version Selection
 
-| Build | Variant | Notes |
+| Build | Rust layout | Notes |
 |---|---|---|
-| `<= 17763` | `Win10LTSC` | Windows 10 LTSC / 1809-era layout |
-| `17764 – 21999` | `Win10` | Windows 10 1903 and later |
-| `22000 – 22620` | `Win11` | Windows 11 21H2 layout |
-| `>= 22621` | `Win11_` | selected by the current code; see note |
+| `< 10240` | none | Not supported |
+| `10240 – 21999` | Win10 | Covers Win10 and Win10LTSC; manager `F31574D6`, desktop `FF72FFDD` |
+| `>= 22000` | Win11 | Covers 21H2 and later; manager `53F5CA0B`, desktop `3F07F4BE` |
 
-Note: the variant name suggests `Win11_` covers 24H2 and later, while `VirtualDesktopAPI.cs` selects it
-for build `>= 22621` (22H2). The real boundary must be verified on actual builds before the Rust port
-relies on it. Record the verified matrix here and in the code.
+The C# selector distinguishes `Win10LTSC`, `Win10`, `Win11`, and `Win11_`. The Rust port uses two
+layouts because the methods it calls share the same GUIDs and vtable prefix inside each pair. The
+Win11 layout has been exercised on build 26200 only. Verification on Windows 10 and on Windows 11
+21H2/22H2 is postponed until suitable images are available; record results in `MIGRATION.md`, not
+here.
 
 Version detection should use `windows-version` or `RtlGetVersion`, not registry parsing. Keep the
 build-number thresholds in one place.
@@ -346,10 +352,11 @@ build-number thresholds in one place.
 The C# app catches an exception during painting and recreates both COM singletons; window enumeration
 feeds a per-handle failure counter. Model this explicitly:
 
-- `ApiError` with variants for `NotSupported`, `Com(HRESULT)`, `DesktopNotFound`, `WindowNotFound`,
-  `Timeout`.
-- A supervisor that drops and recreates the COM objects on `RPC_E_*`, `E_FAIL`, `CO_E_*`, or repeated
-  failures. Recreating the singleton is behavior, not an implementation detail.
+- `ApiError` with variants for `NotSupported`, `Windows(Error)`, `UnexpectedNull`,
+  `DesktopOutOfRange`, `DesktopNotFound`, `WindowNotFound`, and `InvalidString`.
+- A supervisor that drops and recreates the COM objects on `RPC_E_*`, `E_FAIL`, or known shell
+  failures. Recreating the singleton is behavior, not an implementation detail. The current
+  `SupervisedDesktop` retries once per call and logs the failure.
 - Keep the "blacklist a window after 10 desktop-index failures" rule; it prevents log spam from snapped
   window helper windows.
 - Unsupported Windows builds fail with a clear, user-visible message, not a panic.
@@ -658,7 +665,7 @@ There is no test project in the C# repository. The Rust port should not repeat t
 | Live thumbnails | Not in v1 |
 | Settings UI | Not in v1; `winsafe` and `windows-reactor` not used |
 | Settings storage | C#-compatible registry values |
-| Virtual desktops | One safe API + per-build vtable modules |
+| Virtual desktops | One safe API + Win10/Win11 layout modules |
 | Threading | Single STA UI thread, `WM_TIMER` driven |
 | Application icons | Windows Shell APIs |
 | Application state | Pure Rust |

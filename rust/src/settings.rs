@@ -1,10 +1,25 @@
+//! Settings that are compatible with the existing C# application.
+//!
+//! The C# pager stores its configuration in
+//! `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`. During the migration both
+//! implementations share that key, so the Rust reader accepts the types the C#
+//! code writes (mostly `REG_DWORD`, but `BackgroundOpacity` is a `REG_SZ`) and
+//! falls back to the defaults when a value is missing or malformed.
+//!
+//! The `Vec<ViewMode>` list is still flat because the registry stores one byte
+//! per renderer. It will be reshaped into per-desktop/screen rows when monitor
+//! enumeration exists in Phase 4.
+
 use windows_registry::{CURRENT_USER, Key};
 
 const REGISTRY_PATH: &str = r"SOFTWARE\MicroTaskPager";
 
+/// The two ways a desktop/monitor can be rendered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
+    /// Scaled window rectangles with application icons.
     Preview,
+    /// Grid of application icons.
     MicroTaskbar,
 }
 
@@ -18,6 +33,7 @@ impl ViewMode {
     }
 }
 
+/// How the border around a desktop is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DesktopBorderStyle {
     Box,
@@ -33,6 +49,11 @@ impl DesktopBorderStyle {
     }
 }
 
+/// Values that control layout, colors, refresh timing, and window behavior.
+///
+/// Colors are stored as 32-bit ARGB values, matching the integers the C#
+/// application writes. Keeping the same representation avoids conversion
+/// mistakes while both implementations read the same registry key.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub view_mode_default: ViewMode,
@@ -79,6 +100,12 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Loads the registry values, falling back to `Default` for anything that
+    /// is missing or cannot be parsed.
+    ///
+    /// This deliberately does not return an error: a missing key simply means
+    /// "use defaults", which is also what the C# application does. A partially
+    /// created key is treated the same way, one value at a time.
     pub fn load() -> Self {
         let mut settings = Self::default();
         let Ok(key) = CURRENT_USER.open(REGISTRY_PATH) else {
@@ -144,6 +171,8 @@ impl Settings {
     }
 }
 
+/// Reads a number, accepting a string as well because older or hand-edited
+/// registry values are not guaranteed to have the type the C# code writes.
 fn read_u32(key: &Key, name: &str, fallback: u32) -> u32 {
     if let Ok(value) = key.get_u32(name) {
         return value;
@@ -158,6 +187,8 @@ fn read_u32(key: &Key, name: &str, fallback: u32) -> u32 {
     fallback
 }
 
+/// Reads the opacity, which the C# application stores as a decimal string.
+/// A DWORD is accepted as a fallback.
 fn read_opacity(key: &Key, name: &str, fallback: f64) -> f64 {
     if let Ok(value) = key.get_string(name)
         && let Some(parsed) = parse_opacity(&value)
@@ -176,6 +207,8 @@ fn parse_opacity(value: &str) -> Option<f64> {
     value.trim().parse::<f64>().ok()
 }
 
+/// Converts the registry byte array into view modes. Unknown bytes use the
+/// configured default rather than failing the whole import.
 fn decode_view_modes(bytes: &[u8], fallback: ViewMode) -> Vec<ViewMode> {
     bytes
         .iter()

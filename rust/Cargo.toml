@@ -6,11 +6,16 @@ rust-version = "1.95"
 publish = false
 
 [dependencies]
+# The umbrella windows crate is still on 0.62; the focused Microsoft crates
+# (registry, version, and the optional canvas) use the 0.100 line.
 windows = { version = "0.62", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_Com",
+    "Win32_System_LibraryLoader",
     "Win32_System_Threading",
+    "Win32_System_SystemInformation",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
@@ -20,4 +25,6 @@ windows-registry = "0.100"
 windows-version = "0.100"
 
 [lints.rust]
+# Require an explicit unsafe block even inside an unsafe function, so every
+# foreign call is visible at its use site.
 unsafe_op_in_unsafe_fn = "deny"

@@ -78,8 +78,14 @@ cargo test
   toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
 - The current binary is a scaffold: it loads settings and exits. The Win32 window and message loop
   arrive in Phase 4.
-- The virtual-desktop backend currently supports build 22621 and later (Win11_ variant) only. Older
-  builds return `ApiError::NotSupported` until the Win11, Win10, and Win10LTSC modules are ported.
+- The virtual-desktop backend supports build 10240 and later. Builds below 22000 use the Win10 layout
+  (covering Win10 and Win10LTSC); build 22000 and later use the Win11 layout. Older builds return
+  `ApiError::NotSupported`.
+- Verification on Windows 10, Win10LTSC, and Windows 11 21H2/22H2 is postponed; do not block work on
+  obtaining those images. See the Postponed section in `rust/MIGRATION.md`.
+- `rust/MIGRATION.md` also contains a code map and glossary for the module structure and terms such as
+  `SupervisedDesktop`, layout, and probe.
+- Logs are written to `%LOCALAPPDATA%\MicroTaskPager\logs` with 14-day retention.
 - COM verification uses the standalone probe:
 
   ```powershell
@@ -87,9 +93,14 @@ cargo test
   cargo run --example probe -- index 0x1234
   cargo run --example probe -- pinned 0x1234
   cargo run --example probe -- switch 1
+  cargo run --example probe -- window 60
+  cargo run --example probe -- move 0x1234 1
+  cargo run --example probe -- pin 0x1234
+  cargo run --example probe -- unpin 0x1234
   ```
 
-  Run the read-only commands first. `move` and `pin` change real window state.
+  Run the read-only commands first. `move`, `pin`, and `unpin` change real window or shell state. Use
+  `window` to create a probe-owned throwaway window instead of moving a real application.
 
 - Do not declare work complete while `cargo fmt --check` or `cargo clippy -D warnings` fails.
 - Do not run the GUI while the C# application is running: both implementations pin themselves to all
@@ -138,7 +149,8 @@ Guidance:
 - `rust/ARCHITECTURE.md` - migration architecture and behavioral contract.
 - `rust/MIGRATION.md` - phase status, verification log, and open questions.
 - `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API).
-- `rust/src/desktop/` - safe `VirtualDesktopApi` plus the per-build COM backends.
+- `rust/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
+  restart supervisor.
 - `rust/examples/probe/` - standalone virtual-desktop COM probe.
 
 ## Notes
