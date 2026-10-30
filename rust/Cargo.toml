@@ -13,6 +13,7 @@ build = "build.rs"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
     "Win32_Security",
     "Win32_System_Com",
     "Win32_System_LibraryLoader",
@@ -34,6 +35,11 @@ windows-version = "0.100"
 # Require an explicit unsafe block even inside an unsafe function, so every
 # foreign call is visible at its use site.
 unsafe_op_in_unsafe_fn = "deny"
+
+[dev-dependencies]
+# The isolated reactor About spike exercises WinUI 3 without becoming part of
+# the pager binary. It is built only with `cargo run --example reactor_about`.
+windows-reactor = "0.100"
 
 [build-dependencies]
 embed-resource = "3.0"

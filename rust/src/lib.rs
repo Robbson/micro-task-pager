@@ -3,6 +3,7 @@
 //! The crate is intentionally split into small modules so the Windows-specific
 //! and unsafe code stays away from the application logic:
 //!
+//! - [`about`] shows the native modal About dialog.
 //! - [`com`] initializes the COM apartment on the UI thread.
 //! - [`desktop`] is the safe wrapper around the undocumented virtual desktop
 //!   COM interfaces. Start with [`desktop::open`], which returns a
@@ -15,6 +16,7 @@
 //! same code path. The probe is not a separate test framework; it is a small
 //! command-line program built from `examples/probe/main.rs`.
 
+pub mod about;
 pub mod app;
 pub mod com;
 pub mod desktop;

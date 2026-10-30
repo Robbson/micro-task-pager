@@ -100,8 +100,20 @@ block Phase 3.
 - [x] Deployment from a clean directory works.
 - [x] Pinning and cross-desktop visibility verified; covered-window recovery and last-active restore
       are implemented and exercised manually.
+- [x] About is a native modal dialog matching the C# layout: logo, version, author, acknowledgments,
+      centered Close button, themed controls, and system-DPI scaling.
 - [ ] Older Windows builds and multi-monitor layouts (postponed).
 - [ ] Remove the C# implementation (only after explicit user instruction and older-build parity).
+
+### Experimental WinUI example
+
+`examples/reactor_about.rs` renders the same About content with `windows-reactor` 0.100 (WinUI 3) as
+a visual and startup-cost comparison. It is a dev-dependency and is not linked into the pager binary.
+It requires the Windows App Runtime 2.x framework package:
+
+```powershell
+cargo run --example reactor_about
+```
 
 ## Postponed
 
@@ -140,6 +152,8 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Use screen cursor coordinates while dragging the pager | Client coordinates change as the window moves, which caused a feedback loop and flicker |
 | 2026-10-30 | Drop topmost and suspend its timer reassertion while the context menu is open | A topmost pager otherwise covers its own popup menu |
 | 2026-10-30 | Keep unsafe confined to FFI modules instead of adopting `winsafe` | `winsafe` is a UI wrapper, not a safe abstraction for undocumented shell COM; the official `windows` crate is the right binding |
+| 2026-10-30 | Implement About as a native modal Win32 dialog instead of a message box | Matches the C# layout and keeps the release dependency-free; the logo is an embedded PNG decoded with WIC |
+| 2026-10-30 | Keep `windows-reactor` behind an example-only dev-dependency | WinUI 3 needs the Windows App SDK 2.x runtime and owns its own application lifetime, so it is unsuitable for a modal dialog inside the Win32 pager; it remains available for visual comparison |
 
 ## Verified Windows builds
 
@@ -171,6 +185,8 @@ narrative.
 | 2026-10-30 | 4 | Window drag shows a semi-transparent image-list ghost icon with the normal arrow cursor; drag end releases the image-list lock and the pager stays responsive |
 | 2026-10-30 | 5 | Pager pinned (`probe pinned` = true), visible on desktop 1 after an external switch, switched back through the pager; no hook or restore errors; 18 tests pass |
 | 2026-10-30 | 6 | Release exe: x64 Windows GUI, 680 KB, static CRT (no VCRUNTIME/UCRT), embedded 0.1.0.0 and system-DPI manifest; ran from a clean temp folder, pin true, 14-day log purge worked, `WM_CLOSE` exited cleanly; 18 tests pass |
+| 2026-10-30 | 6 | About dialog: native modal, embedded logo decoded through WIC, themed controls after adding the common-controls v6 manifest dependency, centered on the primary screen, and visually compared with the C# layout; `cargo test` (18), `fmt --check`, and `clippy -D warnings` pass |
+| 2026-10-30 | 6 | Isolated `examples/reactor_about.rs` built and ran against Windows App Runtime 2.6.4; WinUI 3 rendered the same About content with Fluid window chrome for comparison; not linked into the pager |
 
 ## Code map and glossary
 
@@ -182,6 +198,7 @@ documentation mirrors this table.
 | `src/main.rs` | Process entry point: logging, COM apartment, single instance, then the message loop. |
 | `src/lib.rs` | Library root shared by the binary and the probe. |
 | `src/app.rs` | Application state, timers, snapshot refresh, layout rebuild, mouse and command handling. |
+| `src/about.rs` | Native modal About dialog, embedded logo decoding, and DPI-aware layout. |
 | `src/window.rs` | Win32 window, window procedure, timers, context menu. |
 | `src/monitors.rs` | Monitor enumeration and work areas. |
 | `src/com.rs` | RAII guard that initializes the COM apartment on the calling thread. |
@@ -200,6 +217,7 @@ documentation mirrors this table.
 | `app.rc`, `app.manifest`, `build.rs` | Icon, version resource, DPI/asInvoker manifest, and resource embedding. |
 | `.cargo/config.toml` | Static MSVC runtime for self-contained release builds. |
 | `examples/probe/main.rs` | Standalone probe; not part of the pager binary. |
+| `examples/reactor_about.rs` | Isolated WinUI 3 About spike; dev-dependency only, not part of the pager binary. |
 
 Terms that appear in the code:
 

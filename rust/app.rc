@@ -1,4 +1,5 @@
 1 ICON "../src/Resources/icon.ico"
+101 RCDATA "../src/Resources/logo.png"
 
 1 VERSIONINFO
 FILEVERSION 0,1,0,0

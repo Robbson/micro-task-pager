@@ -25,13 +25,13 @@ use windows::Win32::UI::HiDpi::GetDpiForSystem;
 use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW,
-    IDC_SIZEALL, KillTimer, LoadCursorW, MB_ICONINFORMATION, MB_OK, MessageBoxW, PostMessageW,
-    SM_CXDRAG, SM_CYDRAG, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    SetCursor, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindowAsync, WM_CLOSE,
-    WindowFromPoint,
+    IDC_SIZEALL, KillTimer, LoadCursorW, PostMessageW, SM_CXDRAG, SM_CYDRAG, SW_SHOWNOACTIVATE,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetForegroundWindow, SetTimer,
+    SetWindowPos, ShowWindowAsync, WM_CLOSE, WindowFromPoint,
 };
 use windows::core::{PCWSTR, w};
 
+use crate::about;
 use crate::desktop::{self, SupervisedDesktop, VirtualDesktopApi};
 use crate::foreground::ForegroundTracker;
 use crate::logging;
@@ -689,15 +689,14 @@ impl App {
         }
     }
 
-    fn show_about(&self) {
-        unsafe {
-            let _ = MessageBoxW(
-                Some(self.hwnd),
-                w!("Micro Task Pager\nRust migration\n\nVirtual desktop pager"),
-                w!("About Micro Task Pager"),
-                MB_OK | MB_ICONINFORMATION,
-            );
+    fn show_about(&mut self) {
+        // The pager is topmost. Suspend the watchdog and topmost reassertion
+        // while the modal dialog owns the UI thread, just as for the menu.
+        self.set_menu_open(true);
+        if let Err(error) = about::show(self.hwnd, self.dpi) {
+            logging::error(format!("about dialog failed: {error}"));
         }
+        self.set_menu_open(false);
     }
 
     fn reassert_topmost(&self) {

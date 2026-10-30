@@ -158,9 +158,14 @@ COM objects.
 | Logging | In-house file logger, daily file, 14-day retention | decided |
 | Build system | Cargo | decided |
 | Testing | `cargo test` for pure logic, `examples/probe` for COM | decided |
+| About dialog | Native modal Win32 dialog with standard controls and a WIC-decoded PNG | decided |
+| WinUI evaluation | `examples/reactor_about.rs`, dev-dependency only | experimental |
 
-Do not add a third-party GUI framework. In v1 the application needs exactly one window, one context
-menu, and GDI drawing; `winsafe`, `windows-reactor`, `egui`, and similar crates are unnecessary.
+Do not add a third-party GUI framework to the pager. In v1 the application needs exactly one window,
+one context menu, and GDI drawing; `winsafe`, `windows-reactor`, `egui`, and similar crates are
+unnecessary. The isolated `examples/reactor_about.rs` spike is the only exception: it is a
+`dev-dependency`, is not linked into the release binary, and exists to compare the WinUI 3 look and
+startup cost against the native dialog.
 
 ## 4. Repository Structure
 
