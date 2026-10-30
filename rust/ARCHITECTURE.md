@@ -433,6 +433,10 @@ Only then replace `GdiPainter` with `D2DPainter` behind the same trait.
 with `WS_EX_LAYERED` and `SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)`. Do not implement
 opacity by pre-multiplying every color; that produces different results and breaks icon rendering.
 
+While the context menu is open, temporarily drop `HWND_TOPMOST` and suppress the timer-driven
+topmost reassertion. Otherwise the pager covers its own popup menu. Restore topmost after
+`TrackPopupMenu` returns.
+
 ### 7.6 DPI
 
 The current process is **system DPI aware** (`app.manifest`), and all layout is computed in physical
@@ -541,8 +545,9 @@ Use this as the acceptance list. Every item should be verified against the C# bu
 
 These are intentional fixes or simplifications. Document any additional deviation as it is made.
 
-- Scale preview rectangle height with the height factor, not the width factor (the C# code multiplies
-  both by the width percentage).
+- Use one uniform scale factor per monitor for preview rectangles. The C# code computes width and height
+  percentages separately, but both reduce to `pagerHeight / monitorHeight`, so the result is
+  identical.
 - Use `(desktop, screen)` view-mode indexing instead of the flat, colliding index.
 - Hit-test using each renderer's actual mode, not the global default mode.
 - Do not apply `PointToClient` to coordinates that are already client-space.
@@ -554,8 +559,13 @@ These are intentional fixes or simplifications. Document any additional deviatio
 - Derive z-order from `EnumWindows` order and normalize it after enumeration, instead of walking
   `GetWindow(GW_HWNDNEXT)` for every window. The relative order is the same.
 - Do not call COM during `WM_PAINT`; paint from the cached snapshot.
+- Clip each monitor's drawing to its pager rectangle, so a window that extends across monitors cannot
+  paint into the neighboring screen.
+- Pre-blend the desktop separator color because GDI `FillRect` has no alpha channel.
+- Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
 - Replace OLE drag-and-drop with an internal mouse-capture drag: the payload is only a window handle
-  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary.
+  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. Use a hand cursor
+  for window drags and the four-way move cursor only for dragging the pager itself.
 - Keep the vertical-monitor layout limitation for v1.
 
 ## 11. Migration Strategy
@@ -656,6 +666,12 @@ There is no test project in the C# repository. The Rust port should not repeat t
 12. Prefer native Windows functionality over unnecessary abstractions.
 13. No panics across FFI boundaries.
 14. Keep the settings model and the rendering model free of Win32 types where practical.
+
+`winsafe` is not a dependency and would not remove the need for `unsafe`: it is a wrapper for ordinary
+Win32 UI work, while the virtual desktop layer uses undocumented COM vtables. Keep `unsafe` confined
+to the FFI modules (`desktop/com`, `render/gdi`, `window`, `windows`, `monitors`, and the small Win32
+calls in `app.rs`), and give every block a safety comment. Layout, snapshot models, settings, and the
+supervisor should remain safe Rust.
 
 ## 15. Important Architectural Decisions
 

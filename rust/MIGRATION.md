@@ -15,7 +15,7 @@ section instead.
 | 1. Scaffold | Complete | 2026-10-30 | 2026-10-30 | Core scaffold done; remaining items re-scoped to Phase 2 and Phase 4 |
 | 2. Virtual desktop subsystem | Complete | 2026-10-30 | 2026-10-30 | Win10/Win11 layouts, supervisor, logging, and probe implemented; older-build verification postponed |
 | 3. Window model | Complete | 2026-10-30 | 2026-10-30 | Enumeration, filters, icons, z-order, failure handling, and snapshot hash implemented |
-| 4. Main window and rendering | Not started | | | |
+| 4. Main window and rendering | Complete | 2026-10-30 | 2026-10-30 | Win32 window, monitor layout, GDI renderer, interactions, manifest, icon, and version resource implemented |
 | 5. Always-on behavior | Not started | | | |
 | 6. Parity and deployment | Not started | | | |
 
@@ -63,16 +63,21 @@ block Phase 3.
 - [x] Icon fallback chain (`WM_GETICON`, class icon, `IDI_APPLICATION`) plus a per-window cache.
 - [x] Snapshot hash for change detection.
 - [x] Probe `snapshot` command verified on build 26200.
-- [ ] Renderer consumes the snapshot (Phase 4).
+- [x] Renderer consumes the snapshot (Phase 4).
 
 ## Phase 4: Main Window and Rendering
 
-Moved out of Phase 1 because each item depends on the window or monitor layout.
-
-- [ ] Application manifest with `asInvoker` and system DPI awareness.
-- [ ] Application icon and version resource.
-- [ ] Replace the temporary console entry point with the Win32 message loop.
-- [ ] Reshape the flat `RendererViewModes` registry value into the per-desktop/screen model.
+- [x] Win32 popup window, message loop, primary/secondary timers, and layered-window opacity.
+- [x] Monitor enumeration and per-desktop/screen layout, ordered left-to-right then top-to-bottom.
+- [x] GDI double-buffered renderer for Preview and Micro Taskbar, including icons, borders, separators,
+      active highlighting, and `+N` overflow.
+- [x] Hit testing, click to switch/focus, internal drag to move a window, Shift+wheel mode toggle.
+- [x] Context menu: Toggle View Mode, Position (Restore/Save/Default), About, Exit.
+- [x] Application manifest with `asInvoker` and system DPI awareness.
+- [x] Application icon and version resource.
+- [x] Replaced the temporary console entry point with the Win32 message loop.
+- [x] Reshaped the flat `RendererViewModes` registry value into the per-desktop/screen model.
+- [ ] Always-on behavior (pinning, covered-window restore) is Phase 5.
 
 ## Postponed
 
@@ -100,6 +105,11 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Postpone older-build verification | No Windows 10 or older Windows 11 images are available; code is in place and the matrix can be filled later | Postponed section |
 | 2026-10-30 | Derive z-order from `EnumWindows` order | Avoids the C# O(n²) `GetWindow` walk; relative order is equivalent |
 | 2026-10-30 | Prune desktop-lookup failure counters using every window that reaches the lookup | The C# code prunes against successful windows only, so a failing window loses its counter each snapshot and never reaches the blacklist | ARCHITECTURE §10 |
+| 2026-10-30 | Use GDI `DrawIconEx` instead of converting every `HICON` to a bitmap | Fewer GDI objects and no manual icon-bitmap lifetime; the pager redraws only on changes |
+| 2026-10-30 | Pre-blend the separator color | `FillRect` has no alpha, so the GDI color is the result of blending C#'s translucent light blue over the default background |
+| 2026-10-30 | Use screen cursor coordinates while dragging the pager | Client coordinates change as the window moves, which caused a feedback loop and flicker |
+| 2026-10-30 | Drop topmost and suspend its timer reassertion while the context menu is open | A topmost pager otherwise covers its own popup menu |
+| 2026-10-30 | Keep unsafe confined to FFI modules instead of adopting `winsafe` | `winsafe` is a UI wrapper, not a safe abstraction for undocumented shell COM; the official `windows` crate is the right binding |
 
 ## Verified Windows builds
 
@@ -113,7 +123,6 @@ Record every build on which the probe runs. Do not infer results from a differen
 
 | Question | Why it matters | Owner | Status |
 |---|---|---|---|
-| Which manifest/icon embedding approach: `embed-resource` or linker args from `build.rs`? | Affects build dependencies and reproducibility | | Open |
 | Does `IVirtualDesktopPinnedApps` pinning still require `ShowInTaskbar` on current builds? | Always-on behavior depends on it | | Postponed to Phase 5 |
 | Should the toolchain be pinned to an exact version? | `1.99.1` is currently installed without `cargo.exe`, so `stable` (also 1.99.1) is used | | Open |
 
@@ -127,6 +136,8 @@ narrative.
 | 2026-10-30 | 1 | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo build`, `cargo test` pass on stable 1.99.1; 4 unit tests; `cargo run` reads the existing `HKCU\SOFTWARE\MicroTaskPager` values and prints them |
 | 2026-10-30 | 2 | Probe on build 26200: count 2, two desktop GUIDs, VS Code HWND maps to desktop 0, pin state read, switch 0 -> 1 -> 0; probe-owned window moved 0 -> 1 -> 0 and pinned/unpinned; fmt, clippy, and 11 tests pass |
 | 2026-10-30 | 3 | Probe `snapshot` on build 26200: 16 filtered windows, desktop mapping, z-order, active window, icon present for every window, and a stable hash; fmt, clippy, docs, and 14 tests pass |
+| 2026-10-30 | 4 | Pager window on build 26200 rendered both modes (screenshots), click switched 0 -> 1 -> 0, Shift+wheel/menu toggle persisted, position save/default/restore worked, system DPI awareness = 1, version resource present, fmt/clippy/docs and 17 tests pass |
+| 2026-10-30 | 4 | User-test fixes: pager drag follows the screen cursor exactly (+20,+10 test), desktop 1 content renders at absolute coordinates, context menu shows Position above the pager and dismisses cleanly; 18 tests pass |
 
 ## Code map and glossary
 
@@ -135,11 +146,14 @@ documentation mirrors this table.
 
 | Path | What it does |
 |---|---|
-| `src/main.rs` | Temporary console entry point. Initializes logging and COM, enforces single instance, loads settings, and exits. The Win32 window arrives in Phase 4. |
+| `src/main.rs` | Process entry point: logging, COM apartment, single instance, then the message loop. |
 | `src/lib.rs` | Library root shared by the binary and the probe. |
+| `src/app.rs` | Application state, timers, snapshot refresh, layout rebuild, mouse and command handling. |
+| `src/window.rs` | Win32 window, window procedure, timers, context menu. |
+| `src/monitors.rs` | Monitor enumeration and work areas. |
 | `src/com.rs` | RAII guard that initializes the COM apartment on the calling thread. |
 | `src/single_instance.rs` | Named-mutex guard that prevents two pagers from running. |
-| `src/settings.rs` | Registry-compatible settings model and defaults. |
+| `src/settings.rs` | Registry-compatible settings model, defaults, and position/view-mode writers. |
 | `src/logging.rs` | Daily file logger with 14-day retention. |
 | `src/desktop/mod.rs` | Public safe API (`VirtualDesktopApi`), errors, and `SupervisedDesktop`. |
 | `src/desktop/com/core.rs` | Shared COM interface definitions and the generic backend. |
@@ -147,6 +161,9 @@ documentation mirrors this table.
 | `src/desktop/com/win11.rs` | Win11 layout (build 22000 and later). |
 | `src/windows/mod.rs` | Window enumeration, filtering, snapshot model, and change hash. |
 | `src/windows/icons.rs` | Icon fallback chain and per-window icon cache. |
+| `src/render/mod.rs` | Layout model, hit testing, drawing instructions, and `Painter` trait. |
+| `src/render/gdi.rs` | Double-buffered GDI backend. |
+| `app.rc`, `app.manifest`, `build.rs` | Icon, version resource, DPI/asInvoker manifest, and resource embedding. |
 | `examples/probe/main.rs` | Standalone probe; not part of the pager binary. |
 
 Terms that appear in the code:
@@ -163,8 +180,26 @@ Terms that appear in the code:
 | Z-order | Stacking order. In the snapshot, larger values are closer to the top. |
 | Failure counter / blacklist | A window whose desktop lookup keeps failing is skipped after 10 attempts, mostly to avoid snapped-window helper windows spamming the log. |
 | HICON | A borrowed icon handle supplied by the shell. It must not be destroyed by the pager. |
+| `PagerLayout` | The computed geometry for one frame: desktop columns, screens, clickable cells, and the `+N` overflow tile. Drawing and hit testing both use it. |
+| `Painter` | A tiny drawing interface. `GdiPainter` implements it with Win32 GDI; layout code never calls GDI directly. |
+| GDI | The classic Win32 drawing API. The pager draws into a memory DC and blits once per paint. |
 | AUMID | Application User Model ID. Windows uses it to pin an application to all virtual desktops. The probe sets one so pin/unpin can be tested safely. |
 | vtable | A table of function pointers that makes up a COM object. The `#[repr(C)]` structs in `core.rs` mirror the operating system's table layout. |
+
+## Unsafe code policy
+
+`winsafe` is not a dependency. It is a higher-level wrapper for ordinary Win32 UI work, but it does
+not make undocumented shell COM interfaces or raw vtables safe. The project uses Microsoft's official
+`windows` crate and keeps `unsafe` at the FFI boundary:
+
+- Raw COM vtables and pointers live in `src/desktop/com/`.
+- GDI calls live in `src/render/gdi.rs`.
+- Win32 window/message/monitor calls live in `window.rs`, `windows/`, `monitors.rs`, and `app.rs`.
+- Layout, snapshot models, settings, and the supervisor are safe Rust and contain no raw pointers.
+
+Every `unsafe` block has a nearby safety comment explaining the pointer/thread/handle invariant. A
+future safety audit can tighten the wrappers, but switching to a UI framework would not remove the
+unsafe COM layer that this application depends on.
 
 ## How to use this document
 

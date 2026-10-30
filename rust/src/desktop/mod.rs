@@ -194,14 +194,17 @@ impl SupervisedDesktop {
             match result {
                 Ok(value) => return Ok(value),
                 Err(error) => {
-                    let restart = attempt == 0 && error.is_restartable();
-                    logging::warn(format!(
-                        "virtual desktop call failed (restart={restart}): {error}"
-                    ));
-                    if !restart {
+                    if attempt == 0 && error.is_restartable() {
+                        logging::warn(format!(
+                            "virtual desktop call failed; recreating backend: {error}"
+                        ));
+                        *inner = None;
+                    } else {
+                        // Non-restartable errors are usually per-window lookup
+                        // failures. The snapshotter counts and blacklists those;
+                        // logging every one would flood the file.
                         return Err(error);
                     }
-                    *inner = None;
                 }
             }
         }

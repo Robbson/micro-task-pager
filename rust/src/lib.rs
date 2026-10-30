@@ -15,9 +15,13 @@
 //! same code path. The probe is not a separate test framework; it is a small
 //! command-line program built from `examples/probe/main.rs`.
 
+pub mod app;
 pub mod com;
 pub mod desktop;
 pub mod logging;
+pub mod monitors;
+pub mod render;
 pub mod settings;
 pub mod single_instance;
+pub mod window;
 pub mod windows;

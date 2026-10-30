@@ -7,14 +7,16 @@
 //! falls back to the defaults when a value is missing or malformed.
 //!
 //! The `Vec<ViewMode>` list is still flat because the registry stores one byte
-//! per renderer. It will be reshaped into per-desktop/screen rows when monitor
-//! enumeration exists in Phase 4.
+//! per renderer. `App::normalize_view_modes` maps it to the
+//! `desktop * screen_count + screen` order once monitor enumeration is
+//! available.
 
-use windows_registry::{CURRENT_USER, Key};
+use windows_registry::{CURRENT_USER, Key, Type};
 
 const REGISTRY_PATH: &str = r"SOFTWARE\MicroTaskPager";
 
 /// The two ways a desktop/monitor can be rendered.
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
     /// Scaled window rectangles with application icons.
@@ -24,6 +26,11 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
+    /// Byte used in the `REG_BINARY` view-mode array.
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+
     fn from_u32(value: u32) -> Option<Self> {
         match value {
             0 => Some(Self::Preview),
@@ -214,6 +221,33 @@ fn decode_view_modes(bytes: &[u8], fallback: ViewMode) -> Vec<ViewMode> {
         .iter()
         .map(|byte| ViewMode::from_u32(u32::from(*byte)).unwrap_or(fallback))
         .collect()
+}
+
+/// Reads the saved pager position, if both coordinates are present.
+pub fn load_pager_location() -> Option<(i32, i32)> {
+    let key = CURRENT_USER.open(REGISTRY_PATH).ok()?;
+    let x = key.get_u32("PagerLocationX").ok()? as i32;
+    let y = key.get_u32("PagerLocationY").ok()? as i32;
+    Some((x, y))
+}
+
+/// Saves the pager position in the same values the C# application uses.
+pub fn save_pager_location(x: i32, y: i32) {
+    let Ok(key) = CURRENT_USER.create(REGISTRY_PATH) else {
+        return;
+    };
+    let _ = key.set_u32("PagerLocationX", x as u32);
+    let _ = key.set_u32("PagerLocationY", y as u32);
+}
+
+/// Saves the per-desktop/screen view modes as the flat `REG_BINARY` array the
+/// C# application expects.
+pub fn save_view_modes(modes: &[ViewMode]) {
+    let Ok(key) = CURRENT_USER.create(REGISTRY_PATH) else {
+        return;
+    };
+    let bytes: Vec<u8> = modes.iter().map(|mode| mode.as_u8()).collect();
+    let _ = key.set_bytes("RendererViewModes", Type::Bytes, &bytes);
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ use std::hash::{Hash, Hasher};
 use windows::Win32::Foundation::{HWND, LPARAM, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClassNameW, GetForegroundWindow, GetShellWindow, GetWindowRect,
-    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
 };
 use windows::core::{BOOL, GUID};
 
@@ -58,6 +58,9 @@ pub struct WindowInfo {
     /// Whether this window was the foreground window when the snapshot was
     /// taken.
     pub is_active: bool,
+    /// Whether the window is minimized. The snapshot keeps minimized windows
+    /// so callers can still map handles, but the renderer skips them.
+    pub is_minimized: bool,
     /// Borrowed icon handle supplied by the shell.
     pub icon: Option<WindowIcon>,
 }
@@ -275,6 +278,7 @@ impl Builder<'_> {
             // enumeration when the total count is known.
             z_order: z_from_top,
             is_active: hwnd == self.foreground,
+            is_minimized: unsafe { IsIconic(hwnd) }.as_bool(),
             icon,
         });
     }
@@ -340,6 +344,7 @@ fn hash_snapshot(snapshot: &WindowSnapshot) -> u64 {
         window.desktop_index.hash(&mut hasher);
         window.z_order.hash(&mut hasher);
         window.is_active.hash(&mut hasher);
+        window.is_minimized.hash(&mut hasher);
         window
             .icon
             .map(|icon| icon.handle().0 as usize)
@@ -370,6 +375,7 @@ mod tests {
                 desktop_index: 0,
                 z_order: 0,
                 is_active: true,
+                is_minimized: false,
                 icon: None,
             }],
             desktop_ids: vec![GUID::zeroed()],
