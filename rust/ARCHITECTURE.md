@@ -173,10 +173,14 @@ architectural benefit (for example, if the COM probe becomes reusable). Suggeste
 ```
 rust/
   Cargo.toml
-  rust-toolchain.toml           # pinned channel + rustfmt/clippy
+  Cargo.lock                    # committed: this is a binary crate
+  rust-toolchain.toml           # toolchain channel + rustfmt/clippy
+  MIGRATION.md                  # phase status, verification log, open questions
   src/
     main.rs                     # process setup, single instance, message loop
     app.rs                      # application state and state transitions
+    com.rs                      # COM apartment guard
+    single_instance.rs          # mutex acquisition and second-instance handling
     window.rs                   # Win32 window, wndproc, context menu
     input.rs                    # hit testing, drag handling
     settings.rs                 # model, defaults, registry import/export
@@ -205,7 +209,8 @@ Use Microsoft's official `windows` crate as the primary binding. Enable only the
 used, for example:
 
 - `Win32_Foundation`
-- `Win32_System_Com`, `Win32_System_LibraryLoader`, `Win32_System_Registry`, `Win32_System_Threading`
+- `Win32_Security` (required by `CreateMutexW`)
+- `Win32_System_Com`, `Win32_System_LibraryLoader`, `Win32_System_Threading`
 - `Win32_UI_WindowsAndMessaging`
 - `Win32_UI_Shell`
 - `Win32_UI_Accessibility` (`SetWinEventHook`, `UnhookWinEvent`)
@@ -213,10 +218,15 @@ used, for example:
 - `Win32_Storage_FileSystem` (logging)
 
 Use `windows-sys` only when a lower-level binding is genuinely preferable. Keep `unsafe` localized
-behind safe Rust interfaces.
+behind safe Rust interfaces. Use the focused `windows-registry` crate instead of raw
+`Win32_System_Registry` bindings.
 
-Pin Microsoft crate versions explicitly in `Cargo.toml` (`windows = "0.100"`, etc.) and verify APIs
-against docs.rs or the crate source. Do not rely on remembered signatures.
+Pin Microsoft crate versions explicitly in `Cargo.toml` and verify APIs against docs.rs or the crate
+source. Do not rely on remembered signatures. The crates do not share one version line:
+
+- `windows = "0.62"` (the umbrella Win32/WinRT crate)
+- `windows-registry = "0.100"`, `windows-version = "0.100"`, and `windows-canvas = "0.100"` (the
+  focused native-app crates)
 
 ### 5.2 Win32 Main Window
 
@@ -539,7 +549,7 @@ Do not rewrite the entire application at once. Use an incremental migration.
 
 ### Phase 1: Scaffold
 
-- Initialize a Cargo crate in `rust/`, pin the toolchain, add `.gitignore` for `target/`.
+- Initialize a Cargo crate in `rust/`, set the toolchain channel, add `.gitignore` for `target/`.
 - Add the application manifest, icon, version resource, single-instance mutex.
 - Implement logging and the settings model, defaults, and registry import.
 - Configure the minimal `windows` features.

@@ -9,7 +9,8 @@ implementations:
 
 - `src/` - the existing C#/.NET Framework 4.8 Windows Forms application. It is the behavioral
   reference and remains the shipping implementation during the migration.
-- `rust/` - the native Rust port. Read `rust/ARCHITECTURE.md` before making structural changes.
+- `rust/` - the native Rust port. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before making
+  structural changes.
 
 Both use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual desktop
 interop must be handled carefully and tested on real Windows builds.
@@ -29,30 +30,34 @@ Installed command-line tools:
 | Tool | Version | Command | Notes |
 |---|---|---|---|
 | PowerShell | 7.4.22 | `pwsh` | Use PowerShell syntax and cmdlets (`Get-ChildItem`, `Select-Object`, `Get-Content`). |
-| ripgrep | 14.1.1 | `rg` | Preferred content search. Supports PCRE2 (`rg --pcre2`); the default engine has no lookaround. Use instead of `Select-String`. |
-| fd | 8.3.2 | `fd` | Fast file-name search. Use instead of recursive `Get-ChildItem -Filter`. |
-| jq | 1.8.2 | `jq` | JSON processing. See PATH note below. |
-| 7-Zip | 26.05 | `7z` | Archive inspection and creation. See PATH note below. |
+| ripgrep | 15.2.0 | `rg` | Preferred content search. Supports PCRE2 (`rg --pcre2`); the default engine has no lookaround. Use instead of `Select-String`. |
+| fd | 8.3.2 | `fd` | Fast file-name search. Use instead of recursive `Get-ChildItem -Filter`. The winget 10.5.0 copy is currently shadowed; see PATH notes. |
+| jq | 1.8.2 | `jq` | JSON processing. |
+| 7-Zip | 26.05 | `7z` | Archive inspection and creation. |
+| WinDbg | 1.2610.1001.0 | `WinDbgX` | Microsoft Store build, app execution alias. See Debugging below. |
 | Rust | 1.99.1 | `rustc`, `cargo` | MSVC toolchain. |
 | rustfmt | 1.10.0 | `cargo fmt` | Formatting. |
 | Clippy | 0.1.99 | `cargo clippy` | Linting. |
 | .NET SDK | 8.0.427 | `dotnet` | Builds the `net48` C# project. |
 
-### PATH note for jq and 7-Zip
+### PATH notes
 
-`jq` and `7-Zip` are installed but are not on `PATH` in the agent shell. Resolve them explicitly:
+- `7z`, `jq`, `rg`, and `fd` are on `PATH`.
+- `rg` resolves to the winget ripgrep 15.2.0.
+- `fd` still resolves to Neovim's 8.3.2 because `E:\Dev\Tools\Neovim\bin` comes before the winget
+  package directory. The winget fd 10.5.0 is later on `PATH`. Use `Get-Command fd` to confirm which
+  binary is selected. To use 10.5.0, remove the Neovim directory from `PATH` or remove its `fd.exe`
+  copy; do not change `PATH` without asking the user.
+- Do not hardcode user-specific paths in repository files. If a tool is needed repeatedly, ask before
+  changing persistent `PATH` settings.
 
-```powershell
-$jq = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\jqlang.jq_*\jq.exe" |
-    Select-Object -First 1).FullName
-& $jq --version
+### Debugging
 
-$sevenZip = 'C:\Program Files\7-Zip\7z.exe'
-& $sevenZip l some-archive.zip
-```
-
-If a script needs them repeatedly, prefer adding them to the user `PATH` over hardcoding absolute
-paths. Do not add user-specific paths to repository files.
+- WinDbg (Store) is available as `WinDbgX` through the app execution alias in
+  `%LOCALAPPDATA%\Microsoft\WindowsApps`. It is GUI-first, so do not launch it from automated commands.
+- There is no `windbg.exe`, `cdb.exe`, or `kd.exe` on `PATH`. For command-line debugging, install the
+  Windows SDK "Debugging Tools for Windows" separately, with explicit user confirmation.
+- Rust MSVC builds write PDBs next to the executable; use `RUST_BACKTRACE=1` when diagnosing panics.
 
 ## Build and verification
 
@@ -69,6 +74,10 @@ cargo test
 
 - The first build requires the MSVC build tools (`link.exe`) and a Windows SDK.
 - Add unit tests next to the modules they cover. There is no separate test crate.
+- `rust-toolchain.toml` currently selects `stable`, which is 1.99.1. The exact `1.99.1` rustup
+  toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
+- The current binary is a scaffold: it loads settings and exits. The Win32 window and message loop
+  arrive in Phase 4.
 - COM verification is done with the standalone probe once it exists:
 
   ```powershell
@@ -120,8 +129,9 @@ Guidance:
 - `src/GUI/` - pager, desktops, settings dialog, about dialog.
 - `src/Config/` - settings model, registry storage, saved pager position.
 - `rust/ARCHITECTURE.md` - migration architecture and behavioral contract.
-- `rust/src/` - Rust implementation (once scaffolded).
-- `rust/examples/probe/` - standalone virtual-desktop COM probe.
+- `rust/MIGRATION.md` - phase status, verification log, and open questions.
+- `rust/src/` - Rust implementation (scaffold: settings, COM apartment, single instance).
+- `rust/examples/probe/` - standalone virtual-desktop COM probe (planned).
 
 ## Notes
 
