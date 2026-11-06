@@ -20,7 +20,7 @@ content; link to the relevant section instead.
 | 6. Parity and deployment | Complete | 2026-10-30 | 2026-10-30 | Native v1 release verified on 26200, single monitor; C# retained |
 | 7. WinUI architecture and docs | Complete | 2026-10-30 | 2026-10-30 | Adopted WinUI 3 via `windows-reactor`; architecture, agent rules, and notices updated |
 | 8. Reactor pager shell | Complete | 2026-11-06 | 2026-11-06 | Borderless/tool-window/layered/topmost reactor window, HWND shim, pinning, and ticks verified on 26200; native v1 remains the main binary until Phase 11 |
-| 9. Reactor pager content | Pending | | | Layout, views, input, drag, menu, icons |
+| 9. Reactor pager content | Complete | 2026-11-06 | 2026-11-06 | DIP layout/hit testing, Preview and Micro views, icons, pointer drag/click, Shift+wheel hook, and native context menu verified on 26200; Settings/About entries wait for Phase 10 |
 | 10. Reactor dialogs | Pending | | | About and Settings |
 | 11. Cutover and cleanup | Pending | | | Reactor main binary; remove native UI and GDI |
 | 12. Verification and packaging | Pending | | | Checklist, OS floor, runtime packaging, supported builds |
@@ -138,12 +138,20 @@ native v1 until the Phase 11 cutover.
 
 ### Phase 9: Reactor Pager Content
 
-- [ ] Port layout and hit testing to DIPs; keep them pure and unit-tested.
-- [ ] Preview view with desktop/window rectangles, icons, borders, and active highlighting.
-- [ ] Micro Taskbar view with icon grid, wrapping, and `+N` overflow.
-- [ ] Click-to-switch/focus, pager drag, window drag, Shift+wheel, and reactor context menu.
-- [ ] Convert cached `HICON`s to reactor image sources; keep keyed lists for identity.
-- [ ] Acceptance: pager UI checklist in `ARCHITECTURE.md` §11.
+- [x] Port layout and hit testing to DIPs; keep them pure and unit-tested.
+- [x] Preview view with desktop/window rectangles, icons, borders, and active highlighting.
+- [x] Micro Taskbar view with icon grid, wrapping, and `+N` overflow.
+- [x] Click-to-switch/focus, pager drag, window drag, Shift+wheel, and native context menu
+      (temporary until reactor exposes one).
+- [x] Convert cached `HICON`s to reactor image sources; keep keyed lists for identity.
+- [x] Acceptance: pager UI checklist in `ARCHITECTURE.md` §11.
+
+The context menu is a native `TrackPopupMenu` in `native_window` because `windows-reactor` 0.100
+`Menu` is a Button/SplitButton flyout, not a right-click context menu. This is a documented temporary
+deviation; topmost is dropped while the menu is open and restored afterward. Settings and About are
+present but grayed until Phase 10. Click/drag state transitions are unit tested; a live
+multi-desktop drag and focus pass remains in Phase 12 to avoid disrupting active desktops during
+development.
 
 ### Phase 10: Reactor Dialogs
 
@@ -223,6 +231,9 @@ These items are not scheduled and do not block the next phase.
 | 2026-11-06 | Find the pager HWND by process ID and window title | Reactor 0.100 exposes no public HWND accessor, and the component declares a stable title before the native lookup runs | ARCHITECTURE §3.6 |
 | 2026-11-06 | Reapply the DIP client size after removing the WinUI frame | Reactor's `ResizeClient` runs before the shim removes the caption, so the first outer size still includes the old non-client area | ARCHITECTURE §3.6 |
 | 2026-11-06 | Retry the HWND lookup every 50 ms until the window appears | The window and title are created after the component's first publication; a full primary-tick delay produced a visible title-bar flash | Phase 8 |
+| 2026-11-06 | Encode cached `HICON`s to PNG with WIC and cache by `(hwnd, hicon)` | Reactor `Image` needs encoded data; encoding once per icon change keeps the 200 ms refresh cheap | ARCHITECTURE §8.6 |
+| 2026-11-06 | Subclass the pager HWND for `WM_MOUSEWHEEL` | Reactor 0.100 has no wheel event; the subclass runs on the UI thread and forwards DIP coordinates through `LocalSender`, so COM stays on the UI thread | ARCHITECTURE §8.4 |
+| 2026-11-06 | Use a native `TrackPopupMenu` for the Phase 9 context menu | The secondary reactor dialog looked poor; `windows-reactor` 0.100 has no right-click context menu. The native menu is a documented temporary shim and topmost is dropped while it is open. Revisit with a later reactor transient-menu API | ARCHITECTURE §8.4, §12 |
 
 ## Verified Windows builds
 
@@ -234,6 +245,7 @@ edition.
 | 26200 | Windows 11 25H2 | Win11 layout | Count 2, current index, desktop GUIDs, window-to-desktop index, switch 0 -> 1 -> 0, move 0 -> 1 -> 0, pin state, pin, and unpin work | 2026-10-30 | Win10 layout and 21H2/22H2 are untested (postponed) |
 | 26200 | Windows 11 25H2 | Win11 layout | Reactor About rendered; borderless, `WS_EX_TOOLWINDOW`, layered alpha, and topmost reassertion work on a live WinUI window | 2026-10-30 | Topmost was reset once by WinUI after the style change; reasserting worked. Pinning through the HWND shim is not yet tested |
 | 26200 | Windows 11 25H2 | Win11 layout | Reactor pager shell: `WS_POPUP` without caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, pinned (`probe pinned` = true), alpha 191 at `0.75`, and `WM_CLOSE` exited cleanly | 2026-11-06 | Single monitor, 100% DPI; shell run from `examples/reactor_pager` while the native v1 remains the main binary |
+| 26200 | Windows 11 25H2 | Win11 layout | Reactor pager content: mixed Micro/Preview desktops with icons, borders, active highlighting, and `+N` overflow; native `TrackPopupMenu` opened with Toggle/Position/Settings/About/Exit, Toggle persisted, and topmost was restored after the menu; the wheel subclass toggled the mode under the cursor for a synthetic `WM_MOUSEWHEEL` | 2026-11-06 | Single monitor, 100% DPI; click-to-switch/focus and window dragging remain for the Phase 12 live pass |
 
 ## Open questions
 
@@ -241,8 +253,8 @@ edition.
 |---|---|---|---|
 | Does `IVirtualDesktopPinnedApps` pinning work on the reactor HWND found by the shim? | Always-on behavior depends on it | | Resolved 2026-11-06: `probe pinned` returned true on build 26200 |
 | Does WinUI reapply styles or topmost in other situations (activation, monitor changes, shell restart)? | The pager must stay topmost and borderless | | Topmost reassert verified on the secondary tick; activation, monitor changes, and shell restart remain in Phase 12 |
-| Is the converter from cached `HICON` to a reactor image source fast enough for many windows? | The pager refreshes every 200 ms | | Phase 9 |
-| Does a reactor `Menu` behave correctly on a layered, tool-window pager? | Right-click is the only entry point to settings/about/exit | | Phase 9 |
+| Is the converter from cached `HICON` to a reactor image source fast enough for many windows? | The pager refreshes every 200 ms | | Resolved 2026-11-06: 18 icons converted at startup and cached; refreshes reuse the encoded sources and log no failures |
+| Does a reactor `Menu` behave correctly on a layered, tool-window pager? | Right-click is the only entry point to settings/about/exit | | Resolved 2026-11-06: 0.100 `Menu` is a button flyout. Phase 9 uses a temporary native `TrackPopupMenu`; true menu support waits for a reactor upgrade |
 | Should the toolchain be pinned to an exact version? | `1.99.1` is currently installed without `cargo.exe`, so `stable` (also 1.99.1) is used | | Open |
 | Framework-dependent or self-contained Windows App Runtime packaging? | Affects release size and prerequisites | | Phase 12 |
 
@@ -266,6 +278,7 @@ narrative.
 | 2026-10-30 | 7 | Live reactor window probe on build 26200: `WS_POPUP`/no title bar, `WS_EX_TOOLWINDOW`, `WS_EX_LAYERED` alpha, and topmost reassertion applied to a WinUI window; screenshot shows desktop through the content; topmost was reset once and reasserted |
 | 2026-10-30 | 7 | Architecture docs updated for the WinUI 3 pivot; native v1 and C# retained; no application behavior changed |
 | 2026-11-06 | 8 | Reactor shell on build 26200: `WS_POPUP` with no caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, `probe pinned` = true, layered alpha 191 at `0.75`, and `WM_CLOSE` exited the process; `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build --examples`, and 21 tests pass; the release native binary still imports no Windows App Runtime DLLs |
+| 2026-11-06 | 9 | Reactor content on build 26200: DIP layout/hit testing, mixed Micro/Preview desktops, keyed icon cell views, 18 `HICON`→PNG conversions, native context menu with the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`), Toggle/Position/grayed Settings/About/Exit, persisted `RendererViewModes=1,0`, topmost dropped during the menu and restored afterward, and a synthetic `WM_MOUSEWHEEL` toggled the mode under the cursor both ways; `cargo fmt --check`, Clippy, examples build, and 31 tests pass; click/drag state machines are unit-tested, live multi-desktop drag/focus is deferred to Phase 12 |
 
 ## Code map and glossary
 
@@ -293,7 +306,7 @@ documentation mirrors this table.
 | `src/desktop/com/win10.rs` | Win10 layout (build 10240–21999). Survives. |
 | `src/desktop/com/win11.rs` | Win11 layout (build 22000 and later). Survives. |
 | `src/windows/mod.rs` | Window enumeration, filtering, snapshot model, and change hash. Survives. |
-| `src/windows/icons.rs` | Icon fallback chain and per-window icon cache. Survives; add image conversion. |
+| `src/windows/icons.rs` | Icon fallback chain, per-window icon cache, and PNG encoding for reactor. |
 
 ### Target WinUI structure
 
@@ -302,16 +315,16 @@ documentation mirrors this table.
 | `src/pager/mod.rs` | Pager component: state, messages, update, and tick scheduling. |
 | `src/pager/view.rs` | Declarative `Canvas`/`Grid` view for Preview and Micro Taskbar. |
 | `src/pager/layout.rs` | Pure DIP layout and hit-testing model. |
-| `src/pager/input.rs` | Pointer/drag state machines. |
-| `src/pager/icons.rs` | `HICON` to reactor image source conversion. |
+| `src/pager/input.rs` | Pointer/drag state machines and drag ghost. |
+| `src/pager/icons.rs` | Encoded icon cache keyed by `(hwnd, hicon)`. |
 | `src/dialogs/about.rs` | Reactor About window, promoted from the example. |
 | `src/dialogs/settings.rs` | Reactor Settings window with Layout/Theme/Misc sections. |
-| `src/native_window.rs` | HWND lookup, window styles, topmost, layered alpha, position, pin handoff. |
+| `src/native_window.rs` | HWND lookup, styles, topmost, layered alpha, position, wheel hook, cursor helpers, and pin handoff. |
 | `app.rc`, `app.manifest`, `build.rs` | Icon, version resource, manifest, and resource embedding. |
 | `.cargo/config.toml` | Static MSVC runtime. |
 | `examples/probe/main.rs` | Standalone COM probe; not part of the pager binary. |
 | `examples/reactor_about.rs` | Reactor About reference and regression sample. |
-| `examples/reactor_pager.rs` | Phase 8 reactor pager shell runner. |
+| `examples/reactor_pager.rs` | Reactor pager shell/content runner (Phases 8-9). |
 
 Terms that appear in the code:
 

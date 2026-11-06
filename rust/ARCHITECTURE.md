@@ -190,6 +190,9 @@ The dependency trade is accepted:
 - It supports secondary windows, so About and Settings can be normal application windows without a
   native dialog runtime.
 - It supports context menus, pointer capture, pointer positions, keyed lists, and drag operations.
+  Version 0.100 `Menu` is a Button/SplitButton flyout, not a right-click context menu; Phase 9
+  therefore uses a native `TrackPopupMenu` in `native_window` and revisits true context menus with a
+  later reactor release.
 - It is code-first; no XAML files or XAML compiler are needed.
 
 ### 3.3 Component Model
@@ -222,7 +225,9 @@ Rules:
 - About and Settings are secondary windows opened with `ComponentContext::open_window`.
 - Secondary windows can be opened and closed repeatedly; the one-shot `Application.Start` lifecycle
   is not a problem because the pager application remains alive.
-- There are no native `DialogBox` / `TrackPopupMenu` calls in the target UI.
+- There are no native `DialogBox` calls in the target UI. The Phase 9 context menu is the one
+  temporary exception: `native_window::show_context_menu` uses `TrackPopupMenu` because reactor 0.100
+  has no right-click context menu. Replace it when reactor exposes transient menus.
 
 ### 3.5 Reactivity and Timers
 
@@ -301,7 +306,7 @@ These rules exist to keep the application understandable without building a cust
 | Rendering | WinUI composition (`Canvas`, `Grid`, `Border`, `Image`, `TextBlock`) | decided |
 | Window previews | Scaled window rectangles + shell icons (no DWM) | decided |
 | Application icons | Shell APIs converted to reactor image sources | decided |
-| Context menu | Reactor `Menu` | decided |
+| Context menu | Native `TrackPopupMenu` in `native_window` (temporary) | decided |
 | Settings UI | Reactor secondary window | decided |
 | About | Reactor secondary window | decided |
 | Settings storage | Windows registry, C#-compatible | decided |
@@ -540,7 +545,7 @@ The pager component consumes the immutable snapshot and produces a `View`. The v
 - One screen per monitor per desktop.
 - Window rectangles, icons, active state, and z-order.
 - Per-screen view mode.
-- Hover/drag state.
+- Hover/drag state (drag ghost in `input.rs`; hover highlighting is deferred).
 
 Keep the layout and hit-testing code separate from the view. They operate in DIPs and are unit-tested
 without WinUI.
@@ -575,24 +580,32 @@ Micro Taskbar is a `Grid` or `Canvas` of icon tiles:
   the HWND, matching the C# behavior and avoiding client-coordinate feedback loops.
 - Drag a miniature/icon to another desktop to move the window. The drag ghost is a reactor element in a
   `Canvas`; the drop uses the existing `move_window_to` API.
-- Shift+wheel toggles the view mode under the cursor and persists it.
-- Right-click opens a reactor `Menu` with Toggle View Mode, Position, Settings, About, and Exit.
-- While the menu is open, suspend topmost reassertion so the pager does not cover its own popup.
+- Shift+wheel toggles the view mode under the cursor and persists it. Reactor 0.100 has no wheel
+  event, so `native_window` subclasses the pager HWND for `WM_MOUSEWHEEL` and forwards client DIPs
+  plus Shift to the UI thread.
+- Right-click opens the native context menu with Toggle View Mode, Position, Settings, About, and
+  Exit, using the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`) as leading menu text. Reactor 0.100 has
+  no right-click context menu, so `native_window::show_context_menu` uses `TrackPopupMenu`; this is a
+  documented temporary Win32 shim.
+- Drop topmost while the modal menu is open and restore it before returning, so the pager cannot
+  cover its own popup.
 
 ### 8.5 Refresh and Identity
 
 - Use the tick pattern from section 3.5.
 - Recompute the snapshot and layout only when the primary tick fires.
-- Use the change-detection hash to skip republishing identical views.
+- Use the change-detection hash to skip layout and icon work; reactor's reconciler skips unchanged
+  native properties, so the declarative view can still be rebuilt cheaply.
 - Use keys for desktop and window collections so reactor can preserve element identity.
 
 ### 8.6 Icons
 
 The icon cache currently returns `HICON`. Reactor `Image` needs image data:
 
-- Convert each cached icon to a PNG or bitmap source once, then cache the converted source.
-- Keep the `HICON` fallback chain and cache key `(hwnd, hicon)`.
-- Prune converted sources when the window disappears.
+- `windows/icons.rs` converts each cached icon to a PNG with WIC, including the mask-derived alpha
+  fallback for older icons.
+- `pager/icons.rs` caches the `EncodedImage` keyed by `(hwnd, hicon)` and prunes entries when the
+  window disappears.
 - Do not decode icons per frame or per view publication.
 
 ### 8.7 Opacity and Topmost
@@ -753,7 +766,8 @@ as it is made.
 - Keep the vertical-monitor layout limitation.
 - Keep global window opacity through the layered-window shim; do not approximate it by pre-multiplying
   colors.
-- Use a reactor `Menu` instead of `TrackPopupMenu`; topmost is suspended while the menu is open.
+- Use a native `TrackPopupMenu` in `native_window` until reactor exposes transient menus; drop
+  topmost while the modal menu is open and restore it afterward.
 
 ## 13. Migration Strategy
 
@@ -877,7 +891,7 @@ safe Rust.
 | Rendering | WinUI composition |
 | Window previews | Scaled geometries + shell icons |
 | Live thumbnails | Not planned |
-| Context menu | Reactor `Menu` |
+| Context menu | Native `TrackPopupMenu` in `native_window` (temporary) |
 | Settings UI | Reactor secondary window |
 | About | Reactor secondary window |
 | Native Win32 | Platform glue only |

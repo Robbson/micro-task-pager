@@ -13,17 +13,25 @@
 //! It is deliberately not a UI abstraction. Anything that starts looking like
 //! one belongs upstream in `windows-reactor` instead.
 
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT};
+use std::cell::RefCell;
+
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_SHIFT};
+use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClientRect, GetWindowLongPtrW, GetWindowRect,
-    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, HWND_TOPMOST, IsWindowVisible,
-    LWA_ALPHA, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_NOZORDER, SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync,
-    WS_BORDER, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX,
-    WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WindowFromPoint,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClientRect,
+    GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW,
+    GetWindowTextW, GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, IsWindowVisible,
+    LWA_ALPHA, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow,
+    SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync, TPM_LEFTALIGN,
+    TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, WM_MOUSEWHEEL, WS_BORDER,
+    WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
+    WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WindowFromPoint,
 };
-use windows::core::BOOL;
+use windows::core::{BOOL, PCWSTR, w};
 
 use crate::monitors;
 
@@ -54,6 +62,245 @@ struct FindWindow<'a> {
     process_id: u32,
     title: &'a str,
     found: Option<HWND>,
+}
+
+thread_local! {
+    // Reactor 0.100 has no wheel event. The subclass procedure runs on the UI
+    // thread, so the non-Send callback can hold a `LocalSender`.
+    static WHEEL_HANDLER: RefCell<Option<WheelHandler>> = RefCell::new(None);
+}
+
+type WheelHandler = Box<dyn Fn(f64, f64, bool) -> bool>;
+
+/// A wheel-message hook installed on the pager window.
+pub struct WheelHook {
+    hwnd: HWND,
+    id: usize,
+}
+
+impl WheelHook {
+    /// Installs a `WM_MOUSEWHEEL` handler that receives client DIPs and Shift.
+    ///
+    /// The handler returns `true` when it handled the message. The callback
+    /// runs on the UI thread because it is invoked from the window procedure.
+    pub fn install(
+        hwnd: HWND,
+        handler: impl Fn(f64, f64, bool) -> bool + 'static,
+    ) -> Result<Self, windows::core::Error> {
+        WHEEL_HANDLER.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(handler));
+        });
+
+        // SAFETY: the handle belongs to this process; the subclass id is local
+        // to this module and the callback has the required ABI.
+        let installed = unsafe { SetWindowSubclass(hwnd, Some(wheel_subclass_proc), 1, 0) };
+        if !installed.as_bool() {
+            WHEEL_HANDLER.with(|slot| {
+                *slot.borrow_mut() = None;
+            });
+            return Err(windows::core::Error::from_thread());
+        }
+
+        Ok(Self { hwnd, id: 1 })
+    }
+}
+
+impl Drop for WheelHook {
+    fn drop(&mut self) {
+        WHEEL_HANDLER.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
+        // SAFETY: removing the same subclass id is safe even during teardown.
+        unsafe {
+            let _ = RemoveWindowSubclass(self.hwnd, Some(wheel_subclass_proc), self.id);
+        }
+    }
+}
+
+unsafe extern "system" fn wheel_subclass_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    if message == WM_MOUSEWHEEL {
+        // WM_MOUSEWHEEL coordinates are screen pixels in the low/high words.
+        let x = (lparam.0 & 0xFFFF) as u16 as i16 as i32;
+        let y = ((lparam.0 >> 16) & 0xFFFF) as u16 as i16 as i32;
+        let mut point = POINT { x, y };
+        if unsafe { ScreenToClient(hwnd, &mut point) }.as_bool() {
+            let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
+            let scale = 96.0 / f64::from(dpi);
+            let shift = unsafe { GetKeyState(VK_SHIFT.0 as i32) } < 0;
+            let handled = WHEEL_HANDLER.with(|slot| {
+                slot.borrow().as_ref().is_some_and(|handler| {
+                    handler(
+                        f64::from(point.x) * scale,
+                        f64::from(point.y) * scale,
+                        shift,
+                    )
+                })
+            });
+            if handled {
+                return LRESULT(0);
+            }
+        }
+    }
+
+    // SAFETY: unhandled messages continue through the original window
+    // procedure chain for this window.
+    unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+}
+
+/// Current cursor position in physical screen pixels.
+pub fn cursor_position() -> Option<(i32, i32)> {
+    let mut point = POINT::default();
+    // SAFETY: `GetCursorPos` only reads the global cursor position.
+    unsafe {
+        GetCursorPos(&mut point).ok()?;
+    }
+    Some((point.x, point.y))
+}
+
+/// Whether Shift is currently held.
+pub fn shift_pressed() -> bool {
+    // SAFETY: `GetKeyState` only reads keyboard state for the current thread's
+    // input queue.
+    unsafe { GetKeyState(VK_SHIFT.0 as i32) < 0 }
+}
+
+/// Foreground window at pager startup.
+pub fn foreground_window() -> Option<HWND> {
+    // SAFETY: `GetForegroundWindow` only reads the current foreground handle.
+    let hwnd = unsafe { GetForegroundWindow() };
+    (!hwnd.0.is_null()).then_some(hwnd)
+}
+
+/// Focuses a window without any extra WinUI wrapping.
+pub fn activate_window(hwnd: HWND) -> bool {
+    // SAFETY: the handle belongs to another application; `SetForegroundWindow`
+    // only requests activation and does not transfer ownership.
+    unsafe { SetForegroundWindow(hwnd).as_bool() }
+}
+
+/// Menu commands returned by the native context menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContextCommand {
+    ToggleViewMode,
+    RestorePosition,
+    SavePosition,
+    DefaultPosition,
+    Settings,
+    About,
+    Exit,
+}
+
+const MENU_TOGGLE: u32 = 1;
+const MENU_RESTORE: u32 = 2;
+const MENU_SAVE: u32 = 3;
+const MENU_DEFAULT: u32 = 4;
+const MENU_SETTINGS: u32 = 5;
+const MENU_ABOUT: u32 = 6;
+const MENU_EXIT: u32 = 7;
+
+/// Shows the native context menu at the cursor and returns the chosen command.
+///
+/// Reactor 0.100 has no right-click context menu; this is a deliberate,
+/// documented Win32 shim until reactor exposes transient menus. Topmost is
+/// dropped for the modal menu and restored before returning, because a topmost
+/// pager would otherwise cover its own popup.
+pub fn show_context_menu(hwnd: HWND) -> Option<ContextCommand> {
+    let mut screen = POINT::default();
+    // SAFETY: reads the global cursor position; no window state is changed.
+    unsafe {
+        GetCursorPos(&mut screen).ok()?;
+    }
+
+    // SAFETY: menu handles are created and destroyed symmetrically below; the
+    // handle is only used on this thread.
+    unsafe {
+        let menu = CreatePopupMenu().ok()?;
+        let position = match CreatePopupMenu() {
+            Ok(position) => position,
+            Err(_) => {
+                let _ = DestroyMenu(menu);
+                return None;
+            }
+        };
+
+        // Native menus have no per-item icon column without owner-drawing the
+        // whole menu, so keep the C# glyphs as leading menu labels.
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            MENU_TOGGLE as usize,
+            w!("↔  Toggle View Mode"),
+        );
+        let _ = AppendMenuW(position, MF_STRING, MENU_RESTORE as usize, w!("Restore"));
+        let _ = AppendMenuW(position, MF_STRING, MENU_SAVE as usize, w!("Save"));
+        let _ = AppendMenuW(position, MF_STRING, MENU_DEFAULT as usize, w!("Default"));
+        // Populate the submenu before attaching it; an empty submenu attached
+        // first is not guaranteed to render later.
+        let _ = AppendMenuW(menu, MF_POPUP, position.0 as usize, w!("⌖  Position"));
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING | MF_GRAYED,
+            MENU_SETTINGS as usize,
+            w!("⚙  Settings"),
+        );
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING | MF_GRAYED,
+            MENU_ABOUT as usize,
+            w!("ℹ  About"),
+        );
+        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let _ = AppendMenuW(menu, MF_STRING, MENU_EXIT as usize, w!("✕  Exit"));
+
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_NOTOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+        let _ = SetForegroundWindow(hwnd);
+        let selection = TrackPopupMenu(
+            menu,
+            TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RIGHTBUTTON,
+            screen.x,
+            screen.y,
+            None,
+            hwnd,
+            None,
+        );
+        let _ = DestroyMenu(menu);
+        let _ = SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+
+        match selection.0 as u32 {
+            MENU_TOGGLE => Some(ContextCommand::ToggleViewMode),
+            MENU_RESTORE => Some(ContextCommand::RestorePosition),
+            MENU_SAVE => Some(ContextCommand::SavePosition),
+            MENU_DEFAULT => Some(ContextCommand::DefaultPosition),
+            MENU_SETTINGS => Some(ContextCommand::Settings),
+            MENU_ABOUT => Some(ContextCommand::About),
+            MENU_EXIT => Some(ContextCommand::Exit),
+            _ => None,
+        }
+    }
 }
 
 unsafe extern "system" fn find_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -247,6 +494,16 @@ impl PagerWindow {
             let _ = ShowWindowAsync(self.hwnd, SW_SHOWNOACTIVATE);
         }
         let _ = self.reassert_topmost();
+    }
+
+    /// Current window origin in physical screen pixels.
+    pub fn origin(&self) -> Option<(i32, i32)> {
+        self.rect().ok().map(|rect| (rect.left, rect.top))
+    }
+
+    /// Full window rectangle in physical screen pixels.
+    pub fn window_rect(&self) -> Option<RECT> {
+        self.rect().ok()
     }
 
     fn apply_styles(&mut self) -> Result<bool, windows::core::Error> {
