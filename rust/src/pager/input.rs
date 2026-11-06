@@ -205,6 +205,7 @@ mod tests {
         PagerLayout {
             width: 200.0,
             height: 40.0,
+            border: 1.0,
             desktop_width: 100.0,
             desktop_count: 2,
             desktops: Vec::new(),

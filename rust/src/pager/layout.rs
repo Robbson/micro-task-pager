@@ -84,6 +84,8 @@ impl Rect {
 pub struct CellLayout {
     pub hwnd: HWND,
     pub rect: Rect,
+    /// Pixel-snapped icon rectangle inside the cell.
+    pub icon: Rect,
     pub is_active: bool,
 }
 
@@ -117,6 +119,8 @@ pub struct DesktopLayout {
 pub struct PagerLayout {
     pub width: f64,
     pub height: f64,
+    /// Border and separator thickness in DIPs, snapped to whole device pixels.
+    pub border: f64,
     pub desktop_width: f64,
     pub desktop_count: u32,
     pub desktops: Vec<DesktopLayout>,
@@ -179,19 +183,30 @@ impl PagerLayout {
 }
 
 /// Builds the pager layout from a snapshot, monitors, and nested view modes.
+///
+/// Coordinates are snapped to whole physical pixels. WinUI antialiases
+/// fractional DIP positions, which blurs 1 px borders and resamples icons, so
+/// the reactor layout is computed on the same pixel grid as the C# renderer and
+/// converted back to DIPs. `dpi` is the window or system DPI (96 = 100%).
 pub fn build(
     snapshot: &WindowSnapshot,
     monitors: &[MonitorInfo],
     view_modes: &[Vec<ViewMode>],
     settings: &Settings,
+    dpi: u32,
 ) -> PagerLayout {
-    let pager_height = f64::from(settings.pager_height.max(1));
+    let scale = f64::from(dpi.max(96)) / 96.0;
+    let pager_height_px = ((f64::from(settings.pager_height.max(1)) * scale).round() as i32).max(1);
+    let pager_height = f64::from(pager_height_px) / scale;
+    let border_px = (BORDER_SIZE * scale).round().max(1.0);
+    let border = border_px / scale;
     let desktop_count = snapshot.desktop_count.max(1);
 
     if monitors.is_empty() {
         return PagerLayout {
             width: 1.0,
             height: pager_height,
+            border,
             desktop_width: 1.0,
             desktop_count,
             desktops: Vec::new(),
@@ -201,7 +216,7 @@ pub fn build(
     let screen_count = monitors.len();
     let screen_widths: Vec<f64> = monitors
         .iter()
-        .map(|monitor| aspect_width(monitor, pager_height))
+        .map(|monitor| screen_width_px(monitor, pager_height_px) as f64 / scale)
         .collect();
     let desktop_width = screen_widths.iter().sum::<f64>().max(1.0);
     let width = desktop_width * f64::from(desktop_count);
@@ -231,12 +246,25 @@ pub fn build(
 
             let (cells, overflow) = match view_mode {
                 ViewMode::Preview => (
-                    preview_cells(&windows, monitor, screen_x, pager_height),
+                    preview_cells(
+                        &windows,
+                        monitor,
+                        screen_x,
+                        pager_height,
+                        screen_width,
+                        scale,
+                        border,
+                    ),
                     None,
                 ),
-                ViewMode::MicroTaskbar => {
-                    micro_taskbar_cells(&windows, screen_x, screen_width, pager_height, settings)
-                }
+                ViewMode::MicroTaskbar => micro_taskbar_cells(
+                    &windows,
+                    screen_x,
+                    screen_width,
+                    pager_height,
+                    settings,
+                    scale,
+                ),
             };
 
             screens.push(ScreenLayout {
@@ -259,6 +287,7 @@ pub fn build(
     PagerLayout {
         width,
         height: pager_height,
+        border,
         desktop_width,
         desktop_count,
         desktops,
@@ -270,26 +299,42 @@ fn preview_cells(
     monitor: &MonitorInfo,
     screen_x: f64,
     pager_height: f64,
+    screen_width: f64,
+    scale: f64,
+    border: f64,
 ) -> Vec<CellLayout> {
-    let scale = pager_height / f64::from(monitor.height().max(1));
-    let screen_rect = Rect::new(0.0, 0.0, aspect_width(monitor, pager_height), pager_height);
+    let reduction = pager_height / f64::from(monitor.height().max(1));
+    let screen_rect = Rect::new(0.0, 0.0, screen_width, pager_height);
     let mut sorted = windows.to_vec();
     sorted.sort_by_key(|window| window.z_order);
 
     sorted
         .into_iter()
         .filter_map(|window| {
-            let left = f64::from(window.rect.left - monitor.rect.left) * scale;
-            let top = f64::from(window.rect.top - monitor.rect.top) * scale;
-            let width = (f64::from(window.width()) * scale - BORDER_SIZE).max(0.0);
-            let height = (f64::from(window.height()) * scale - BORDER_SIZE).max(0.0);
+            let left = snap(
+                f64::from(window.rect.left - monitor.rect.left) * reduction,
+                scale,
+            );
+            let top = snap(
+                f64::from(window.rect.top - monitor.rect.top) * reduction,
+                scale,
+            );
+            let right = snap(
+                left + (f64::from(window.width()) * reduction - border).max(0.0),
+                scale,
+            );
+            let bottom = snap(
+                top + (f64::from(window.height()) * reduction - border).max(0.0),
+                scale,
+            );
 
-            let cell = Rect::new(left, top, left + width, top + height);
+            let cell = Rect::new(left, top, right, bottom);
             let cell = cell.intersect(screen_rect)?.translate(screen_x, 0.0);
 
             Some(CellLayout {
                 hwnd: window.hwnd,
                 rect: cell,
+                icon: centered_icon(cell, scale),
                 is_active: window.is_active,
             })
         })
@@ -302,53 +347,59 @@ fn micro_taskbar_cells(
     screen_width: f64,
     height: f64,
     settings: &Settings,
+    scale: f64,
 ) -> (Vec<CellLayout>, Option<OverflowLayout>) {
     let mut sorted = windows.to_vec();
     sorted.sort_by_key(|window| (window.process_id, window.hwnd.0 as usize));
 
-    let icon_padding_x = f64::from(settings.icon_padding_x);
-    let icon_padding_y = f64::from(settings.icon_padding_y);
-    let tile_width = (ICON_SIZE + icon_padding_x).max(1.0);
-    let tile_height = (ICON_SIZE + icon_padding_y).max(1.0);
+    // The C# renderer positions tiles with integer pixel arithmetic. Using the
+    // same grid keeps icon columns aligned and avoids half-pixel resampling.
+    let icon_px = (ICON_SIZE * scale).round().max(1.0) as i64;
+    let padding_x_px = (f64::from(settings.icon_padding_x) * scale).round() as i64;
+    let padding_y_px = (f64::from(settings.icon_padding_y) * scale).round() as i64;
+    let tile_width_px = (icon_px + padding_x_px).max(1);
+    let tile_height_px = (icon_px + padding_y_px).max(1);
+    let screen_width_px = (screen_width * scale).round().max(1.0) as i64;
+    let height_px = (height * scale).round().max(1.0) as i64;
 
-    let icons = sorted.len();
-    let columns = (screen_width / tile_width).floor().max(1.0);
-    let rows = (height / tile_height).floor().max(1.0);
+    let icons = sorted.len() as i64;
+    let columns = (screen_width_px / tile_width_px).max(1);
+    let rows = (height_px / tile_height_px).max(1);
 
-    let mut remaining = 0usize;
-    let center_x;
-    let center_y;
+    let mut remaining = 0i64;
+    let center_x_px;
+    let center_y_px;
 
-    if icons as f64 > columns {
-        let required_rows = (icons as f64 / columns).ceil();
-        remaining = icons % columns as usize;
+    if icons > columns {
+        let required_rows = (icons + columns - 1) / columns;
+        remaining = icons % columns;
 
         if required_rows > rows {
-            remaining = icons - columns as usize * rows as usize;
-            center_y = frac(height, tile_height) / 2.0;
+            remaining = icons - columns * rows;
+            center_y_px = (height_px % tile_height_px) / 2;
         } else {
-            center_y = frac(height, tile_height * required_rows) / 2.0;
+            center_y_px = (height_px % (tile_height_px * required_rows)) / 2;
         }
 
-        center_x = frac(screen_width, tile_width) / 2.0;
+        center_x_px = (screen_width_px % tile_width_px) / 2;
     } else {
-        center_x = (screen_width - tile_width * icons as f64) / 2.0;
-        center_y = (height - tile_height) / 2.0;
+        center_x_px = (screen_width_px - tile_width_px * icons) / 2;
+        center_y_px = (height_px - tile_height_px) / 2;
     }
 
-    let root_x = screen_x + center_x;
-    let root_y = center_y;
+    let root_x_px = (screen_x * scale).round() as i64 + center_x_px;
+    let root_y_px = center_y_px;
     let mut cells = Vec::new();
     let mut overflow = None;
-    let mut col = 0i32;
-    let mut row = 0i32;
+    let mut col = 0i64;
+    let mut row = 0i64;
 
     for window in sorted {
-        let left = root_x + f64::from(col) * tile_width;
-        let top = root_y + f64::from(row) * tile_height;
-        let rect = Rect::new(left, top, left + tile_width, top + tile_height);
+        let left_px = root_x_px + col * tile_width_px;
+        let top_px = root_y_px + row * tile_height_px;
+        let rect = physical_rect(left_px, top_px, tile_width_px, tile_height_px, scale);
 
-        if remaining > 0 && col == columns as i32 - 1 && row == rows as i32 - 1 {
+        if remaining > 0 && col == columns - 1 && row == rows - 1 {
             overflow = Some(OverflowLayout {
                 rect,
                 text: format!("+{}", remaining + 1),
@@ -356,13 +407,22 @@ fn micro_taskbar_cells(
             break;
         }
 
+        let icon = physical_rect(
+            left_px + tile_width_px / 2 - icon_px / 2,
+            top_px + tile_height_px / 2 - icon_px / 2,
+            icon_px,
+            icon_px,
+            scale,
+        );
+
         cells.push(CellLayout {
             hwnd: window.hwnd,
             rect,
+            icon,
             is_active: window.is_active,
         });
 
-        if col < columns as i32 - 1 {
+        if col < columns - 1 {
             col += 1;
         } else {
             row += 1;
@@ -373,16 +433,52 @@ fn micro_taskbar_cells(
     (cells, overflow)
 }
 
-fn frac(value: f64, divisor: f64) -> f64 {
-    if divisor <= 0.0 {
-        0.0
-    } else {
-        value - (value / divisor).floor() * divisor
-    }
+/// Snaps a DIP value to the nearest whole device pixel.
+fn snap(value: f64, scale: f64) -> f64 {
+    (value * scale).round() / scale
 }
 
-fn aspect_width(monitor: &MonitorInfo, pager_height: f64) -> f64 {
-    (f64::from(monitor.width()) * pager_height / f64::from(monitor.height().max(1))).max(1.0)
+/// Width of a monitor in the pager, in whole physical pixels.
+fn screen_width_px(monitor: &MonitorInfo, height_px: i32) -> i64 {
+    (i64::from(monitor.width().max(1)) * i64::from(height_px) / i64::from(monitor.height().max(1)))
+        .max(1)
+}
+
+/// Converts a physical-pixel rectangle to DIPs.
+fn physical_rect(left: i64, top: i64, width: i64, height: i64, scale: f64) -> Rect {
+    let left = left as f64 / scale;
+    let top = top as f64 / scale;
+    Rect::new(
+        left,
+        top,
+        left + width as f64 / scale,
+        top + height as f64 / scale,
+    )
+}
+
+/// Centers the 16 DIP icon inside a cell on the device pixel grid.
+///
+/// The result is clipped to the cell so a small preview window cannot draw its
+/// icon over a neighboring cell.
+fn centered_icon(cell: Rect, scale: f64) -> Rect {
+    let icon_px = (ICON_SIZE * scale).round().max(1.0) as i64;
+    let left_px = (cell.left * scale).round() as i64;
+    let top_px = (cell.top * scale).round() as i64;
+    let width_px = (cell.width() * scale).round() as i64;
+    let height_px = (cell.height() * scale).round() as i64;
+
+    let icon_left = left_px + width_px / 2 - icon_px / 2;
+    let icon_top = top_px + height_px / 2 - icon_px / 2;
+    let left = icon_left.max(left_px);
+    let top = icon_top.max(top_px);
+    let right = (icon_left + icon_px).min(left_px + width_px);
+    let bottom = (icon_top + icon_px).min(top_px + height_px);
+
+    if right <= left || bottom <= top {
+        return Rect::default();
+    }
+
+    physical_rect(left, top, right - left, bottom - top, scale)
 }
 
 fn monitor_for_window(window: &WindowInfo, monitors: &[MonitorInfo]) -> Option<usize> {
@@ -493,18 +589,41 @@ mod tests {
     }
 
     #[test]
-    fn size_keeps_the_monitor_aspect_ratio() {
+    fn size_is_snapped_to_whole_pixels() {
         let layout = build(
             &snapshot(Vec::new(), 2),
             &[monitor()],
             &modes(ViewMode::MicroTaskbar, 2, 1),
             &settings(ViewMode::MicroTaskbar),
+            96,
         );
 
-        assert!((layout.height - 40.0).abs() < f64::EPSILON);
-        assert!((layout.desktop_width - 1920.0 / 1080.0 * 40.0).abs() < 0.001);
-        assert!((layout.width - layout.desktop_width * 2.0).abs() < 0.001);
+        // 1920 * 40 / 1080 = 71.11 px; the C# renderer truncates to 71.
+        assert_eq!(layout.height, 40.0);
+        assert_eq!(layout.desktop_width, 71.0);
+        assert_eq!(layout.width, 142.0);
+        assert_eq!(layout.border, 1.0);
         assert_eq!(layout.desktops.len(), 2);
+    }
+
+    #[test]
+    fn coordinates_land_on_the_device_pixel_grid() {
+        let mut scaled = monitor();
+        scaled.rect.right = 2560;
+        scaled.rect.bottom = 1440;
+        let layout = build(
+            &snapshot(Vec::new(), 2),
+            &[scaled],
+            &modes(ViewMode::MicroTaskbar, 2, 1),
+            &settings(ViewMode::MicroTaskbar),
+            144,
+        );
+
+        // 2560 * 60 / 1440 = 106.67 px, truncated to 106 for the desktop width.
+        assert_eq!(layout.height, 40.0);
+        assert!((layout.desktop_width - 106.0 / 1.5).abs() < 1e-9);
+        assert!((layout.border - 2.0 / 1.5).abs() < 1e-9);
+        assert!((layout.width - 2.0 * 106.0 / 1.5).abs() < 1e-9);
     }
 
     #[test]
@@ -520,6 +639,7 @@ mod tests {
             &[monitor()],
             &modes(ViewMode::Preview, 1, 1),
             &settings(ViewMode::Preview),
+            96,
         );
 
         let hit = layout
@@ -548,6 +668,7 @@ mod tests {
             &[monitor()],
             &modes(ViewMode::Preview, 1, 1),
             &settings(ViewMode::Preview),
+            96,
         );
 
         let cells = &layout.desktops[0].screens[0].cells;
@@ -574,6 +695,7 @@ mod tests {
             &[monitor()],
             &modes(ViewMode::MicroTaskbar, 1, 1),
             &settings(ViewMode::MicroTaskbar),
+            96,
         );
 
         let overflow = layout.desktops[0].screens[0]
@@ -597,6 +719,7 @@ mod tests {
             &[monitor()],
             &modes(ViewMode::MicroTaskbar, 2, 1),
             &settings(ViewMode::MicroTaskbar),
+            96,
         );
 
         let cell = &layout.desktops[1].screens[0].cells[0];
@@ -618,6 +741,7 @@ mod tests {
             &[monitor()],
             &modes,
             &settings(ViewMode::MicroTaskbar),
+            96,
         );
 
         assert_eq!(
@@ -641,6 +765,7 @@ mod tests {
             &[monitor()],
             &modes(ViewMode::Preview, 1, 1),
             &settings(ViewMode::Preview),
+            96,
         );
 
         let cell = &layout.desktops[0].screens[0].cells[0];

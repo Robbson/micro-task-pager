@@ -16,7 +16,7 @@ use windows_reactor::{
 };
 
 use super::layout::{
-    BORDER_SIZE, ICON_SIZE, OVERFLOW_FONT_SIZE, PagerLayout, ScreenLayout, desktop_border_color,
+    ICON_SIZE, OVERFLOW_FONT_SIZE, PagerLayout, Rect, ScreenLayout, desktop_border_color,
     desktop_border_style,
 };
 use super::{Message, Pager, WINDOW_TITLE};
@@ -44,7 +44,11 @@ pub(super) fn build(pager: &Pager, context: &mut ViewContext<Pager>) -> View {
             if screen_position + 1 < desktop.screens.len() {
                 children.push(KeyedView::new(
                     format!("separator:{}:{}", desktop.index, screen.index),
-                    separator(screen.x + screen.width, pager.layout.height),
+                    separator(
+                        screen.x + screen.width,
+                        pager.layout.height,
+                        pager.layout.border,
+                    ),
                 ));
             }
         }
@@ -115,6 +119,18 @@ fn build_screen(
             ViewMode::MicroTaskbar => micro_cell(pager, cell),
         };
         children.push(KeyedView::new(key, view));
+
+        if cell.icon.width() > 0.0
+            && let Some(image) = pager.icons.get(cell.hwnd.0 as usize)
+        {
+            children.push(KeyedView::new(
+                format!(
+                    "icon:{desktop_index}:{}:{}",
+                    screen.index, cell.hwnd.0 as usize
+                ),
+                icon_view(image.clone(), cell.icon),
+            ));
+        }
     }
 
     if let Some(overflow) = &screen.overflow {
@@ -137,19 +153,15 @@ fn preview_cell(pager: &Pager, cell: &super::layout::CellLayout) -> View {
         pager.settings.window_border_color
     };
 
-    let tile = Border::new()
+    Border::new()
         .width(cell.rect.width())
         .height(cell.rect.height())
         .canvas_left(cell.rect.left)
         .canvas_top(cell.rect.top)
         .background(color(fill))
         .border_brush(color(border))
-        .border_thickness(BORDER_SIZE);
-
-    match pager.icons.get(cell.hwnd.0 as usize) {
-        Some(image) => tile.content(icon_image(image.clone())),
-        None => View::from(tile),
-    }
+        .border_thickness(pager.layout.border)
+        .into()
 }
 
 fn micro_cell(pager: &Pager, cell: &super::layout::CellLayout) -> View {
@@ -168,10 +180,7 @@ fn micro_cell(pager: &Pager, cell: &super::layout::CellLayout) -> View {
             .canvas_top(cell.rect.top)
     };
 
-    match pager.icons.get(cell.hwnd.0 as usize) {
-        Some(image) => tile.content(icon_image(image.clone())),
-        None => View::from(tile),
-    }
+    tile.into()
 }
 
 fn overflow_view(overflow: &super::layout::OverflowLayout, settings: &Settings) -> View {
@@ -218,9 +227,9 @@ fn ghost_view(pager: &Pager, ghost: super::input::Ghost) -> View {
     }
 }
 
-fn separator(x: f64, height: f64) -> View {
+fn separator(x: f64, height: f64, border: f64) -> View {
     Border::new()
-        .width(BORDER_SIZE)
+        .width(border)
         .height(height)
         .canvas_left(x)
         .canvas_top(0.0)
@@ -244,26 +253,27 @@ fn desktop_border(
             .canvas_left(desktop_x)
             .canvas_top(0.0)
             .border_brush(color(border_color))
-            .border_thickness(BORDER_SIZE)
+            .border_thickness(layout.border)
             .into(),
         DesktopBorderStyle::Underline => Border::new()
             .width(layout.desktop_width)
-            .height(BORDER_SIZE)
+            .height(layout.border)
             .canvas_left(desktop_x)
-            .canvas_top(layout.height - BORDER_SIZE)
+            .canvas_top(layout.height - layout.border)
             .background(color(border_color))
             .into(),
     }
 }
 
-fn icon_image(image: windows_reactor::EncodedImage) -> Image {
+fn icon_view(image: windows_reactor::EncodedImage, rect: Rect) -> View {
     Image::new()
         .source_data(image)
-        .width(ICON_SIZE)
-        .height(ICON_SIZE)
+        .width(rect.width())
+        .height(rect.height())
         .stretch(Stretch::Uniform)
-        .horizontal_alignment(HorizontalAlignment::Center)
-        .vertical_alignment(VerticalAlignment::Center)
+        .canvas_left(rect.left)
+        .canvas_top(rect.top)
+        .into()
 }
 
 fn error_view(pager: &Pager, context: &mut ViewContext<Pager>, error: &str) -> View {

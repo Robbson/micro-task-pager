@@ -266,7 +266,13 @@ impl Pager {
         let view_modes = initial_view_modes(&settings, snapshot.desktop_count, monitors.len());
         let mut icons = IconSources::default();
         icons.refresh(&snapshot, icon_pixels(native_window::system_dpi()));
-        let layout = layout::build(&snapshot, &monitors, &view_modes, &settings);
+        let layout = layout::build(
+            &snapshot,
+            &monitors,
+            &view_modes,
+            &settings,
+            native_window::system_dpi(),
+        );
         let client_size = positive_size(&layout);
 
         crate::logging::info(format!(
@@ -395,11 +401,17 @@ impl Pager {
     }
 
     fn rebuild_layout(&mut self) {
+        let dpi = self
+            .window
+            .as_ref()
+            .map(|window| native_window::window_dpi(window.hwnd()))
+            .unwrap_or_else(native_window::system_dpi);
         self.layout = layout::build(
             &self.snapshot,
             &self.monitors,
             &self.view_modes,
             &self.settings,
+            dpi,
         );
         self.client_size = positive_size(&self.layout);
     }
