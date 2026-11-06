@@ -1,12 +1,37 @@
 # Third-Party Notices
 
-Micro Task Pager includes the third-party components listed below. Their licenses and attributions are reproduced here as required by their respective terms.
+Micro Task Pager uses the third-party components listed below. Their licenses and attributions are reproduced here as required by their respective terms.
 
-These notices apply only to the bundled third-party assemblies. Micro Task Pager's own source code is licensed under the MIT License; see [LICENSE](LICENSE).
+These notices cover the bundled C# assemblies and the dependencies of the Rust port. Micro Task Pager's own source code is licensed under the MIT License; see [LICENSE](LICENSE).
 
 Microsoft .NET Framework is a system prerequisite and is not included in this distribution.
 
 The versions below reflect the dependencies used by the current release. Update this file when the dependencies change.
+
+## Rust implementation (in development)
+
+The Rust port is not part of the current C# release package yet. Its runtime dependencies are:
+
+### windows-reactor 0.100.0
+
+- Project: <https://github.com/microsoft/windows-rs>
+- Copyright: Copyright © Microsoft Corporation
+- License: MIT OR Apache-2.0
+- Notes: WinUI 3 component framework used for the pager, About, and Settings UI.
+
+### windows / windows-core 0.62 and 0.100
+
+- Project: <https://github.com/microsoft/windows-rs>
+- Copyright: Copyright © Microsoft Corporation
+- License: MIT OR Apache-2.0
+- Notes: Win32, COM, and shell bindings. The 0.62 and 0.100 lines coexist because `windows-reactor` uses the 0.100 line.
+
+### Windows App SDK / Windows App Runtime 2.x
+
+- Project: <https://github.com/microsoft/WindowsAppSDK>
+- Copyright: Copyright © Microsoft Corporation
+- License: Microsoft Windows App SDK license terms
+- Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. The release packaging decision (framework-dependent or self-contained) is made in Phase 12.
 
 ## Runtime components
 

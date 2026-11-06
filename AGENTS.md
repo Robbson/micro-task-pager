@@ -9,11 +9,15 @@ implementations:
 
 - `src/` - the existing C#/.NET Framework 4.8 Windows Forms application. It is the behavioral
   reference and remains the shipping implementation during the migration.
-- `rust/` - the native Rust port. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before making
-  structural changes.
+- `rust/` - the Rust port. The native Win32 v1 is complete and remains runnable, but the **target UI
+  is WinUI 3 through `windows-reactor`**. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before
+  making structural changes.
 
 Both use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual desktop
 interop must be handled carefully and tested on real Windows builds.
+
+New UI work belongs in reactor components. Do not extend the native Win32 window, GDI renderer, or
+native dialog code; those modules are transitional and are removed after the WinUI cutover.
 
 ## Tooling available to agents
 
@@ -85,10 +89,24 @@ cargo test
   toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
 - `cargo run` builds and starts the pager GUI. `build.rs` compiles `app.rc` (icon and version) and
   embeds `app.manifest` through the MSVC linker flags.
-- The current GUI renders both view modes and supports click-to-switch, click-to-focus, pager dragging,
-  window dragging between desktops, Shift+wheel mode toggle, and the context menu. It also pins itself
-  to all desktops when `ShowAppInTaskbar` is enabled, re-shows when covered, and restores the last
-  active window per desktop after a switch.
+- The current `cargo run` binary is the native Win32 v1. The target implementation is a
+  `windows-reactor` (WinUI 3) component; see `rust/ARCHITECTURE.md` §3 and §13.
+- `windows-reactor` 0.100 is currently a dev-dependency used by `examples/reactor_about.rs`. Phase 8
+  promotes it to a normal dependency for the pager.
+- WinUI 3 requires the Windows App Runtime 2.x framework package. It is installed on this machine
+  (2.6.4); the reactor About example is the quickest smoke test:
+
+  ```powershell
+  cargo run --example reactor_about
+  ```
+
+- The WinUI target requires Windows 10 1809 (build 17763) or later. The virtual-desktop backend still
+  supports build 10240 and later, but the native v1 is the only implementation that can run below
+  17763. Update user-facing requirements at cutover.
+- The native v1 GUI renders both view modes and supports click-to-switch, click-to-focus, pager
+  dragging, window dragging between desktops, Shift+wheel mode toggle, and the context menu. It also
+  pins itself to all desktops when `ShowAppInTaskbar` is enabled, re-shows when covered, and restores
+  the last active window per desktop after a switch.
 - The virtual-desktop backend supports build 10240 and later. Builds below 22000 use the Win10 layout
   (covering Win10 and Win10LTSC); build 22000 and later use the Win11 layout. Older builds return
   `ApiError::NotSupported`.
@@ -153,39 +171,49 @@ Guidance:
 
 - `src/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
   `Win10`, `Win10LTSC`, `Win11`, and `Win11_`. The current selector uses `Win11_` for build 22621 and
-  later; `rust/ARCHITECTURE.md` section 6.3 flags that the real boundary still needs verification.
+  later; `rust/ARCHITECTURE.md` §7.3 flags that the real boundary still needs verification.
   Keep shared changes in sync across all four files.
 - `src/Core/` - window enumeration, types, DPI helpers.
 - `src/GUI/` - pager, desktops, settings dialog, about dialog.
 - `src/Config/` - settings model, registry storage, saved pager position.
-- `rust/ARCHITECTURE.md` - migration architecture and behavioral contract.
+- `rust/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
 - `rust/MIGRATION.md` - phase status, verification log, and open questions.
 - `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
-  model, application state, and Win32 window).
+  model, and the transitional native Win32 v1).
 - `rust/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
   restart supervisor.
 - `rust/src/windows/` - window enumeration, filtering, snapshot model, and icon cache.
-- `rust/src/render/` - layout, hit testing, `Painter` trait, and the GDI backend.
+- `rust/src/render/` - transitional native layout, hit testing, `Painter` trait, and GDI backend.
+  Removed after the WinUI cutover; pure layout/hit testing moves to `pager/`.
+- `rust/src/pager/` - target reactor pager component, view, layout, input, and icon conversion.
+- `rust/src/dialogs/` - target reactor About and Settings windows.
+- `rust/src/native_window.rs` - target HWND/pinning/topmost/opacity shim for the reactor pager.
 - `rust/app.rc`, `rust/app.manifest`, `rust/build.rs` - icon, version resource, and manifest.
 - `rust/examples/probe/` - standalone virtual-desktop COM probe.
+- `rust/examples/reactor_about.rs` - reactor About reference and regression sample.
 
 ## Notes
 
 - Virtual-desktop COM interfaces are undocumented and version-sensitive. Test interop changes on the
   supported Windows versions rather than assuming one layout.
 - The desktop API is apartment-threaded. Initialize `micro_task_pager::com::Apartment` on the thread
-  that will use it and keep all `desktop` calls on that thread.
+  that will use it and keep all `desktop` calls on that thread. In the WinUI target, that thread is the
+  reactor UI thread.
 - Windows belonging to the pager process are intentionally excluded from the pager.
-- The Rust implementation must preserve the behavior described in `rust/ARCHITECTURE.md` section 9.
-  Intentional deviations from the C# implementation are listed in section 10 there.
-- Do not add a settings window, DWM thumbnails, Direct2D, per-monitor DPI v2, or ARM64 support unless
-  the user explicitly asks for them.
-- Do not introduce a GUI framework (`winsafe`, `windows-reactor`, `egui`, etc.) for the v1 pager.
-  `winsafe` would not remove the `unsafe` needed for the undocumented virtual-desktop COM layer.
-- Keep `unsafe` confined to the FFI modules (`desktop/com`, `render/gdi`, `window`, `windows`,
-  `monitors`, and small Win32 calls in `app.rs`) and document each block. Layout, settings, and the
-  supervisor should stay safe Rust.
-- The context menu is modal (`TrackPopupMenu`). If an automated test sends `WM_RBUTTONUP`, the pager
-  stops its timers until the menu is dismissed. Use `WM_COMMAND` to test menu actions, or click
-  outside/close the menu afterward.
+- The Rust implementation must preserve the behavior described in `rust/ARCHITECTURE.md` §11.
+  Intentional deviations from the C# implementation are listed in §12 there.
+- **Use WinUI 3 through `windows-reactor` for all UI work.** Do not build a custom UI framework,
+  widget toolkit, dialog runtime, or drawing abstraction on Win32. `winsafe`, `egui`, and other GUI
+  frameworks are not used.
+- Do not add DWM thumbnails, a custom Direct2D/GDI renderer, or ARM64 support unless the user explicitly
+  asks. WinUI composition replaces the custom renderer.
+- Keep `unsafe` confined to the platform modules (`desktop/com`, `windows`, `monitors`, `foreground`,
+  `single_instance`, `logging`, `native_window`, and the COM bootstrap in `main.rs`) and document each
+  block. Components, layout, hit testing, settings, and the supervisor stay safe Rust.
+- The native v1 context menu is modal (`TrackPopupMenu`). This note applies only while the native v1
+  remains: if an automated test sends `WM_RBUTTONUP`, the pager stops its timers until the menu is
+  dismissed. Use `WM_COMMAND` to test menu actions, or click outside/close the menu afterward. The
+  WinUI target uses a reactor `Menu` instead.
 - Keep the C# and Rust settings registry values compatible while both implementations exist.
+- The Windows App Runtime 2.x framework package is a prerequisite for the WinUI target. The app must
+  either require it or bundle it self-contained; decide during Phase 12.

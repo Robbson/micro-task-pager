@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Internal
+- The Rust port now targets WinUI 3 through `windows-reactor` instead of extending the native Win32
+  UI. The native Win32 v1 remains the behavioral reference and fallback until the WinUI cutover.
+- Architecture, migration, agent, and third-party notice documentation updated for the WinUI target.
+
 ## v1.5.0
 
 ### General

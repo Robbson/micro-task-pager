@@ -1,7 +1,9 @@
 # Rust Migration – Architecture and Development Guidelines
 
-Status: working draft. The status column in section 3 and the decisions in section 15 define the
-current direction; everything else is a candidate or deferred.
+Status: active architecture. The **target UI is WinUI 3 through `windows-reactor`**. The native Win32
+v1 implementation is complete and remains in the repository as the behavioral reference and shipping
+implementation until the WinUI cutover. New UI work must follow this document, not extend the native
+Win32 UI.
 
 ## 1. Project Overview
 
@@ -20,28 +22,42 @@ The main goals of the migration are:
 - Improve memory safety and reliability.
 - Retain access to native Windows functionality.
 - Preserve existing application behavior and functionality.
-- Modernize selected UI components where it makes sense.
-- Keep the architecture modular and maintainable.
+- Keep the code compact, readable, and easy to maintain.
+- Provide a modern Windows look and feel through WinUI 3.
+- Keep runtime overhead low: no permanent render loop; refresh only when the snapshot changes.
 
-Microsoft's official `windows-rs` ecosystem should be preferred wherever practical.
+Microsoft's official `windows-rs` ecosystem is preferred wherever practical. `windows-reactor` is the
+UI framework; the raw `windows` crate is for platform interop only.
 
 The existing C# implementation is the behavioral reference. When in doubt, read the C# code rather
 than guessing what the application does.
 
-### 1.1 Non-Goals for v1
+### 1.1 Non-Goals
 
-- A settings window or any settings UI framework.
-- DWM live thumbnails or screen capture.
-- Direct2D/GPU rendering, unless a dedicated spike shows it is needed.
-- Per-monitor DPI V2.
-- ARM64.
+- DWM live thumbnails or screen capture. Window previews remain scaled geometry maps.
+- A custom GPU renderer. WinUI composition is used instead of Direct2D/GDI.
+- A home-grown UI framework or widget toolkit. `windows-reactor` is the UI abstraction.
+- ARM64. The x64 build runs under emulation on ARM64 Windows 11.
 - Desktop creation, removal, or renaming.
 - Installer, auto-update, and code signing.
+- XAML files, XAML compilation, or a XAML designer. Reactor views are Rust code.
+
+### 1.2 Architecture Priority
+
+When goals conflict, use this order:
+
+1. Compact, readable, maintainable code.
+2. Modern Windows behavior and appearance.
+3. Behavioral parity with the C# application.
+4. Dependency independence.
+
+The project accepts the Windows App SDK runtime dependency. It is small relative to the .NET
+Framework deployment it replaces and removes hundreds of lines of native UI assembly code from this
+repository.
 
 ## 2. What the Existing Application Actually Does
 
-This section describes the behavior that has to survive the migration. It is the most important
-part of this document.
+This section describes the behavior that has to survive the migration. It is the behavioral contract.
 
 ### 2.1 Main Window
 
@@ -53,10 +69,10 @@ part of this document.
   the middle mouse button or Shift + left mouse button, and can save, restore, or reset the position
   from the context menu (stored in the registry).
 - Right-click opens a context menu: Toggle View Mode, Position (Restore/Save/Default), Settings,
-  About, Exit. The Settings entry is dropped in v1 (see section 8); Exit must remain, because the
-  window has no system menu.
-- Background opacity is the window's alpha (`Form.Opacity`), i.e. a layered window.
-- The process is **system DPI aware**, not per-monitor aware (see section 7.6).
+  About, Exit. Exit must remain, because the window has no system menu.
+- Background opacity is the window's alpha (`Form.Opacity`), i.e. a layered window. The target
+  implementation uses `WS_EX_LAYERED` with `SetLayeredWindowAttributes` on the WinUI window.
+- The C# process is system DPI aware. The WinUI target is DPI aware through WinUI's DIP layout.
 
 ### 2.2 View Modes
 
@@ -72,8 +88,8 @@ desktop and monitor it:
 4. Draws a border.
 
 Windows are drawn in z-order (back to front). Clicking a miniature selects that window. There is **no
-DWM thumbnail and no screen capture** anywhere in the current implementation, and the migrated v1 must
-not introduce one (see section 3).
+DWM thumbnail and no screen capture** anywhere in the current implementation, and the migrated
+application must not introduce one.
 
 **Micro Taskbar** draws a centered grid of application icons for the desktop/monitor. It computes
 columns and rows from the available size and icon padding, and reserves the last cell for a `+N`
@@ -81,10 +97,12 @@ overflow label when not all windows fit. Active windows get a highlighted tile b
 
 ### 2.3 Settings and Persistence
 
-Settings are not a separate model today: `AppSettings` is loaded from and saved to
-`HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager` (`AppSettingsStore.cs`). The pager position is stored under
-the same key (`RegistryAccess.cs`). The settings dialog is built programmatically with WinForms; the
-project enables `UseWPF` and a few files carry unused `System.Windows.*` imports, but no WPF UI exists.
+`AppSettings` is loaded from and saved to `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`
+(`AppSettingsStore.cs`). The pager position is stored under the same key (`RegistryAccess.cs`).
+
+The C# settings dialog is a separate window built programmatically with WinForms. It has three tabs:
+Layout, Theme, and Misc. It supports per-option revert, reset per tab, live preview where safe, and
+numeric limits. The Rust target ports this behavior as a reactor component.
 
 ### 2.4 Virtual Desktop Management
 
@@ -110,6 +128,9 @@ The pager is only useful if it is always present. The current app implements thi
   window, the pager re-shows itself with `ShowWindowAsync(SW_SHOWNOACTIVATE)` and re-applies topmost.
 - A single-instance mutex so two pagers cannot fight over topmost and pinning.
 
+The WinUI target keeps this behavior. Pinning and topmost are applied through the `native_window`
+shim because `windows-reactor` does not expose a public HWND/AppWindow accessor.
+
 ### 2.6 Window Model
 
 `WindowManager.GetOpenWindows()` enumerates top-level windows and filters them:
@@ -133,154 +154,289 @@ that window, retrying once after 150 ms because the desktop switch animation can
 
 ### 2.8 Refresh Model
 
-There is no render loop. Two polling loops (200 ms primary, 500 ms secondary) build a window snapshot,
-compute a change-detection hash, and invalidate the window only when the hash changes. Desktop count
-and monitor configuration are checked on the slower loop and cause a full rebuild of all desktop and
-COM objects.
+The native implementation has no render loop. Two polling loops (200 ms primary, 500 ms secondary)
+build a window snapshot, compute a change-detection hash, and invalidate the window only when the hash
+changes. Desktop count and monitor configuration are checked on the slower loop and cause a full
+rebuild of all desktop and COM objects.
 
-## 3. Technology Stack
+The WinUI implementation keeps the same polling intervals but expresses them as reactor messages. A
+`spawn_background` task sleeps and returns a tick message; the component then refreshes on the UI
+thread and schedules the next tick. No COM work runs on the thread-pool thread.
+
+## 3. UI Architecture: WinUI 3 via windows-reactor
+
+### 3.1 The Decision
+
+`windows-reactor` is the application's UI framework. The pager, About, and Settings are reactor
+components. Native Win32 is an implementation detail used only for shell interop and the few window
+properties that reactor does not expose.
+
+Do **not** build a framework, widget toolkit, layout engine, dialog runtime, or drawing abstraction
+on top of Win32. That approach was tried for the native About dialog and produced a 650-line file for
+a static window. The equivalent reactor component is about 85 lines.
+
+The dependency trade is accepted:
+
+- `windows-reactor` is the UI dependency, not an experiment. It is a dev-dependency today and becomes
+  a normal dependency in Phase 8.
+- The Windows App SDK runtime is required (framework package) or bundled (self-contained).
+- This is still dramatically smaller than a .NET Framework deployment and removes the largest source
+  of accidental UI complexity in this repository.
+
+### 3.2 Why Reactor
+
+- Declarative views make the structure of a screen obvious.
+- WinUI provides modern controls, layout, input, focus, accessibility, and DPI handling.
+- It supports secondary windows, so About and Settings can be normal application windows without a
+  native dialog runtime.
+- It supports context menus, pointer capture, pointer positions, keyed lists, and drag operations.
+- It is code-first; no XAML files or XAML compiler are needed.
+
+### 3.3 Component Model
+
+Each screen is one `Component` with a small message type:
+
+```rust
+impl Component for Pager {
+    type Input = PagerInput;
+    type Message = Message;
+
+    fn create(input: &Self::Input, context: &ComponentContext<Self>) -> Self;
+    fn update(&mut self, message: Message, context: &ComponentContext<Self>);
+    fn view(&self, input: &Self::Input, context: &mut ViewContext<Self>) -> View;
+}
+```
+
+Rules:
+
+- `view` is declarative and contains layout, styling, and event wiring only.
+- `update` contains state transitions and side effects.
+- Platform work is called from `update` through safe modules, never from `view`.
+- One screen equals one component. Do not split a screen into a custom widget hierarchy unless the
+  split has a clear behavioral reason.
+- Use keys for desktop/window collections so identity survives refreshes.
+
+### 3.4 Window Model
+
+- The pager is the root component started by `App::run_component::<Pager>`.
+- About and Settings are secondary windows opened with `ComponentContext::open_window`.
+- Secondary windows can be opened and closed repeatedly; the one-shot `Application.Start` lifecycle
+  is not a problem because the pager application remains alive.
+- There are no native `DialogBox` / `TrackPopupMenu` calls in the target UI.
+
+### 3.5 Reactivity and Timers
+
+Reactor does not expose a timer API. Use a self-rescheduling tick:
+
+```rust
+fn schedule_refresh(&self, context: &ComponentContext<Self>) {
+    let delay = self.settings.primary_update_delay;
+    _ = context.spawn_background(move |_token| {
+        std::thread::sleep(std::time::Duration::from_millis(delay));
+        Message::Tick
+    });
+}
+```
+
+The background closure only sleeps and returns a message. The `update` handler performs COM and window
+enumeration on the UI thread, where the STA lives.
+
+### 3.6 Native Window Shim
+
+`windows-reactor` 0.100 does not expose a public HWND or AppWindow accessor. A small
+`native_window.rs` module owns the gap:
+
+- Find the pager HWND by process ID and window title.
+- Apply `WS_POPUP`, remove caption/thick-frame/system-menu styles, and set `WS_EX_TOOLWINDOW` or
+  `WS_EX_APPWINDOW` according to `ShowAppInTaskbar`.
+- Apply `WS_EX_LAYERED` and `SetLayeredWindowAttributes` for window opacity.
+- Set the initial/saved position.
+- Reapply topmost on the tick. WinUI can reapply its own styles after a style change, so topmost is
+  treated as a state to maintain, not a one-time setting.
+- Pass the HWND to the virtual-desktop pinning API.
+
+This shim is deliberately small. If it starts growing into a UI abstraction, stop and move the
+missing capability upstream to `windows-reactor` instead.
+
+Validated on build 26200: a reactor window can be made borderless, tool-window, layered with alpha,
+and topmost. The title bar disappears and the desktop shows through the alpha. WinUI reset topmost
+once during the probe; reasserting it works.
+
+### 3.7 Threading with Reactor
+
+- Reactor owns the UI thread and runs the WinUI application loop.
+- Initialize the COM apartment on that same thread before starting the reactor app.
+- All virtual-desktop COM and window enumeration calls stay on that thread.
+- Background reactor tasks only sleep, perform pure work, or return a message. They never call shell
+  COM or touch application state.
+- `SetWinEventHook` callbacks still deliver to the UI thread. Store only the handle and let the next
+  tick do the COM lookup.
+
+### 3.8 Readability Rules
+
+These rules exist to keep the application understandable without building a custom framework:
+
+- A screen component should read top-to-bottom: state, messages, `update`, then `view`.
+- Keep `view` declarative. If it needs a loop, loop over model data, not over Win32 calls.
+- Put pure geometry in `layout.rs` and pure input transitions in `input.rs`.
+- Split a module before it exceeds a few hundred lines. About should be roughly 80-100 lines; a pager
+  screen with its view, layout, and input split should stay well below the native implementation.
+- Prefer named structs (`Rect`, `Cell`, `WindowTile`) over tuples and parallel arrays.
+- Do not create a generic abstraction for one call site. Introduce a helper only when it removes real
+  repetition without hiding control flow.
+- Delete the native path as soon as the reactor path passes its checklist. Dual UI implementations are
+  the opposite of maintainable.
+
+## 4. Technology Stack
 
 | Area | Technology | Status |
 |---|---|---|
 | Programming language | Rust (stable, MSVC toolchain) | decided |
-| Windows API bindings | `windows` / `windows-rs` | decided |
-| Low-level Windows bindings | `windows-sys` only where necessary | decided |
-| COM interoperability | `windows-core` | decided |
-| Main window | Native Win32 (`RegisterClassExW`, `CreateWindowExW`, message loop) | decided |
-| Main rendering (v1) | GDI into a double-buffered memory DC behind a `Painter` trait | decided |
-| Main rendering (later) | Direct2D via `windows-canvas` | deferred, spike required |
+| UI framework | `windows-reactor` 0.100 (WinUI 3) | decided |
+| Native Windows bindings | `windows` 0.62 / `windows-core` | decided |
+| COM interoperability | `windows-core` and hand-written shell vtables | decided |
+| Main window | Reactor root component + `native_window` shim | decided |
+| Rendering | WinUI composition (`Canvas`, `Grid`, `Border`, `Image`, `TextBlock`) | decided |
 | Window previews | Scaled window rectangles + shell icons (no DWM) | decided |
-| Live thumbnails | DWM Thumbnail API | deferred, not planned for v1 |
-| Application icons | `WM_GETICON` / `GCL_HICON` / `LoadIcon` | decided |
-| Settings UI | none in v1; `winsafe` / `windows-reactor` are not used | not planned |
+| Application icons | Shell APIs converted to reactor image sources | decided |
+| Context menu | Reactor `Menu` | decided |
+| Settings UI | Reactor secondary window | decided |
+| About | Reactor secondary window | decided |
 | Settings storage | Windows registry, C#-compatible | decided |
-| Windows version detection | `windows-version` crate or `RtlGetVersion` | candidate |
+| Runtime | Windows App Runtime 2.x | decided |
+| Minimum OS | Windows 10 1809 (build 17763) | decided |
 | Logging | In-house file logger, daily file, 14-day retention | decided |
 | Build system | Cargo | decided |
-| Testing | `cargo test` for pure logic, `examples/probe` for COM | decided |
-| About dialog | Native modal Win32 dialog with standard controls and a WIC-decoded PNG | decided |
-| WinUI evaluation | `examples/reactor_about.rs`, dev-dependency only | experimental |
+| Testing | `cargo test`, reactor component tests, `examples/probe` | decided |
+| GDI / `Painter` / Direct2D | Removed after the WinUI cutover | deprecated |
+| Native Win32 dialogs | Removed after the WinUI cutover | deprecated |
 
-Do not add a third-party GUI framework to the pager. In v1 the application needs exactly one window,
-one context menu, and GDI drawing; `winsafe`, `windows-reactor`, `egui`, and similar crates are
-unnecessary. The isolated `examples/reactor_about.rs` spike is the only exception: it is a
-`dev-dependency`, is not linked into the release binary, and exists to compare the WinUI 3 look and
-startup cost against the native dialog.
+Do not add another GUI framework (`winsafe`, `egui`, another WinUI wrapper) alongside reactor. Do not
+extend the native Win32 UI.
 
-## 4. Repository Structure
+## 5. Repository Structure
 
 The Rust implementation lives in `rust/` inside the existing Git repository. The C# implementation
 remains available during migration and is the reference for behavior.
 
-Start with a single Cargo crate. Split it into multiple crates only when there is a concrete
-architectural benefit (for example, if the COM probe becomes reusable). Suggested module layout:
+The target module layout is:
 
 ```
 rust/
   Cargo.toml
   Cargo.lock                    # committed: this is a binary crate
-  rust-toolchain.toml           # toolchain channel + rustfmt/clippy
-  MIGRATION.md                  # phase status, verification log, open questions
+  rust-toolchain.toml
+  ARCHITECTURE.md
+  MIGRATION.md
   src/
-    main.rs                     # process setup, single instance, message loop
-    app.rs                      # application state and state transitions
-    com.rs                      # COM apartment guard
-    single_instance.rs          # mutex acquisition and second-instance handling
-    foreground.rs               # foreground hook and last-active-window tracking
-    window.rs                   # Win32 window, wndproc, context menu
-    input.rs                    # hit testing, drag handling
-    settings.rs                 # model, defaults, registry import/export
+    main.rs                     # logging, COM apartment, single instance, reactor bootstrap
+    lib.rs
+    pager/
+      mod.rs                     # Pager component: state, messages, update
+      view.rs                    # declarative Canvas/Grid view
+      layout.rs                  # pure layout in DIPs, unit-tested
+      input.rs                   # pure hit testing and drag state
+      icons.rs                   # HICON -> reactor image source
+    dialogs/
+      about.rs                   # reactor About window
+      settings.rs                # reactor Settings window
+    native_window.rs             # HWND lookup and pager-specific window styles
+    settings.rs                  # model, defaults, registry import/export
     logging.rs
+    com.rs
+    single_instance.rs
+    foreground.rs
     desktop/
-      mod.rs                    # safe virtual-desktop API and restart supervisor
-      com/mod.rs                # layout selection by build number
-      com/core.rs               # shared interfaces and generic backend
+      mod.rs
+      com/mod.rs
+      com/core.rs
       com/win10.rs
       com/win11.rs
     windows/
-      mod.rs                    # window enumeration and snapshot
+      mod.rs
       icons.rs
-    render/
-      mod.rs                    # Painter trait and layout model
-      gdi.rs
+    monitors.rs
   examples/
-    probe/                      # standalone COM verification binary
+    probe/                       # standalone COM verification binary
+    reactor_about.rs             # reactor About reference / regression sample
 ```
 
-## 5. Windows API Integration
+The native v1 modules `window.rs`, `render/`, and `about.rs` are transitional. They are removed after
+the reactor pager reaches parity.
 
-### 5.1 windows-rs
+## 6. Native Windows Integration
 
-Use Microsoft's official `windows` crate as the primary binding. Enable only the features that are
-used, for example:
+### 6.1 Crates and Features
 
-- `Win32_Foundation`
-- `Win32_Security` (required by `CreateMutexW`)
-- `Win32_System_Com`, `Win32_System_LibraryLoader`, `Win32_System_Threading`
-- `Win32_UI_WindowsAndMessaging`
-- `Win32_UI_Shell`
-- `Win32_UI_Accessibility` (`SetWinEventHook`, `UnhookWinEvent`)
-- `Win32_Graphics_Gdi`, `Win32_Graphics_Dwm` (only if DWM is used later)
-- `Win32_Storage_FileSystem` (logging)
+Use the official crates:
 
-Use `windows-sys` only when a lower-level binding is genuinely preferable. Keep `unsafe` localized
-behind safe Rust interfaces. Use the focused `windows-registry` crate instead of raw
-`Win32_System_Registry` bindings.
+- `windows = "0.62"` for Win32, COM, shell, and logging APIs.
+- `windows-core` for COM traits and error types.
+- `windows-reactor = "0.100"` for UI.
+- `windows-registry = "0.100"` and `windows-version = "0.100"` where applicable.
 
-Pin Microsoft crate versions explicitly in `Cargo.toml` and verify APIs against docs.rs or the crate
-source. Do not rely on remembered signatures. The crates do not share one version line:
+`windows-reactor` uses the 0.100 line of `windows-core`; the application's raw `windows` bindings use
+0.62. The two can coexist. Keep the versions pinned and verify APIs against the actual crate source.
 
-- `windows = "0.62"` (the umbrella Win32/WinRT crate)
-- `windows-registry = "0.100"`, `windows-version = "0.100"`, and `windows-canvas = "0.100"` (the
-  focused native-app crates)
+Enable only the `windows` features that are used. After the cutover, the UI-related features shrink to
+the platform modules: COM, shell, threading, library loader, accessibility, file system, registry,
+monitors, and the small `native_window` surface.
 
-### 5.2 Win32 Main Window
+### 6.2 Native Surface
 
-The main window remains a classic Win32 window. Required messages:
+Native Win32 code is limited to:
 
-- `WM_CREATE`, `WM_DESTROY`, `WM_CLOSE`
-- `WM_PAINT`, `WM_SIZE`, `WM_DPICHANGED` (even if only logged in v1)
-- `WM_TIMER` for the primary/secondary refresh ticks
-- `WM_APP + n` for state changes posted from hooks or other threads
-- mouse messages (`WM_LBUTTONDOWN`, `WM_LBUTTONUP`, `WM_MOUSEMOVE`, `WM_MOUSEWHEEL`,
-  `WM_MBUTTONDOWN`, `WM_RBUTTONUP`) and `TrackPopupMenu` for the context menu
+- `desktop/` - undocumented virtual-desktop COM.
+- `windows/` - window enumeration, filtering, icons, snapshot.
+- `foreground.rs` - WinEvent hook.
+- `single_instance.rs` - named mutex.
+- `monitors.rs` - monitor geometry and work areas.
+- `logging.rs` - file logging and file-system calls.
+- `native_window.rs` - pager window styles, topmost, opacity, position, HWND lookup.
+- `main.rs` - process bootstrap and COM apartment.
 
-The window procedure stays small. It forwards to an `App`/`WindowState` object; it does not contain
-window enumeration, COM calls, or drawing logic.
+UI components must not contain raw handles, message constants, or `unsafe` blocks.
 
-### 5.3 Threading and Message Model
+### 6.3 Threading and Message Model
 
-- Initialize COM once on the UI thread with `CoInitializeEx(COINIT_APARTMENTTHREADED)`.
-- **All** shell and virtual-desktop COM calls happen on that thread. The C# app achieves this by
-  marshaling background loops back with `Invoke`; in Rust, remove the background threads entirely.
-- Use `WM_TIMER` ticks to enumerate windows, query desktops, and invalidate. Optionally use a second
-  timer for the slower watchdog. Do not use a permanent render loop.
+- Reactor owns the UI thread and the WinUI message loop.
+- Initialize the COM apartment on the UI thread before `App::run_component`.
+- All virtual-desktop COM calls happen on that thread.
+- Use the self-rescheduling reactor tick instead of `WM_TIMER`.
 - `SetWinEventHook` with `WINEVENT_OUTOFCONTEXT` delivers callbacks on the installing thread's message
-  loop, which is the UI thread. Keep hook callbacks free of blocking COM calls where possible; store
-  the handle and let the next tick use it.
+  loop, which is the UI thread. Keep the callback free of blocking COM calls.
 - Do not block the UI thread with `SendMessage` to other processes. Use `SendMessageTimeoutW` with a
   short timeout for `WM_GETICON`.
-- If a helper thread is ever added, communicate with the UI thread via `PostMessage(WM_APP + n)` and
-  a small queue. Never touch application state or COM interfaces from two threads.
+- Never touch application state or COM interfaces from two threads.
 
-### 5.4 FFI Safety Rules
+### 6.4 FFI Safety Rules
 
-- No `unwrap`/`expect`/panics inside `extern "system"` callbacks (wndproc, WinEvent hook). A panic must
-  not unwind across the FFI boundary; if a boundary can panic, wrap it in `catch_unwind`.
+- No `unwrap`/`expect`/panics inside `extern "system"` callbacks. A panic must not unwind across the
+  FFI boundary; wrap a boundary that can panic in `catch_unwind`.
 - Every Win32 handle and COM pointer gets an RAII wrapper (`HWND`, `HICON`, `HBITMAP`, `HBRUSH`,
   `HFONT`, `HMENU`, mutex handle, `IUnknown`-derived pointer).
 - Check `HRESULT` explicitly. Do not convert a failed COM call into a default value.
 - Document the safety contract of every `unsafe` block: which pointer must be valid, which thread it
   belongs to, and what owns it.
+- Keep `unsafe` out of reactor components, layout, hit testing, settings, and the supervisor.
 
-## 6. Virtual Desktop Subsystem
+### 6.5 WinUI Bootstrap and Packaging
 
-### 6.1 Structure: One Safe API, Four Thin Layout Modules
+- `windows-reactor` bootstraps the Windows App Runtime 2.x framework package.
+- The target minimum OS is Windows 10 1809 (build 17763), the minimum supported by the runtime.
+- Keep the application manifest `asInvoker`. WinUI 3 provides DPI-aware layout; verify the final
+  DPI-awareness manifest entry during Phase 12 instead of relying on the native v1 system-DPI setting.
+- Decide between framework-dependent (small app, runtime installed) and self-contained (larger app)
+  during the packaging phase. The architecture supports either.
+
+## 7. Virtual Desktop Subsystem
+
+### 7.1 Structure: One Safe API, Two Layout Modules
 
 Do not port the C# file structure. The four C# files duplicate roughly 300 lines of wrapper logic each.
 Use instead:
 
-- One safe trait, for example:
+- One safe trait:
 
   ```rust
   pub trait VirtualDesktopApi {
@@ -306,7 +462,7 @@ Use instead:
 Use the generated `windows::Win32::UI::Shell::IVirtualDesktopManager` for the documented interface.
 Hand-define only the internal interfaces.
 
-### 6.2 COM Interop Notes
+### 7.2 COM Interop Notes
 
 These details are easy to get wrong and are not visible in the C# declarations:
 
@@ -336,13 +492,17 @@ These details are easy to get wrong and are not visible in the C# declarations:
 - Prefer `GetDesktopIndex` by comparing desktop GUIDs over `FindDesktop`, which has produced
   `0x800706F4` in practice.
 
-### 6.3 Version Selection
+### 7.3 Version Selection
 
 | Build | Rust layout | Notes |
 |---|---|---|
-| `< 10240` | none | Not supported |
+| `< 10240` | none | Not supported by the virtual-desktop backend |
 | `10240 – 21999` | Win10 | Covers Win10 and Win10LTSC; manager `F31574D6`, desktop `FF72FFDD` |
 | `>= 22000` | Win11 | Covers 21H2 and later; manager `53F5CA0B`, desktop `3F07F4BE` |
+
+The virtual-desktop backend still supports build 10240 and later. The **application** requires Windows
+10 1809 (17763) or later because of the Windows App Runtime. Builds below 17763 cannot run the WinUI
+target; document this in the user-facing requirements at cutover.
 
 The C# selector distinguishes `Win10LTSC`, `Win10`, `Win11`, and `Win11_`. The Rust port uses two
 layouts because the methods it calls share the same GUIDs and vtable prefix inside each pair. The
@@ -353,7 +513,7 @@ here.
 Version detection should use `windows-version` or `RtlGetVersion`, not registry parsing. Keep the
 build-number thresholds in one place.
 
-### 6.4 Failure Handling
+### 7.4 Failure Handling
 
 The C# app catches an exception during painting and recreates both COM singletons; window enumeration
 feeds a per-handle failure counter. Model this explicitly:
@@ -361,126 +521,132 @@ feeds a per-handle failure counter. Model this explicitly:
 - `ApiError` with variants for `NotSupported`, `Windows(Error)`, `UnexpectedNull`,
   `DesktopOutOfRange`, `DesktopNotFound`, `WindowNotFound`, and `InvalidString`.
 - A supervisor that drops and recreates the COM objects on `RPC_E_*`, `E_FAIL`, or known shell
-  failures. Recreating the singleton is behavior, not an implementation detail. The current
-  `SupervisedDesktop` retries once per call and logs the failure.
+  failures. Recreating the singleton is behavior, not an implementation detail. `SupervisedDesktop`
+  retries once per call and logs the failure.
 - Keep the "blacklist a window after 10 desktop-index failures" rule; it prevents log spam from snapped
   window helper windows.
 - Unsupported Windows builds fail with a clear, user-visible message, not a panic.
 
-## 7. Rendering
+## 8. Pager UI
 
-### 7.1 v1: GDI
+### 8.1 View Model
 
-The current output is a few dozen filled rectangles, application icons, one-pixel borders, and one text
-string per overflow tile. A GDI renderer into an off-screen memory DC (`CreateCompatibleDC` +
-`CreateCompatibleBitmap`), blitted once per `WM_PAINT` with `BitBlt`, is a 1:1 behavioral match,
-double-buffered, and has no device-loss story.
+The pager component consumes the immutable snapshot and produces a `View`. The view model is pure data:
 
-Use this for v1, and keep rendering independent of application logic:
+- Desktop columns.
+- One screen per monitor per desktop.
+- Window rectangles, icons, active state, and z-order.
+- Per-screen view mode.
+- Hover/drag state.
 
-- The renderer receives an immutable `ViewModel` (desktops, screens, window rectangles, icons, colors,
-  active state) and produces drawing calls. It does not call COM, enumerate windows, or read settings.
-- No COM calls and no window enumeration inside `WM_PAINT`.
-- Reuse GDI objects (pens, brushes, fonts) for the process lifetime; do not create them per frame.
-- Cache icon bitmaps per `(hwnd, hicon)` and prune them in the snapshot step.
+Keep the layout and hit-testing code separate from the view. They operate in DIPs and are unit-tested
+without WinUI.
 
-### 7.2 Painter Abstraction
+### 8.2 Preview Mode
 
-Define a small trait so a different backend can be added without touching layout code:
+Preview mode is a `Canvas` with one child per visible window. Each child is a small `Grid` or
+`Border` composition containing:
 
-```rust
-pub trait Painter {
-    fn fill_rect(&mut self, rect: Rect, color: Color);
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: i32);
-    fn draw_icon(&mut self, icon: &Icon, center: Point);
-    fn draw_text_centered(&mut self, text: &str, rect: Rect, color: Color);
-    fn push_clip(&mut self, rect: Rect);
-    fn pop_clip(&mut self);
-}
-```
+- A `Border` for the window rectangle with the configured background and border colors.
+- An `Image` for the centered application icon.
+- A highlight for the active window.
+- Children ordered back-to-front to match z-order.
 
-`GdiPainter` is the only backend in v1. The trait also makes layout testable without a window.
+Do not use `Border` layout to reproduce the scaled geometry; compute the rectangles in
+`pager/layout.rs` and position them with `Canvas::left`/`Canvas::top`.
 
-### 7.3 Direct2D: Deferred
+### 8.3 Micro Taskbar Mode
 
-`windows-canvas` is real and usable (0.100.0, September 2026) but very young: two releases, a high MSRV,
-and a small user base. More importantly, it does not solve the hard part of this application:
+Micro Taskbar is a `Grid` or `Canvas` of icon tiles:
 
-- The window uses per-window alpha (`BackgroundOpacity`). That means a layered window. Direct2D on a
-  plain HWND swap chain does not give per-pixel alpha for free; it requires a composition surface or
-  `UpdateLayeredWindow`.
-- The workload does not need GPU acceleration. Repainting happens on state changes, not continuously.
+- Compute columns, rows, icon size, and the `+N` overflow tile in `pager/layout.rs`.
+- Render each tile as a `Border` containing an `Image` and optional text.
+- Highlight the active window tile.
 
-Therefore: do not make Phase 4 depend on Direct2D. If it is added later, spike these first:
+### 8.4 Input and Interaction
 
-1. Hosting a Direct2D surface in a plain Win32 HWND (render target or swap chain).
-2. Layered-window alpha.
-3. `HICON`/`HBITMAP` to a Direct2D bitmap (WIC).
-4. Text rendering for the `+N` label.
-5. System DPI mapping.
-6. Device-loss recovery.
+- Use reactor pointer events for press/move/release and capture.
+- Left-click on another desktop switches to it.
+- Left-click on the active desktop focuses the clicked window.
+- Middle-drag or Shift+left-drag moves the pager; use screen coordinates and `native_window` to move
+  the HWND, matching the C# behavior and avoiding client-coordinate feedback loops.
+- Drag a miniature/icon to another desktop to move the window. The drag ghost is a reactor element in a
+  `Canvas`; the drop uses the existing `move_window_to` API.
+- Shift+wheel toggles the view mode under the cursor and persists it.
+- Right-click opens a reactor `Menu` with Toggle View Mode, Position, Settings, About, and Exit.
+- While the menu is open, suspend topmost reassertion so the pager does not cover its own popup.
 
-Only then replace `GdiPainter` with `D2DPainter` behind the same trait.
+### 8.5 Refresh and Identity
 
-### 7.4 GDI to Direct2D Mapping (reference only)
+- Use the tick pattern from section 3.5.
+- Recompute the snapshot and layout only when the primary tick fires.
+- Use the change-detection hash to skip republishing identical views.
+- Use keys for desktop and window collections so reactor can preserve element identity.
 
-| GDI operation | Direct2D equivalent |
-|---|---|
-| `FillRect` | `FillRectangle` |
-| `FrameRect` / `Rectangle` | `DrawRectangle` |
-| `BitBlt` (memory DC to window) | `DrawBitmap` / present |
-| `CreateSolidBrush` | `CreateSolidColorBrush` |
-| `StretchBlt` | `DrawBitmap` with destination rectangle |
-| `DrawText` | `DrawTextLayout` |
+### 8.6 Icons
 
-### 7.5 Opacity and Layering
+The icon cache currently returns `HICON`. Reactor `Image` needs image data:
 
-`BackgroundOpacity` is applied to the whole window, including icons and text. In Win32, implement it
-with `WS_EX_LAYERED` and `SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)`. Do not implement
-opacity by pre-multiplying every color; that produces different results and breaks icon rendering.
+- Convert each cached icon to a PNG or bitmap source once, then cache the converted source.
+- Keep the `HICON` fallback chain and cache key `(hwnd, hicon)`.
+- Prune converted sources when the window disappears.
+- Do not decode icons per frame or per view publication.
 
-While the context menu is open, temporarily drop `HWND_TOPMOST` and suppress the timer-driven
-topmost reassertion. Otherwise the pager covers its own popup menu. Restore topmost after
-`TrackPopupMenu` returns.
+### 8.7 Opacity and Topmost
 
-### 7.6 DPI
+- Apply `BackgroundOpacity` through `WS_EX_LAYERED` and
+  `SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA)` in `native_window`.
+- Do not simulate opacity by pre-multiplying every color; it breaks icons and text.
+- Reapply `HWND_TOPMOST` on the secondary tick. WinUI may reset window styles after style changes.
+- The covered-window watchdog remains: `WindowFromPoint`, `ShowWindowAsync(SW_SHOWNOACTIVATE)`, then
+  reapply topmost.
 
-The current process is **system DPI aware** (`app.manifest`), and all layout is computed in physical
-pixels from a single scale factor (`GetDpiForSystem` / 96). Keep this for v1:
+### 8.8 DPI and Multi-Monitor
 
-- Read the system DPI once at startup; do not react to `WM_DPICHANGED` beyond logging.
-- Keep the pager height, paddings, borders, icon size, and font size as logical values multiplied by
-  the scale factor.
-- Document that per-monitor V2 support is out of scope for v1. It affects every coordinate, hit test,
-  and icon size and is a separate project.
+- Reactor and WinUI use DIPs; remove the manual `scale()` helpers from UI layout.
+- WinUI handles per-monitor DPI. This is an intentional improvement over the C# system-DPI behavior.
+- Keep the monitor enumeration used to compute pager width and preview rectangles.
+- Keep the C# limitation for vertically arranged monitors until the layout model is redesigned.
 
-### 7.7 Multi-Monitor Layout
+## 9. Dialogs
 
-Desktops are columns. Within a desktop, one renderer per physical monitor, ordered left-to-right and
-then top-to-bottom. The current app has a known limitation with vertically arranged monitors; v1 keeps
-the same limitation and documents it rather than redesigning the layout model.
+### 9.1 About
 
-## 8. Settings and Persistence
+The About dialog is a reactor secondary window:
 
-### 8.1 No Settings Window in v1
+- 600 x 480 DIP client area.
+- Logo image from the embedded `logo.png`.
+- Version, author, acknowledgments, and a Close button.
+- Title "About Micro Task Pager".
+- Light theme, white background, centered content.
 
-The settings dialog is out of scope. There is no decision to make about `winsafe` versus
-`windows-reactor` versus WinUI 3, because none of them is used. Once the dialog is gone, the C#
-project no longer needs `UseWPF` or the unused `System.Windows.*` imports; that is a worthwhile
-cleanup on the reference implementation as well.
+`examples/reactor_about.rs` is the reference implementation. Promote it into
+`src/dialogs/about.rs` during Phase 10 and delete the native `src/about.rs`.
 
-"DEFAULTS only" does not mean "no configuration". The application still needs:
+### 9.2 Settings
 
-- A `Settings` struct with the current defaults.
-- A registry reader so existing users keep their pager height, colors, and per-screen view modes, and
-  so the C# and Rust builds agree during migration.
-- Registry writes for the two behaviors that already persist without the dialog: pager position
-  (Save) and the per-screen view-mode toggle.
+The Settings dialog is a reactor secondary window:
 
-The context menu remains: Toggle View Mode, Position (Restore/Save/Default), About, Exit. It must not
-contain a Settings entry until a settings window exists.
+- Sections corresponding to the C# tabs: Layout, Theme, Misc.
+- A working copy of `Settings`; edits do not touch the live settings until Apply/OK.
+- Apply, OK, Cancel, and reset-per-section.
+- Per-option revert where the C# dialog supports it.
+- Live preview for safe changes (opacity, colors, height, view mode) by publishing a preview settings
+  object to the pager component.
+- Numeric clamps and validation before writing.
+- Registry write through the existing `settings.rs` model; keep C#-compatible value names and types.
 
-### 8.2 Registry Compatibility
+Preferred WinUI controls: `NumberBox`, `Slider`, `ColorPicker` or color fields, `ToggleSwitch`,
+`ComboBox`, `Button`, and `TabView` or a sectioned `NavigationView`. Do not recreate WinForms controls
+or build custom widgets.
+
+## 10. Settings and Persistence
+
+### 10.1 Settings UI
+
+The settings dialog is part of the WinUI target. It is no longer out of scope.
+
+### 10.2 Registry Compatibility
 
 Path: `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`. Keep the existing value names and types during the
 migration:
@@ -508,7 +674,7 @@ migration:
 Read tolerantly: accept both DWORD and string where a value may have been written by a different
 version. Write the same types C# writes, so both implementations can share the key.
 
-### 8.3 Settings Model
+### 10.3 Settings Model
 
 Keep the model independent of any UI:
 
@@ -517,8 +683,10 @@ Keep the model independent of any UI:
   (`desktop + screen`) collides when a desktop spans multiple monitors; fix this in the model and
   translate only when importing/exporting the flat registry binary.
 - Defaults implemented as `Default`, not scattered constants.
+- Settings changes are values, not UI controls. The pager component receives settings and rebuilds the
+  view; it never reads registry values during layout.
 
-## 9. Behavioral Parity Checklist
+## 11. Behavioral Parity Checklist
 
 Use this as the acceptance list. Every item should be verified against the C# build.
 
@@ -532,7 +700,7 @@ Use this as the acceptance list. Every item should be verified against the C# bu
 - [ ] Left-click on another desktop switches to it.
 - [ ] Left-click on the active desktop focuses the clicked window.
 - [ ] Drag a miniature/icon onto another desktop moves the window there.
-- [ ] Right-click menu with Toggle View Mode, Position, About, Exit.
+- [ ] Right-click menu with Toggle View Mode, Position, Settings, About, Exit.
 - [ ] Mouse wheel (with Shift) toggles the view mode under the cursor and persists it.
 - [ ] Window enumeration filters (shell window, invisible, empty title, CoreWindow, own process,
       unresolvable desktop) with failure blacklist.
@@ -545,15 +713,23 @@ Use this as the acceptance list. Every item should be verified against the C# bu
 - [ ] Continue running when a COM call fails; recreate the COM objects.
 - [ ] Registry import/export compatible with the C# app.
 - [ ] Logs in `%LOCALAPPDATA%\MicroTaskPager\logs`, rotated, retained for 14 days.
-- [ ] System DPI scaling of height, padding, borders, icons, and fonts.
+- [ ] About content matches the C# dialog (logo, version, author, acknowledgments, Close).
+- [ ] Settings exposes the same options, limits, revert, and reset-per-section behavior as the C# dialog.
+- [ ] DPI scaling is correct on high-DPI and mixed-DPI monitors.
+- [ ] WinUI look and feel: themed controls, focus visuals, keyboard navigation, accessibility names.
 
-## 10. Known Deviations from the C# Implementation
+## 12. Known Deviations from the C# Implementation
 
-These are intentional fixes or simplifications. Document any additional deviation as it is made.
+These are intentional fixes, simplifications, or platform changes. Document any additional deviation
+as it is made.
 
-- Use one uniform scale factor per monitor for preview rectangles. The C# code computes width and height
-  percentages separately, but both reduce to `pagerHeight / monitorHeight`, so the result is
-  identical.
+- Replace the native WinForms UI with WinUI 3; the look and control behavior differ by design.
+- Use WinUI DIPs and per-monitor DPI instead of the C# system-DPI scaling.
+- Require Windows 10 1809 (17763) or later because of the Windows App Runtime.
+- Ship with a Windows App Runtime dependency (framework package or self-contained).
+- Use one uniform scale factor per monitor for preview rectangles, with the monitor rectangle converted
+  to the same DIP space. The C# code computes width and height percentages separately, but both reduce
+  to `pagerHeight / monitorHeight`, so the result is identical.
 - Use `(desktop, screen)` view-mode indexing instead of the flat, colliding index.
 - Hit-test using each renderer's actual mode, not the global default mode.
 - Do not apply `PointToClient` to coordinates that are already client-space.
@@ -564,149 +740,161 @@ These are intentional fixes or simplifications. Document any additional deviatio
   never reaches the blacklist.
 - Derive z-order from `EnumWindows` order and normalize it after enumeration, instead of walking
   `GetWindow(GW_HWNDNEXT)` for every window. The relative order is the same.
-- Do not call COM during `WM_PAINT`; paint from the cached snapshot.
-- Clip each monitor's drawing to its pager rectangle, so a window that extends across monitors cannot
+- No COM during painting; the view is built from the cached snapshot.
+- Clip each monitor's preview to its pager rectangle, so a window that extends across monitors cannot
   paint into the neighboring screen.
-- Pre-blend the desktop separator color because GDI `FillRect` has no alpha channel.
 - Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
-- Replace OLE drag-and-drop with an internal mouse-capture drag: the payload is only a window handle
-  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. Show a
-  semi-transparent icon drag image with the common-controls image-list drag API and keep the normal
-  arrow cursor; the four-way move cursor is reserved for dragging the pager itself.
-- Keep the vertical-monitor layout limitation for v1.
+- Replace OLE drag-and-drop with an internal pointer-capture drag: the payload is only a window handle
+  and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. The drag ghost is a
+  reactor element.
+- Keep the vertical-monitor layout limitation.
+- Keep global window opacity through the layered-window shim; do not approximate it by pre-multiplying
+  colors.
+- Use a reactor `Menu` instead of `TrackPopupMenu`; topmost is suspended while the menu is open.
 
-## 11. Migration Strategy
+## 13. Migration Strategy
 
-Do not rewrite the entire application at once. Use an incremental migration.
+The native Win32 v1 completed Phases 1-6. The UI migration to WinUI 3 is a new phase sequence. Do not
+rewrite everything at once, and keep the native v1 runnable until the reactor pager passes the
+checklist.
 
-### Phase 1: Scaffold
+### Phase 7: Architecture and Documentation
 
-- Initialize a Cargo crate in `rust/`, set the toolchain channel, add `.gitignore` for `target/`.
-- Add the application manifest, icon, version resource, single-instance mutex.
-- Implement logging and the settings model, defaults, and registry import.
-- Configure the minimal `windows` features.
+- Update `ARCHITECTURE.md`, `MIGRATION.md`, `AGENTS.md`, and dependency notices for the WinUI direction.
+- Record the window-shim and layered-alpha probe results.
+- No application behavior changes.
 
-### Phase 2: Virtual Desktop Subsystem
+### Phase 8: Pager Shell
 
-Prioritize the technically most challenging component.
+- Add `windows-reactor` as a normal dependency.
+- Create `pager/` component, `native_window.rs`, and a reactor root window.
+- Apply borderless/tool-window/layered/topmost styles and the saved position.
+- Find the HWND and pin to all desktops.
+- Add the self-rescheduling tick and refresh the snapshot.
+- Acceptance: pinned, topmost, opacity works, no title bar, clean shutdown, no COM off the UI thread.
 
-- Port the internal COM interfaces and the `QueryService` wiring.
-- Build the `examples/probe` binary: count, current, index of window, switch, move, pin.
-- Verify each supported Windows build and record the matrix.
-- Implement the supervisor and error model.
-- Do not build the UI before this works reliably.
+### Phase 9: Pager Content
 
-### Phase 3: Window Model
+- Port layout and hit testing to DIPs.
+- Preview and Micro Taskbar views with desktop/window cells.
+- Click-to-switch/focus, pager drag, window drag, Shift+wheel, context menu.
+- Icon conversion and keyed lists.
+- Acceptance: checklist items for the pager UI.
 
-- Window enumeration and all filters.
-- Desktop index per window, failure counter, blacklist.
-- Z-order, foreground state, titles, classes.
-- Icon retrieval, caching, pruning.
-- Immutable snapshot + change-detection hash.
+### Phase 10: Dialogs
 
-### Phase 4: Main Window and Rendering
+- Promote `examples/reactor_about.rs` to `dialogs/about.rs`.
+- Build `dialogs/settings.rs` with tabs, working copy, validation, apply/cancel, and live preview.
+- Delete the native `about.rs`; the native v1 never had a Settings dialog.
+- Acceptance: About and Settings match the C# behavior and look modern.
 
-- Win32 window, message loop, timers.
-- `Painter` trait, `GdiPainter`, double buffering, layered opacity.
-- Preview and Micro Taskbar layout.
-- Hit testing, click to switch/focus, internal drag to move a window.
-- Context menu.
+### Phase 11: Cutover and Cleanup
 
-### Phase 5: Always-On Behavior
+- Make the reactor pager the main binary.
+- Delete `window.rs`, `render/`, native `about.rs`, and the `windows` UI features that are no longer
+  used.
+- Remove `Paint`/GDI references from docs and tests.
+- Keep `examples/reactor_about.rs` only if it remains a useful regression sample.
 
-- Pin to all desktops.
-- Topmost and covered-window watchdog.
-- Foreground WinEvent hook and last-active-window restore.
-- Desktop count and monitor configuration change handling with COM restart.
+### Phase 12: Verification and Packaging
 
-### Phase 6: Parity and Deployment
-
-- Walk the checklist in section 9 against the C# build.
-- Check shutdown, handle/COM leaks, and log output.
-- Verify on all supported Windows builds.
-- Test deployment without a .NET runtime.
+- Walk the section 11 checklist against the C# build.
+- Verify on supported Windows builds and mixed-DPI monitors.
+- Decide framework-dependent vs self-contained runtime packaging.
+- Update user-facing requirements for Windows 10 1809 and the Windows App Runtime.
 - Keep the C# implementation until parity is proven; remove it only on explicit instruction.
 
-Settings UI, Direct2D, live thumbnails, per-monitor DPI, and ARM64 are not phases of this migration.
+## 14. Testing and Verification
 
-## 12. Testing and Verification
+- Unit-test pure logic: DIP layout, hit testing, Micro Taskbar grid/overflow, change-detection hash,
+  icon conversion, registry parsing, settings defaults.
+- Use reactor's component test facilities where they fit for view/message tests. Do not build a custom
+  UI test framework.
+- Keep the `probe` example for COM and version-matrix verification.
+- Add screenshot comparison or at least deterministic layout tests for both view modes.
+- Add manual UI smoke tests for borderless/topmost/opacity/pinning after style changes.
+- Verify no COM or window enumeration happens on a background thread.
+- Run `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and
+  `cargo test` before declaring work complete.
 
-There is no test project in the C# repository. The Rust port should not repeat that.
+## 15. Deployment and Packaging
 
-- Unit-test pure logic: aspect-ratio scaling, Micro Taskbar grid and overflow computation,
-  change-detection hash, registry parsing (including missing/malformed values), settings defaults.
-- Keep a `probe` example binary for COM and version-matrix verification; it is the practical
-  integration test on each Windows build.
-- Add `#[ignore]`d integration tests for mutation paths, gated by an environment variable, so they
-  never move real windows during a normal `cargo test`.
-- Add screenshot comparison or at least a deterministic layout test for both view modes using a fake
-  `Painter`.
-- Run `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, and `cargo test` before declaring work
-  complete.
-
-## 13. Deployment and Packaging
-
-- x64 MSVC build; no .NET runtime, no installer.
+- x64 MSVC build; no .NET runtime and no installer.
 - `#![windows_subsystem = "windows"]` so no console window appears.
 - Statically link the MSVC runtime (`rust/.cargo/config.toml`) so the executable does not require the
   Visual C++ redistributable.
-- Embed the icon and a version resource.
-- Keep the application manifest with `asInvoker` and system DPI awareness.
+- Windows App Runtime 2.x is required. Choose framework-dependent or self-contained during Phase 12.
+- Minimum OS: Windows 10 1809 (build 17763).
+- Embed the icon and version resource.
+- Keep the application manifest `asInvoker`. Verify the final WinUI DPI-awareness manifest entry in
+  Phase 12.
 - Keep the C# mutex name (`micro-task-pager-win-app`) for release builds so the two implementations
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
 - Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
 - The release artifact is `rust/target/release/micro-task-pager.exe`. A distribution folder may rename
-  it to `MicroTaskPager.exe` as a drop-in replacement. The C# implementation stays in the repository
-  until older-build and multi-monitor parity are verified.
+  it to `MicroTaskPager.exe`; the embedded icon/version/manifest stay intact.
 
-## 14. General Rust Development Guidelines
+## 16. Rust Development Guidelines
 
 1. Prefer safe Rust APIs over direct FFI.
 2. Keep `unsafe` blocks small and document their safety requirements.
 3. Encapsulate all undocumented COM interfaces behind the safe `VirtualDesktopApi` trait.
 4. Avoid leaking raw Windows handles across application layers.
-5. Use RAII wrappers for GDI, COM, and other Windows resources.
+5. Use RAII wrappers for COM and other Windows resources.
 6. Handle `HRESULT` errors explicitly; no silent fallbacks.
 7. Respect COM apartment and thread-affinity requirements; use one STA thread.
-8. Avoid unnecessary dependencies.
-9. Keep application logic independent of the window and the renderer.
-10. Write compatibility tests for undocumented Windows APIs.
-11. Do not assume Windows implementation details remain stable across updates.
-12. Prefer native Windows functionality over unnecessary abstractions.
-13. No panics across FFI boundaries.
-14. Keep the settings model and the rendering model free of Win32 types where practical.
+8. Optimize for readability first. Compact, declarative code beats clever abstraction.
+9. One screen equals one component; `view` is the only layout code.
+10. Do not build a UI framework or widget toolkit on Win32. Use `windows-reactor`.
+11. Do not add Win32 UI code to components. Platform behavior lives in native modules.
+12. Keep layout and hit testing pure and testable.
+13. Use DIPs in UI code; do not reintroduce manual DPI scaling.
+14. Keep the settings model independent of the UI.
+15. Do not assume Windows implementation details remain stable across updates.
+16. No panics across FFI boundaries.
 
-`winsafe` is not a dependency and would not remove the need for `unsafe`: it is a wrapper for ordinary
-Win32 UI work, while the virtual desktop layer uses undocumented COM vtables. Keep `unsafe` confined
-to the FFI modules (`desktop/com`, `render/gdi`, `window`, `windows`, `monitors`, and the small Win32
-calls in `app.rs`), and give every block a safety comment. Layout, snapshot models, settings, and the
-supervisor should remain safe Rust.
+`winsafe` is not a dependency. It would not remove the `unsafe` needed for the undocumented
+virtual-desktop COM layer, and it would compete with reactor. `windows-reactor` is the chosen UI
+framework. Keep `unsafe` confined to the platform modules (`desktop/com`, `windows`, `monitors`,
+`foreground`, `single_instance`, `logging`, `native_window`, and the COM bootstrap in `main.rs`) and
+give every block a safety comment. Components, layout, hit testing, settings, and the supervisor stay
+safe Rust.
 
-## 15. Important Architectural Decisions
+## 17. Important Architectural Decisions
 
 | Decision | Direction |
 |---|---|
 | Repository layout | Separate `rust/` directory |
 | Rust project | Single Cargo crate initially |
-| Main window | Classic Win32 |
-| Rendering v1 | GDI behind a `Painter` trait |
-| Rendering later | Direct2D via `windows-canvas`, only after a spike |
+| UI framework | WinUI 3 through `windows-reactor` |
+| Main window | Reactor root component + native window shim |
+| Rendering | WinUI composition |
 | Window previews | Scaled geometries + shell icons |
-| Live thumbnails | Not in v1 |
-| Settings UI | Not in v1; `winsafe` and `windows-reactor` not used |
-| Settings storage | C#-compatible registry values |
+| Live thumbnails | Not planned |
+| Context menu | Reactor `Menu` |
+| Settings UI | Reactor secondary window |
+| About | Reactor secondary window |
+| Native Win32 | Platform glue only |
 | Virtual desktops | One safe API + Win10/Win11 layout modules |
-| Threading | Single STA UI thread, `WM_TIMER` driven |
-| Application icons | Windows Shell APIs |
+| Threading | Reactor UI thread, single STA for COM |
+| Application icons | Shell APIs converted to reactor image sources |
 | Application state | Pure Rust |
+| Runtime | Windows App Runtime 2.x |
+| Minimum OS | Windows 10 1809 (17763) |
 | .NET dependency | Removed in the final implementation |
+| C# implementation | Reference and shipping until the WinUI cutover |
 
-## 16. Instructions for AI Coding Assistants
+## 18. Instructions for AI Coding Assistants
 
 When assisting with this project:
 
-- Read this architecture document and `AGENTS.md` before proposing structural changes.
+- Read this architecture document, `MIGRATION.md`, and `AGENTS.md` before proposing structural changes.
+- Treat WinUI 3 through `windows-reactor` as the UI architecture. Do not propose a native Win32
+  rewrite, a custom UI framework, `winsafe`, `egui`, or another WinUI wrapper.
+- Keep UI components declarative and small. If a screen needs hundreds of lines, split state, layout,
+  input, and platform work.
+- Do not put `unsafe`, raw handles, or message constants in components.
 - Prefer Microsoft's official Rust crates.
 - Verify current crate APIs against their actual documentation and source code; pin versions.
 - Do not invent APIs, methods, COM interfaces, or vtable layouts.
@@ -714,12 +902,12 @@ When assisting with this project:
   is identical across Windows builds.
 - Explain all required `unsafe` operations and their safety assumptions.
 - Keep version-specific Windows compatibility code isolated.
-- Do not add a settings UI, DWM thumbnails, or Direct2D unless explicitly asked.
+- Do not add DWM thumbnails or a custom Direct2D/GDI renderer.
 - Avoid unnecessary architectural complexity.
 - Prefer small, independently testable implementation steps.
-- Preserve existing application behavior unless a deviation is listed in section 10 or explicitly
+- Preserve existing application behavior unless a deviation is listed in section 12 or explicitly
   requested.
 - When porting existing C# functionality, use the existing implementation as the behavioral reference.
 
-The primary objective is a reliable, maintainable, fully native Windows application implemented in
-Rust, not merely a line-by-line translation of the original C# code.
+The primary objective is a reliable, maintainable, compact Windows application implemented in Rust,
+with a modern WinUI 3 UI and no .NET runtime dependency.

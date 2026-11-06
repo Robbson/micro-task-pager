@@ -16,6 +16,11 @@
 
 **Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
 
+> [!NOTE]
+> A native Rust port is in development. Its UI targets WinUI 3 through `windows-reactor`. The current
+> release remains the C#/.NET implementation; the Rust build is not published yet. See
+> [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md) and [`rust/MIGRATION.md`](rust/MIGRATION.md).
+
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
 - **Preview** — a miniature of the real screen, including window positions and z-order.

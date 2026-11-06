@@ -37,8 +37,8 @@ windows-version = "0.100"
 unsafe_op_in_unsafe_fn = "deny"
 
 [dev-dependencies]
-# The isolated reactor About spike exercises WinUI 3 without becoming part of
-# the pager binary. It is built only with `cargo run --example reactor_about`.
+# Reactor reference implementation. Phase 8 promotes windows-reactor to a normal
+# dependency when the pager itself starts using it.
 windows-reactor = "0.100"
 
 [build-dependencies]

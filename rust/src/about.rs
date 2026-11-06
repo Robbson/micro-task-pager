@@ -1,5 +1,9 @@
 //! Native About dialog.
 //!
+//! Transitional: the target About window is the reactor component in
+//! `examples/reactor_about.rs`, promoted to `src/dialogs/about.rs` at the WinUI
+//! cutover.
+//!
 //! The dialog mirrors the reference WinForms `AboutDialog`: a fixed 600x480
 //! client area, the embedded logo, the version, author, acknowledgments, and a
 //! centered Close button. It is a real modal dialog, so the owner is disabled

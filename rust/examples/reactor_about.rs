@@ -1,9 +1,8 @@
-//! Isolated windows-reactor About dialog spike.
+//! Reactor About window reference.
 //!
-//! Run from `rust/` with `cargo run --example reactor_about`. This is not part
-//! of the pager binary; it exists to compare the WinUI 3 look and startup cost
-//! against the native About dialog. It requires the Windows App Runtime 2.x
-//! framework package.
+//! Run from `rust/` with `cargo run --example reactor_about`. This is the visual and
+//! structural reference for the target About window; Phase 10 promotes it to
+//! `src/dialogs/about.rs`. It requires the Windows App Runtime 2.x framework package.
 
 use windows_reactor::*;
 
