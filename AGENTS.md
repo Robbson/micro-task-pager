@@ -91,14 +91,18 @@ cargo test
   embeds `app.manifest` through the MSVC linker flags.
 - The current `cargo run` binary is the native Win32 v1. The target implementation is a
   `windows-reactor` (WinUI 3) component; see `rust/ARCHITECTURE.md` §3 and §13.
-- `windows-reactor` 0.100 is currently a dev-dependency used by `examples/reactor_about.rs`. Phase 8
-  promotes it to a normal dependency for the pager.
+- `windows-reactor` 0.100 is a normal dependency. Phase 8 added the reactor pager shell;
+  `src/main.rs` remains the native v1 until the Phase 11 cutover.
 - WinUI 3 requires the Windows App Runtime 2.x framework package. It is installed on this machine
-  (2.6.4); the reactor About example is the quickest smoke test:
+  (2.6.4); the reactor examples are the quickest smoke test:
 
   ```powershell
   cargo run --example reactor_about
+  cargo run --example reactor_pager
   ```
+
+  `reactor_pager` is the Phase 8 shell. Stop the native v1 first: both use the release mutex and would
+  otherwise fight over pinning and topmost.
 
 - The WinUI target requires Windows 10 1809 (build 17763) or later. The virtual-desktop backend still
   supports build 10240 and later, but the native v1 is the only implementation that can run below
@@ -191,6 +195,7 @@ Guidance:
 - `rust/app.rc`, `rust/app.manifest`, `rust/build.rs` - icon, version resource, and manifest.
 - `rust/examples/probe/` - standalone virtual-desktop COM probe.
 - `rust/examples/reactor_about.rs` - reactor About reference and regression sample.
+- `rust/examples/reactor_pager.rs` - Phase 8 reactor pager shell runner.
 
 ## Notes
 

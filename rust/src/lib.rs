@@ -9,6 +9,9 @@
 //!   COM interfaces. Start with [`desktop::open`], which returns a
 //!   [`desktop::SupervisedDesktop`].
 //! - [`logging`] writes a small daily log file.
+//! - [`native_window`] applies pager-specific Win32 window properties that
+//!   `windows-reactor` does not expose.
+//! - [`pager`] is the target WinUI 3 pager component.
 //! - [`settings`] reads the C#-compatible registry values and provides defaults.
 //! - [`single_instance`] prevents two pagers from running at the same time.
 //!
@@ -23,6 +26,8 @@ pub mod desktop;
 pub mod foreground;
 pub mod logging;
 pub mod monitors;
+pub mod native_window;
+pub mod pager;
 pub mod render;
 pub mod settings;
 pub mod single_instance;

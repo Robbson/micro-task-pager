@@ -9,7 +9,7 @@ build = "build.rs"
 
 [dependencies]
 # The umbrella windows crate is still on 0.62; the focused Microsoft crates
-# (registry, version, and the optional canvas) use the 0.100 line.
+# (registry, version, and reactor) use the 0.100 line.
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -29,17 +29,13 @@ windows = { version = "0.62", features = [
 ] }
 windows-core = "0.62"
 windows-registry = "0.100"
+windows-reactor = "0.100"
 windows-version = "0.100"
 
 [lints.rust]
 # Require an explicit unsafe block even inside an unsafe function, so every
 # foreign call is visible at its use site.
 unsafe_op_in_unsafe_fn = "deny"
-
-[dev-dependencies]
-# Reactor reference implementation. Phase 8 promotes windows-reactor to a normal
-# dependency when the pager itself starts using it.
-windows-reactor = "0.100"
 
 [build-dependencies]
 embed-resource = "3.0"

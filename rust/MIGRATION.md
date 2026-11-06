@@ -19,7 +19,7 @@ content; link to the relevant section instead.
 | 5. Always-on behavior | Complete | 2026-10-30 | 2026-10-30 | Pinning, topmost recovery, foreground hook, and last-active restore implemented |
 | 6. Parity and deployment | Complete | 2026-10-30 | 2026-10-30 | Native v1 release verified on 26200, single monitor; C# retained |
 | 7. WinUI architecture and docs | Complete | 2026-10-30 | 2026-10-30 | Adopted WinUI 3 via `windows-reactor`; architecture, agent rules, and notices updated |
-| 8. Reactor pager shell | Pending | | | Borderless/layered/topmost window, HWND shim, pinning, tick |
+| 8. Reactor pager shell | Complete | 2026-11-06 | 2026-11-06 | Borderless/tool-window/layered/topmost reactor window, HWND shim, pinning, and ticks verified on 26200; native v1 remains the main binary until Phase 11 |
 | 9. Reactor pager content | Pending | | | Layout, views, input, drag, menu, icons |
 | 10. Reactor dialogs | Pending | | | About and Settings |
 | 11. Cutover and cleanup | Pending | | | Reactor main binary; remove native UI and GDI |
@@ -124,14 +124,17 @@ reactor components.
 
 ### Phase 8: Reactor Pager Shell
 
-- [ ] Add `windows-reactor` as a normal dependency.
-- [ ] Create the `pager/` component and `native_window.rs`.
-- [ ] Start the reactor root window and apply borderless, tool-window, layered alpha, topmost, and
-       saved position.
-- [ ] Find the pager HWND and pin to all desktops; reapply topmost on the secondary tick.
-- [ ] Add the self-rescheduling tick and refresh the window snapshot on the UI thread.
-- [ ] Acceptance: pinned, topmost, opacity works, no title bar, clean shutdown, no COM off the UI
-       thread.
+- [x] Add `windows-reactor` as a normal dependency.
+- [x] Create the `pager/` component and `native_window.rs`.
+- [x] Start the reactor root window and apply borderless, tool-window, layered alpha, topmost, and
+      saved position.
+- [x] Find the pager HWND and pin to all desktops; reapply topmost on the secondary tick.
+- [x] Add the self-rescheduling tick and refresh the window snapshot on the UI thread.
+- [x] Acceptance: pinned, topmost, opacity works, no title bar, clean shutdown, no COM off the UI
+      thread.
+
+The reactor shell is runnable as `cargo run --example reactor_pager`; `src/main.rs` stays on the
+native v1 until the Phase 11 cutover.
 
 ### Phase 9: Reactor Pager Content
 
@@ -175,8 +178,8 @@ These items are not scheduled and do not block the next phase.
 |---|---|---|
 | Run the probe on Windows 10 and Win10LTSC | No older images or virtualization available | A Windows 10 image or VM is available |
 | Run the probe on Windows 11 21H2 and 22H2 | Same | A suitable image is available |
-| Validate pinning with `ShowInTaskbar` variants | Needs manual UI testing alongside the pager window | Phase 8 |
-| Verify WinUI topmost across explorer restarts and shell restarts | Requires manual shell testing | Phase 8 |
+| Validate pinning with `ShowInTaskbar` variants | Needs manual UI testing alongside the pager window | Phase 12 |
+| Verify WinUI topmost across explorer restarts and shell restarts | Requires manual shell testing | Phase 12 |
 | Choose framework-dependent vs self-contained runtime packaging | Product/packaging decision | Phase 12 |
 
 ## Decision log
@@ -216,6 +219,10 @@ These items are not scheduled and do not block the next phase.
 | 2026-10-30 | Use a self-rescheduling `spawn_background` tick instead of `WM_TIMER` | Reactor has no timer API; the background task only sleeps and returns a message, so COM stays on the UI thread | ARCHITECTURE §3.5 |
 | 2026-10-30 | Raise the application minimum OS to Windows 10 1809 (17763) | Windows App Runtime 2.x requires 17763; the virtual-desktop backend still supports 10240+, but the WinUI app cannot | ARCHITECTURE §7.3, §15 |
 | 2026-10-30 | Keep the native v1 and C# implementation until the WinUI cutover | The migration needs a behavioral reference and a working fallback | ARCHITECTURE §13 |
+| 2026-11-06 | Keep the native v1 as the main binary through Phase 8 | The reactor shell is runnable as an example, but the pager content and dialogs do not exist yet; cutting over now would remove working behavior | Phase 11 |
+| 2026-11-06 | Find the pager HWND by process ID and window title | Reactor 0.100 exposes no public HWND accessor, and the component declares a stable title before the native lookup runs | ARCHITECTURE §3.6 |
+| 2026-11-06 | Reapply the DIP client size after removing the WinUI frame | Reactor's `ResizeClient` runs before the shim removes the caption, so the first outer size still includes the old non-client area | ARCHITECTURE §3.6 |
+| 2026-11-06 | Retry the HWND lookup every 50 ms until the window appears | The window and title are created after the component's first publication; a full primary-tick delay produced a visible title-bar flash | Phase 8 |
 
 ## Verified Windows builds
 
@@ -226,13 +233,14 @@ edition.
 |---|---|---|---|---|---|
 | 26200 | Windows 11 25H2 | Win11 layout | Count 2, current index, desktop GUIDs, window-to-desktop index, switch 0 -> 1 -> 0, move 0 -> 1 -> 0, pin state, pin, and unpin work | 2026-10-30 | Win10 layout and 21H2/22H2 are untested (postponed) |
 | 26200 | Windows 11 25H2 | Win11 layout | Reactor About rendered; borderless, `WS_EX_TOOLWINDOW`, layered alpha, and topmost reassertion work on a live WinUI window | 2026-10-30 | Topmost was reset once by WinUI after the style change; reasserting worked. Pinning through the HWND shim is not yet tested |
+| 26200 | Windows 11 25H2 | Win11 layout | Reactor pager shell: `WS_POPUP` without caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, pinned (`probe pinned` = true), alpha 191 at `0.75`, and `WM_CLOSE` exited cleanly | 2026-11-06 | Single monitor, 100% DPI; shell run from `examples/reactor_pager` while the native v1 remains the main binary |
 
 ## Open questions
 
 | Question | Why it matters | Owner | Status |
 |---|---|---|---|
-| Does `IVirtualDesktopPinnedApps` pinning work on the reactor HWND found by the shim? | Always-on behavior depends on it | | Phase 8 |
-| Does WinUI reapply styles or topmost in other situations (activation, monitor changes, shell restart)? | The pager must stay topmost and borderless | | Phase 8 |
+| Does `IVirtualDesktopPinnedApps` pinning work on the reactor HWND found by the shim? | Always-on behavior depends on it | | Resolved 2026-11-06: `probe pinned` returned true on build 26200 |
+| Does WinUI reapply styles or topmost in other situations (activation, monitor changes, shell restart)? | The pager must stay topmost and borderless | | Topmost reassert verified on the secondary tick; activation, monitor changes, and shell restart remain in Phase 12 |
 | Is the converter from cached `HICON` to a reactor image source fast enough for many windows? | The pager refreshes every 200 ms | | Phase 9 |
 | Does a reactor `Menu` behave correctly on a layered, tool-window pager? | Right-click is the only entry point to settings/about/exit | | Phase 9 |
 | Should the toolchain be pinned to an exact version? | `1.99.1` is currently installed without `cargo.exe`, so `stable` (also 1.99.1) is used | | Open |
@@ -257,6 +265,7 @@ narrative.
 | 2026-10-30 | 6 | Isolated `examples/reactor_about.rs` built and ran against Windows App Runtime 2.6.4; WinUI 3 rendered the same About content with Fluent window chrome for comparison |
 | 2026-10-30 | 7 | Live reactor window probe on build 26200: `WS_POPUP`/no title bar, `WS_EX_TOOLWINDOW`, `WS_EX_LAYERED` alpha, and topmost reassertion applied to a WinUI window; screenshot shows desktop through the content; topmost was reset once and reasserted |
 | 2026-10-30 | 7 | Architecture docs updated for the WinUI 3 pivot; native v1 and C# retained; no application behavior changed |
+| 2026-11-06 | 8 | Reactor shell on build 26200: `WS_POPUP` with no caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, `probe pinned` = true, layered alpha 191 at `0.75`, and `WM_CLOSE` exited the process; `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build --examples`, and 21 tests pass; the release native binary still imports no Windows App Runtime DLLs |
 
 ## Code map and glossary
 
@@ -302,6 +311,7 @@ documentation mirrors this table.
 | `.cargo/config.toml` | Static MSVC runtime. |
 | `examples/probe/main.rs` | Standalone COM probe; not part of the pager binary. |
 | `examples/reactor_about.rs` | Reactor About reference and regression sample. |
+| `examples/reactor_pager.rs` | Phase 8 reactor pager shell runner. |
 
 Terms that appear in the code:
 

@@ -177,8 +177,8 @@ a static window. The equivalent reactor component is about 85 lines.
 
 The dependency trade is accepted:
 
-- `windows-reactor` is the UI dependency, not an experiment. It is a dev-dependency today and becomes
-  a normal dependency in Phase 8.
+- `windows-reactor` is the UI dependency, not an experiment. It became a normal dependency in
+  Phase 8.
 - The Windows App SDK runtime is required (framework package) or bundled (self-contained).
 - This is still dramatically smaller than a .NET Framework deployment and removes the largest source
   of accidental UI complexity in this repository.
@@ -249,6 +249,8 @@ enumeration on the UI thread, where the STA lives.
 - Find the pager HWND by process ID and window title.
 - Apply `WS_POPUP`, remove caption/thick-frame/system-menu styles, and set `WS_EX_TOOLWINDOW` or
   `WS_EX_APPWINDOW` according to `ShowAppInTaskbar`.
+- Reapply the target client size in DIPs after the frame change. Reactor resizes its client before
+  the shim removes the caption, so the first outer size still includes the old non-client area.
 - Apply `WS_EX_LAYERED` and `SetLayeredWindowAttributes` for window opacity.
 - Set the initial/saved position.
 - Reapply topmost on the tick. WinUI can reapply its own styles after a style change, so topmost is
@@ -359,6 +361,7 @@ rust/
   examples/
     probe/                       # standalone COM verification binary
     reactor_about.rs             # reactor About reference / regression sample
+    reactor_pager.rs             # Phase 8 reactor pager shell runner
 ```
 
 The native v1 modules `window.rs`, `render/`, and `about.rs` are transitional. They are removed after
@@ -772,6 +775,8 @@ checklist.
 - Find the HWND and pin to all desktops.
 - Add the self-rescheduling tick and refresh the snapshot.
 - Acceptance: pinned, topmost, opacity works, no title bar, clean shutdown, no COM off the UI thread.
+- The shell is runnable as `examples/reactor_pager.rs`; `src/main.rs` stays on the native v1 until the
+  Phase 11 cutover.
 
 ### Phase 9: Pager Content
 
