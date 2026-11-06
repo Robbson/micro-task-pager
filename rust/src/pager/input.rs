@@ -6,7 +6,9 @@
 //!
 //! - Middle drag or Shift+left drag moves the pager window.
 //! - Left drag on a window cell starts a window drag after a small threshold.
-//! - A release without a drag is a click: switch desktop or focus a window.
+//! - A left release without a drag is a click: switch desktop or focus a
+//!   window. Releases that do not follow a left press, such as the release
+//!   after the native context menu closes, are ignored.
 
 use windows::Win32::Foundation::HWND;
 
@@ -52,7 +54,10 @@ pub enum ReleaseAction {
 pub struct InputState {
     drag: Option<Drag>,
     ghost: Option<Ghost>,
+    /// A right press opened the context menu; the next release must not click.
     right_press: bool,
+    /// A left press is waiting for its release.
+    left_press: bool,
 }
 
 /// A pointer press to feed into [`InputState::press`].
@@ -71,6 +76,7 @@ impl InputState {
     /// Starts a gesture on a pointer press.
     pub fn press(&mut self, press: PressInput) {
         self.right_press = false;
+        self.left_press = !press.middle;
         self.ghost = None;
 
         if press.middle || press.shift {
@@ -100,6 +106,7 @@ impl InputState {
     pub fn right_press(&mut self) {
         self.drag = None;
         self.ghost = None;
+        self.left_press = false;
         self.right_press = true;
     }
 
@@ -133,11 +140,13 @@ impl InputState {
     pub fn release(&mut self, layout: &PagerLayout, x: f64, _y: f64) -> ReleaseAction {
         if self.right_press {
             self.right_press = false;
+            self.left_press = false;
             self.drag = None;
             self.ghost = None;
             return ReleaseAction::None;
         }
 
+        let left_press = std::mem::take(&mut self.left_press);
         let drag = self.drag.take();
         self.ghost = None;
 
@@ -159,19 +168,25 @@ impl InputState {
                         }
                         _ => ReleaseAction::None,
                     }
-                } else {
+                } else if left_press {
                     click(layout, x, Some(hwnd))
+                } else {
+                    ReleaseAction::None
                 }
             }
-            None => click(layout, x, None),
+            None if left_press => click(layout, x, None),
+            None => ReleaseAction::None,
         }
     }
 
-    /// Cancels a gesture without producing a click or a move.
+    /// Drops the drag/ghost state but keeps the press flags.
+    ///
+    /// Reactor releases pointer capture before `PointerReleased`, and the modal
+    /// context menu loses capture too; the following release must still be
+    /// classified by the press that started it.
     pub fn cancel(&mut self) {
         self.drag = None;
         self.ghost = None;
-        self.right_press = false;
     }
 
     pub fn drag(&self) -> Option<Drag> {
@@ -322,5 +337,69 @@ mod tests {
         input.right_press();
 
         assert_eq!(input.release(&layout(), 10.0, 10.0), ReleaseAction::None);
+    }
+
+    #[test]
+    fn release_without_a_left_press_is_not_a_click() {
+        let mut input = InputState::default();
+
+        assert_eq!(input.release(&layout(), 150.0, 10.0), ReleaseAction::None);
+    }
+
+    #[test]
+    fn context_menu_release_does_not_switch_desktop() {
+        let mut input = InputState::default();
+        input.right_press();
+        // Opening the modal native menu loses reactor pointer capture.
+        input.cancel();
+
+        // The release after the menu closes must not be treated as a click.
+        assert_eq!(input.release(&layout(), 150.0, 10.0), ReleaseAction::None);
+        assert_eq!(input.release(&layout(), 150.0, 10.0), ReleaseAction::None);
+    }
+
+    #[test]
+    fn left_press_on_empty_space_still_switches_desktop() {
+        let mut input = InputState::default();
+        input.press(PressInput {
+            hit: None,
+            x: 150.0,
+            y: 10.0,
+            middle: false,
+            shift: false,
+            cursor: None,
+            origin: None,
+        });
+
+        assert_eq!(
+            input.release(&layout(), 150.0, 10.0),
+            ReleaseAction::Click {
+                desktop: 1,
+                hwnd: None
+            }
+        );
+    }
+
+    #[test]
+    fn capture_loss_before_release_keeps_the_click() {
+        let mut input = InputState::default();
+        input.press(PressInput {
+            hit: None,
+            x: 150.0,
+            y: 10.0,
+            middle: false,
+            shift: false,
+            cursor: None,
+            origin: None,
+        });
+        input.cancel();
+
+        assert_eq!(
+            input.release(&layout(), 150.0, 10.0),
+            ReleaseAction::Click {
+                desktop: 1,
+                hwnd: None
+            }
+        );
     }
 }

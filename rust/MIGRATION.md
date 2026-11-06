@@ -162,6 +162,9 @@ Follow-up fixes after user testing:
 - Layout geometry is computed on whole device pixels (desktop widths truncate like the C# renderer)
   and icons are placed in their own pixel-aligned canvas slots. XAML no longer antialiases 1 px
   borders across two pixels or resamples icons that sat on fractional DIP coordinates.
+- Desktop switching and window focus require a release that follows a left press. A right press keeps
+  suppressing releases while the native context menu runs, so choosing a menu item no longer switches
+  to the desktop under the cursor.
 - The native menu uses `MNS_NOCHECK` and the C# glyphs as leading labels, reducing its width.
 - Drag cursor feedback is deferred: WinUI resets `SetCursor`/`WM_SETCURSOR`. The functional drag path
   does not depend on it.
@@ -297,6 +300,7 @@ narrative.
 | 2026-11-06 | 8 | Reactor shell on build 26200: `WS_POPUP` with no caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, `probe pinned` = true, layered alpha 191 at `0.75`, and `WM_CLOSE` exited the process; `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build --examples`, and 21 tests pass; the release native binary still imports no Windows App Runtime DLLs |
 | 2026-11-06 | 9 | Reactor content on build 26200: DIP layout/hit testing, mixed Micro/Preview desktops, keyed icon cell views, display-sized `HICON`→PNG conversions, compact native context menu with the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`), view-mode changes persisted, topmost dropped/restored around the menu, real Shift+wheel toggled under the cursor both ways, and a probe window dragged from desktop 0 to 1 without switching the current desktop; `cargo fmt --check`, Clippy, examples build, and 31 tests pass; drag cursor feedback is deferred, click-to-switch/focus remains for the Phase 12 live pass |
 | 2026-11-06 | 9 | Crisp-rendering follow-up on build 26200, 3440x1440 at 100%: the layout now works on whole pixels like the C# renderer (pager 214x45 instead of 215x45), 1 px borders no longer antialias across two pixels, and icons sit in pixel-aligned slots; Micro and Preview captures match the C# pager, including the previously soft desktop border and icon edges; `cargo fmt --check`, Clippy, and 32 tests pass |
+| 2026-11-06 | 9 | Context-menu follow-up on build 26200: a right press on a non-current desktop followed by Toggle View Mode changed that desktop's mode without switching to it, while a plain left click on the same desktop still switched; switching and focus now require a release that follows a left press, and the press flags survive both the capture release and the modal menu; `cargo fmt --check`, Clippy, and 36 tests pass |
 
 ## Code map and glossary
 
