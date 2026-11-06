@@ -103,8 +103,8 @@ impl InputState {
         self.right_press = true;
     }
 
-    /// Updates an active window drag and returns `true` when the ghost moved.
-    pub fn pointer_moved(&mut self, x: f64, y: f64, left_down: bool) -> bool {
+    /// Updates an active window drag and returns `true` once it is active.
+    pub fn pointer_moved(&mut self, x: f64, y: f64) -> bool {
         let Some(Drag::Window {
             hwnd,
             origin_desktop: _,
@@ -115,10 +115,6 @@ impl InputState {
         else {
             return false;
         };
-
-        if !left_down {
-            return false;
-        }
 
         if !*active {
             let dx = x - *start_x;
@@ -289,9 +285,9 @@ mod tests {
         let mut input = InputState::default();
         press_window(&mut input);
 
-        assert!(!input.pointer_moved(12.0, 12.0, true));
+        assert!(!input.pointer_moved(12.0, 12.0));
         assert!(input.ghost().is_none());
-        assert!(input.pointer_moved(20.0, 20.0, true));
+        assert!(input.pointer_moved(20.0, 20.0));
         assert_eq!(
             input.ghost(),
             Some(Ghost {
@@ -306,7 +302,7 @@ mod tests {
     fn window_drag_to_another_desktop_moves_the_window() {
         let mut input = InputState::default();
         press_window(&mut input);
-        assert!(input.pointer_moved(150.0, 20.0, true));
+        assert!(input.pointer_moved(150.0, 20.0));
 
         let action = input.release(&layout(), 150.0, 20.0);
 

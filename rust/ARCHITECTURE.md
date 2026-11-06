@@ -581,8 +581,11 @@ Micro Taskbar is a `Grid` or `Canvas` of icon tiles:
 - Drag a miniature/icon to another desktop to move the window. The drag ghost is a reactor element in a
   `Canvas`; the drop uses the existing `move_window_to` API.
 - Shift+wheel toggles the view mode under the cursor and persists it. Reactor 0.100 has no wheel
-  event, so `native_window` subclasses the pager HWND for `WM_MOUSEWHEEL` and forwards client DIPs
-  plus Shift to the UI thread.
+  event, and WinUI delivers wheel input to its child site window rather than the top-level HWND, so
+  `native_window` installs a `WH_MOUSE_LL` hook on the UI thread. It only consumes Shift+wheel when
+  the cursor is over the pager.
+- Keep a drag gesture alive through reactor pointer-capture loss. The release still carries the final
+  coordinates, so losing capture must not turn the drop into a desktop-click switch.
 - Right-click opens the native context menu with Toggle View Mode, Position, Settings, About, and
   Exit, using the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`) as leading menu text. Reactor 0.100 has
   no right-click context menu, so `native_window::show_context_menu` uses `TrackPopupMenu`; this is a
@@ -603,9 +606,10 @@ Micro Taskbar is a `Grid` or `Canvas` of icon tiles:
 The icon cache currently returns `HICON`. Reactor `Image` needs image data:
 
 - `windows/icons.rs` converts each cached icon to a PNG with WIC, including the mask-derived alpha
-  fallback for older icons.
-- `pager/icons.rs` caches the `EncodedImage` keyed by `(hwnd, hicon)` and prunes entries when the
-  window disappears.
+  fallback for older icons. It first copies the icon to the exact display pixel size with
+  `CopyImage`/`LR_COPYFROMRESOURCE`, so WinUI never downscales a large icon frame.
+- `pager/icons.rs` caches the `EncodedImage` keyed by `(hwnd, hicon)`, clears on DPI changes, and
+  prunes entries when the window disappears.
 - Do not decode icons per frame or per view publication.
 
 ### 8.7 Opacity and Topmost
@@ -762,7 +766,14 @@ as it is made.
 - Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
 - Replace OLE drag-and-drop with an internal pointer-capture drag: the payload is only a window handle
   and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. The drag ghost is a
-  reactor element.
+  reactor element. Keep the gesture alive through pointer-capture loss; reactor's release event still
+  carries the final coordinates.
+- Use a low-level mouse hook for Shift+wheel because WinUI consumes wheel input in its child site
+  window. The hook only acts when Shift is held and the cursor is over the pager.
+- Encode icons at the exact display pixel size with `CopyImage` before PNG conversion, so WinUI does
+  not blur them by downscaling a larger frame.
+- Drag cursor feedback is best-effort in Phase 9: `SetCursor` and `WM_SETCURSOR` are reset by WinUI.
+  Revisit when reactor exposes a cursor property; the functional drag/drop path does not depend on it.
 - Keep the vertical-monitor layout limitation.
 - Keep global window opacity through the layered-window shim; do not approximate it by pre-multiplying
   colors.

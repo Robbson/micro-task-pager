@@ -87,7 +87,6 @@ pub(super) fn build(pager: &Pager, context: &mut ViewContext<Pager>) -> View {
             context.callback(|info: PointerEventInfo| Message::PointerMoved {
                 x: info.window_x,
                 y: info.window_y,
-                left: info.is_left_button_pressed,
             }),
         )
         .on_pointer_released(

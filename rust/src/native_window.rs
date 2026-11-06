@@ -13,23 +13,26 @@
 //! It is deliberately not a UI abstraction. Anything that starts looking like
 //! one belongs upstream in `windows-reactor` instead.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
-use windows::Win32::UI::HiDpi::GetDpiForWindow;
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_SHIFT};
+use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_SHIFT};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, EnumWindows, GWL_EXSTYLE, GWL_STYLE, GetClientRect,
-    GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW,
-    GetWindowTextW, GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, IsWindowVisible,
-    LWA_ALPHA, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow,
-    SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync, TPM_LEFTALIGN,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, WM_MOUSEWHEEL, WS_BORDER,
-    WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
-    WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WindowFromPoint,
+    AppendMenuW, CallNextHookEx, CreatePopupMenu, DestroyMenu, EnumChildWindows, EnumWindows,
+    GA_ROOT, GWL_EXSTYLE, GWL_STYLE, GetAncestor, GetClassNameW, GetClientRect, GetCursorPos,
+    GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+    GetWindowThreadProcessId, HC_ACTION, HHOOK, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW,
+    IDC_SIZEALL, IsWindowVisible, LWA_ALPHA, LoadCursorW, MENUINFO, MF_GRAYED, MF_POPUP,
+    MF_SEPARATOR, MF_STRING, MIM_APPLYTOSUBMENUS, MIM_STYLE, MNS_NOCHECK, MSLLHOOKSTRUCT,
+    SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SetCursor, SetForegroundWindow, SetLayeredWindowAttributes, SetMenuInfo, SetWindowLongPtrW,
+    SetWindowPos, SetWindowsHookExW, ShowWindowAsync, TPM_LEFTALIGN, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEWHEEL,
+    WM_SETCURSOR, WS_BORDER, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+    WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME, WindowFromPoint,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -58,6 +61,47 @@ pub fn find_pager_window(title: &str) -> Option<HWND> {
     search.found
 }
 
+/// Finds WinUI's visible content window inside the pager.
+///
+/// WinUI 3 hosts the XAML island in a `DesktopChildSiteBridge` child window.
+/// Mouse wheel messages are delivered to that child, not to the top-level HWND,
+/// so the wheel/cursor subclass must be installed there.
+pub fn find_content_window(pager: HWND) -> Option<HWND> {
+    let mut found = HWND::default();
+
+    // SAFETY: `EnumChildWindows` runs the callback synchronously and only
+    // receives a pointer to `found`, which lives for the whole call.
+    let _ = unsafe {
+        EnumChildWindows(
+            Some(pager),
+            Some(find_content_proc),
+            LPARAM(&mut found as *mut HWND as isize),
+        )
+    };
+
+    (!found.0.is_null()).then_some(found)
+}
+
+unsafe extern "system" fn find_content_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    // SAFETY: `find_content_window` passes a live HWND slot.
+    let found = unsafe { &mut *(lparam.0 as *mut HWND) };
+
+    if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
+        return BOOL(1);
+    }
+
+    let mut buffer = [0u16; 128];
+    // SAFETY: `buffer` is a valid mutable UTF-16 buffer.
+    let length = unsafe { GetClassNameW(hwnd, &mut buffer) };
+    let name = String::from_utf16_lossy(&buffer[..length.max(0) as usize]);
+    if name.eq_ignore_ascii_case("Microsoft.UI.Content.DesktopChildSiteBridge") {
+        *found = hwnd;
+        return BOOL(0);
+    }
+
+    BOOL(1)
+}
+
 struct FindWindow<'a> {
     process_id: u32,
     title: &'a str,
@@ -65,59 +109,153 @@ struct FindWindow<'a> {
 }
 
 thread_local! {
-    // Reactor 0.100 has no wheel event. The subclass procedure runs on the UI
-    // thread, so the non-Send callback can hold a `LocalSender`.
+    // Reactor 0.100 has no wheel event. The low-level mouse hook and the
+    // subclass both run on the UI thread, so the non-Send callback can hold a
+    // `LocalSender`.
     static WHEEL_HANDLER: RefCell<Option<WheelHandler>> = RefCell::new(None);
+    static PAGER_HWND: Cell<usize> = const { Cell::new(0) };
+    // `WM_SETCURSOR` is handled in the content-window subclass so WinUI cannot
+    // reset the move cursor while a drag is active.
+    static DRAG_CURSOR: Cell<bool> = const { Cell::new(false) };
 }
 
 type WheelHandler = Box<dyn Fn(f64, f64, bool) -> bool>;
 
-/// A wheel-message hook installed on the pager window.
+/// A wheel/cursor input hook for the pager.
+///
+/// WinUI's child site window does not reliably receive `WM_MOUSEWHEEL`, and the
+/// top-level HWND does not see wheel messages aimed at the XAML child. A
+/// low-level mouse hook is the reliable shim until reactor exposes wheel
+/// events. It only consumes wheel input when Shift is down and the cursor is
+/// over the pager. The subclass on the XAML child handles `WM_SETCURSOR`.
 pub struct WheelHook {
-    hwnd: HWND,
+    pager: HWND,
+    subclass_hwnd: HWND,
     id: usize,
+    pager_id: usize,
+    hook: HHOOK,
 }
 
 impl WheelHook {
-    /// Installs a `WM_MOUSEWHEEL` handler that receives client DIPs and Shift.
-    ///
-    /// The handler returns `true` when it handled the message. The callback
-    /// runs on the UI thread because it is invoked from the window procedure.
+    /// Installs the wheel and cursor hooks. The handler receives client DIPs
+    /// and Shift, and returns `true` when it handled the wheel message.
     pub fn install(
-        hwnd: HWND,
+        pager: HWND,
         handler: impl Fn(f64, f64, bool) -> bool + 'static,
     ) -> Result<Self, windows::core::Error> {
         WHEEL_HANDLER.with(|slot| {
             *slot.borrow_mut() = Some(Box::new(handler));
         });
+        PAGER_HWND.with(|slot| slot.set(pager.0 as usize));
 
+        let subclass_hwnd = find_content_window(pager).unwrap_or(pager);
         // SAFETY: the handle belongs to this process; the subclass id is local
         // to this module and the callback has the required ABI.
-        let installed = unsafe { SetWindowSubclass(hwnd, Some(wheel_subclass_proc), 1, 0) };
+        let installed =
+            unsafe { SetWindowSubclass(subclass_hwnd, Some(cursor_subclass_proc), 1, 0) };
         if !installed.as_bool() {
-            WHEEL_HANDLER.with(|slot| {
-                *slot.borrow_mut() = None;
-            });
+            clear_input_thread_state();
             return Err(windows::core::Error::from_thread());
         }
 
-        Ok(Self { hwnd, id: 1 })
+        // The content child and the top-level window can both receive
+        // `WM_SETCURSOR` depending on the WinUI build. Install on both.
+        let top_installed = unsafe { SetWindowSubclass(pager, Some(cursor_subclass_proc), 2, 0) };
+        if !top_installed.as_bool() {
+            unsafe {
+                let _ = RemoveWindowSubclass(subclass_hwnd, Some(cursor_subclass_proc), 1);
+            }
+            clear_input_thread_state();
+            return Err(windows::core::Error::from_thread());
+        }
+
+        // SAFETY: WH_MOUSE_LL runs the callback on the installing UI thread,
+        // which has a message loop. The hook is removed in `Drop`.
+        let hook =
+            match unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_wheel_hook_proc), None, 0) } {
+                Ok(hook) => hook,
+                Err(error) => {
+                    unsafe {
+                        let _ = RemoveWindowSubclass(subclass_hwnd, Some(cursor_subclass_proc), 1);
+                        let _ = RemoveWindowSubclass(pager, Some(cursor_subclass_proc), 2);
+                    }
+                    clear_input_thread_state();
+                    return Err(error);
+                }
+            };
+
+        Ok(Self {
+            pager,
+            subclass_hwnd,
+            id: 1,
+            pager_id: 2,
+            hook,
+        })
     }
 }
 
 impl Drop for WheelHook {
     fn drop(&mut self) {
-        WHEEL_HANDLER.with(|slot| {
-            *slot.borrow_mut() = None;
-        });
-        // SAFETY: removing the same subclass id is safe even during teardown.
+        set_drag_cursor(false);
+        clear_input_thread_state();
+        // SAFETY: unhooking and removing the same subclass are safe during
+        // teardown even if the window is already gone.
         unsafe {
-            let _ = RemoveWindowSubclass(self.hwnd, Some(wheel_subclass_proc), self.id);
+            let _ = UnhookWindowsHookEx(self.hook);
+            let _ = RemoveWindowSubclass(self.subclass_hwnd, Some(cursor_subclass_proc), self.id);
+            let _ = RemoveWindowSubclass(self.pager, Some(cursor_subclass_proc), self.pager_id);
         }
     }
 }
 
-unsafe extern "system" fn wheel_subclass_proc(
+fn clear_input_thread_state() {
+    WHEEL_HANDLER.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+    PAGER_HWND.with(|slot| slot.set(0));
+}
+
+unsafe extern "system" fn mouse_wheel_hook_proc(
+    code: i32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    if code == HC_ACTION as i32 {
+        let message = wparam.0 as u32;
+        let pager_value = PAGER_HWND.with(Cell::get);
+
+        if message == WM_MOUSEWHEEL && pager_value != 0 {
+            // SAFETY: for HC_ACTION, `lparam` points to MSLLHOOKSTRUCT.
+            let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+            let pager = HWND(pager_value as *mut std::ffi::c_void);
+            // SAFETY: WindowFromPoint and GetAncestor only read window state.
+            let root = unsafe { GetAncestor(WindowFromPoint(info.pt), GA_ROOT) };
+            let shift = unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) } < 0;
+
+            if root == pager && shift {
+                let mut point = info.pt;
+                // SAFETY: the pager HWND is live while the hook is installed.
+                if unsafe { ScreenToClient(pager, &mut point) }.as_bool() {
+                    let dpi = unsafe { GetDpiForWindow(pager) }.max(96);
+                    let scale = 96.0 / f64::from(dpi);
+                    let handled = WHEEL_HANDLER.with(|slot| {
+                        slot.borrow().as_ref().is_some_and(|handler| {
+                            handler(f64::from(point.x) * scale, f64::from(point.y) * scale, true)
+                        })
+                    });
+                    if handled {
+                        return LRESULT(1);
+                    }
+                }
+            }
+        }
+    }
+
+    // SAFETY: unhandled input continues through the hook chain.
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+unsafe extern "system" fn cursor_subclass_proc(
     hwnd: HWND,
     message: u32,
     wparam: WPARAM,
@@ -125,26 +263,13 @@ unsafe extern "system" fn wheel_subclass_proc(
     _id: usize,
     _data: usize,
 ) -> LRESULT {
-    if message == WM_MOUSEWHEEL {
-        // WM_MOUSEWHEEL coordinates are screen pixels in the low/high words.
-        let x = (lparam.0 & 0xFFFF) as u16 as i16 as i32;
-        let y = ((lparam.0 >> 16) & 0xFFFF) as u16 as i16 as i32;
-        let mut point = POINT { x, y };
-        if unsafe { ScreenToClient(hwnd, &mut point) }.as_bool() {
-            let dpi = unsafe { GetDpiForWindow(hwnd) }.max(96);
-            let scale = 96.0 / f64::from(dpi);
-            let shift = unsafe { GetKeyState(VK_SHIFT.0 as i32) } < 0;
-            let handled = WHEEL_HANDLER.with(|slot| {
-                slot.borrow().as_ref().is_some_and(|handler| {
-                    handler(
-                        f64::from(point.x) * scale,
-                        f64::from(point.y) * scale,
-                        shift,
-                    )
-                })
-            });
-            if handled {
-                return LRESULT(0);
+    if message == WM_SETCURSOR && DRAG_CURSOR.with(Cell::get) {
+        // SAFETY: loading and setting a system cursor only changes the current
+        // thread's cursor and owns no resources.
+        unsafe {
+            if let Ok(cursor) = LoadCursorW(None, IDC_SIZEALL) {
+                SetCursor(Some(cursor));
+                return LRESULT(1);
             }
         }
     }
@@ -166,9 +291,36 @@ pub fn cursor_position() -> Option<(i32, i32)> {
 
 /// Whether Shift is currently held.
 pub fn shift_pressed() -> bool {
-    // SAFETY: `GetKeyState` only reads keyboard state for the current thread's
-    // input queue.
-    unsafe { GetKeyState(VK_SHIFT.0 as i32) < 0 }
+    // SAFETY: `GetAsyncKeyState` reads the global key state and does not need
+    // keyboard focus, which matters while the pager is hovered but inactive.
+    unsafe { GetAsyncKeyState(VK_SHIFT.0 as i32) < 0 }
+}
+
+/// Switches between the normal arrow and the move cursor.
+pub fn set_drag_cursor(move_cursor: bool) {
+    DRAG_CURSOR.with(|value| value.set(move_cursor));
+    // SAFETY: loading and setting a system cursor only changes the current
+    // thread's cursor and owns no resources. WinUI may reset the cursor on its
+    // next input pass; the content-window subclass also answers `WM_SETCURSOR`
+    // while a drag is active. Cursor feedback is a follow-up item.
+    unsafe {
+        let name = if move_cursor { IDC_SIZEALL } else { IDC_ARROW };
+        if let Ok(cursor) = LoadCursorW(None, name) {
+            SetCursor(Some(cursor));
+        }
+    }
+}
+
+/// DPI of a window, or the system DPI if the window has no monitor yet.
+pub fn window_dpi(hwnd: HWND) -> u32 {
+    // SAFETY: `GetDpiForWindow` only reads window DPI.
+    unsafe { GetDpiForWindow(hwnd) }.max(96)
+}
+
+/// DPI of the primary display before the pager HWND exists.
+pub fn system_dpi() -> u32 {
+    // SAFETY: `GetDpiForSystem` only reads the system DPI.
+    unsafe { GetDpiForSystem() }.max(96)
 }
 
 /// Foreground window at pager startup.
@@ -231,7 +383,15 @@ pub fn show_context_menu(hwnd: HWND) -> Option<ContextCommand> {
         };
 
         // Native menus have no per-item icon column without owner-drawing the
-        // whole menu, so keep the C# glyphs as leading menu labels.
+        // whole menu, so keep the C# glyphs as leading menu labels. Removing the
+        // check column keeps the compact width.
+        let menu_info = MENUINFO {
+            cbSize: std::mem::size_of::<MENUINFO>() as u32,
+            fMask: MIM_STYLE | MIM_APPLYTOSUBMENUS,
+            dwStyle: MNS_NOCHECK,
+            ..Default::default()
+        };
+        let _ = SetMenuInfo(menu, &menu_info);
         let _ = AppendMenuW(
             menu,
             MF_STRING,

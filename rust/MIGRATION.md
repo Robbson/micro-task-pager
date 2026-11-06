@@ -20,7 +20,7 @@ content; link to the relevant section instead.
 | 6. Parity and deployment | Complete | 2026-10-30 | 2026-10-30 | Native v1 release verified on 26200, single monitor; C# retained |
 | 7. WinUI architecture and docs | Complete | 2026-10-30 | 2026-10-30 | Adopted WinUI 3 via `windows-reactor`; architecture, agent rules, and notices updated |
 | 8. Reactor pager shell | Complete | 2026-11-06 | 2026-11-06 | Borderless/tool-window/layered/topmost reactor window, HWND shim, pinning, and ticks verified on 26200; native v1 remains the main binary until Phase 11 |
-| 9. Reactor pager content | Complete | 2026-11-06 | 2026-11-06 | DIP layout/hit testing, Preview and Micro views, icons, pointer drag/click, Shift+wheel hook, and native context menu verified on 26200; Settings/About entries wait for Phase 10 |
+| 9. Reactor pager content | Complete | 2026-11-06 | 2026-11-06 | DIP layout/hit testing, Preview and Micro views, crisp display-sized icons, pointer drag/click, low-level Shift+wheel hook, and compact native context menu verified on 26200; drag cursor feedback is a follow-up, Settings/About wait for Phase 10 |
 | 10. Reactor dialogs | Pending | | | About and Settings |
 | 11. Cutover and cleanup | Pending | | | Reactor main binary; remove native UI and GDI |
 | 12. Verification and packaging | Pending | | | Checklist, OS floor, runtime packaging, supported builds |
@@ -149,9 +149,19 @@ native v1 until the Phase 11 cutover.
 The context menu is a native `TrackPopupMenu` in `native_window` because `windows-reactor` 0.100
 `Menu` is a Button/SplitButton flyout, not a right-click context menu. This is a documented temporary
 deviation; topmost is dropped while the menu is open and restored afterward. Settings and About are
-present but grayed until Phase 10. Click/drag state transitions are unit tested; a live
-multi-desktop drag and focus pass remains in Phase 12 to avoid disrupting active desktops during
-development.
+present but grayed until Phase 10.
+
+Follow-up fixes after user testing:
+
+- WinUI delivers wheel input to its child site window, so Shift+wheel now uses a `WH_MOUSE_LL` hook on
+  the UI thread instead of a top-level `WM_MOUSEWHEEL` subclass.
+- Drag/drop keeps the gesture alive through reactor pointer-capture loss; a drop on another desktop
+  moves the window and no longer switches the current desktop on mouse-up.
+- Icons are copied to the exact display pixel size with `CopyImage` before PNG conversion, removing
+  the WinUI downscale blur at 100% DPI.
+- The native menu uses `MNS_NOCHECK` and the C# glyphs as leading labels, reducing its width.
+- Drag cursor feedback is deferred: WinUI resets `SetCursor`/`WM_SETCURSOR`. The functional drag path
+  does not depend on it.
 
 ### Phase 10: Reactor Dialogs
 
@@ -232,7 +242,10 @@ These items are not scheduled and do not block the next phase.
 | 2026-11-06 | Reapply the DIP client size after removing the WinUI frame | Reactor's `ResizeClient` runs before the shim removes the caption, so the first outer size still includes the old non-client area | ARCHITECTURE §3.6 |
 | 2026-11-06 | Retry the HWND lookup every 50 ms until the window appears | The window and title are created after the component's first publication; a full primary-tick delay produced a visible title-bar flash | Phase 8 |
 | 2026-11-06 | Encode cached `HICON`s to PNG with WIC and cache by `(hwnd, hicon)` | Reactor `Image` needs encoded data; encoding once per icon change keeps the 200 ms refresh cheap | ARCHITECTURE §8.6 |
-| 2026-11-06 | Subclass the pager HWND for `WM_MOUSEWHEEL` | Reactor 0.100 has no wheel event; the subclass runs on the UI thread and forwards DIP coordinates through `LocalSender`, so COM stays on the UI thread | ARCHITECTURE §8.4 |
+| 2026-11-06 | Use a low-level mouse hook for Shift+wheel | WinUI delivers wheel input to its child site window, so a top-level `WM_MOUSEWHEEL` subclass never sees it. `WH_MOUSE_LL` runs on the UI thread and only consumes Shift+wheel over the pager | ARCHITECTURE §8.4, §12 |
+| 2026-11-06 | Encode icons at the display pixel size with `CopyImage` | Drawing a 32/48 px shell icon down to 16 DIP blurred the pager at 100% scale; copying to the target size first keeps icons crisp | ARCHITECTURE §8.6, §12 |
+| 2026-11-06 | Keep drag gestures alive through pointer-capture loss | Reactor can lose capture while rebuilding the view after a pointer move; cancelling the drag turned the drop into a desktop click | ARCHITECTURE §8.4, §12 |
+| 2026-11-06 | Defer drag cursor feedback | WinUI resets `SetCursor`/class cursor/`WM_SETCURSOR`; a reactor cursor API or element access is needed. The drag itself works without it | ARCHITECTURE §12 |
 | 2026-11-06 | Use a native `TrackPopupMenu` for the Phase 9 context menu | The secondary reactor dialog looked poor; `windows-reactor` 0.100 has no right-click context menu. The native menu is a documented temporary shim and topmost is dropped while it is open. Revisit with a later reactor transient-menu API | ARCHITECTURE §8.4, §12 |
 
 ## Verified Windows builds
@@ -245,7 +258,7 @@ edition.
 | 26200 | Windows 11 25H2 | Win11 layout | Count 2, current index, desktop GUIDs, window-to-desktop index, switch 0 -> 1 -> 0, move 0 -> 1 -> 0, pin state, pin, and unpin work | 2026-10-30 | Win10 layout and 21H2/22H2 are untested (postponed) |
 | 26200 | Windows 11 25H2 | Win11 layout | Reactor About rendered; borderless, `WS_EX_TOOLWINDOW`, layered alpha, and topmost reassertion work on a live WinUI window | 2026-10-30 | Topmost was reset once by WinUI after the style change; reasserting worked. Pinning through the HWND shim is not yet tested |
 | 26200 | Windows 11 25H2 | Win11 layout | Reactor pager shell: `WS_POPUP` without caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, pinned (`probe pinned` = true), alpha 191 at `0.75`, and `WM_CLOSE` exited cleanly | 2026-11-06 | Single monitor, 100% DPI; shell run from `examples/reactor_pager` while the native v1 remains the main binary |
-| 26200 | Windows 11 25H2 | Win11 layout | Reactor pager content: mixed Micro/Preview desktops with icons, borders, active highlighting, and `+N` overflow; native `TrackPopupMenu` opened with Toggle/Position/Settings/About/Exit, Toggle persisted, and topmost was restored after the menu; the wheel subclass toggled the mode under the cursor for a synthetic `WM_MOUSEWHEEL` | 2026-11-06 | Single monitor, 100% DPI; click-to-switch/focus and window dragging remain for the Phase 12 live pass |
+| 26200 | Windows 11 25H2 | Win11 layout | Reactor pager content: mixed Micro/Preview desktops with crisp display-sized icons, borders, active highlighting, and `+N` overflow; compact native `TrackPopupMenu` with glyph labels and Toggle/Position/grayed Settings/About/Exit; real Shift+wheel toggled the mode under the cursor; dragging a probe window from desktop 0 to 1 moved it while the current desktop stayed 0 | 2026-11-06 | Single monitor, 100% DPI; drag cursor feedback is deferred, click-to-switch/focus remains for the Phase 12 live pass |
 
 ## Open questions
 
@@ -253,7 +266,8 @@ edition.
 |---|---|---|---|
 | Does `IVirtualDesktopPinnedApps` pinning work on the reactor HWND found by the shim? | Always-on behavior depends on it | | Resolved 2026-11-06: `probe pinned` returned true on build 26200 |
 | Does WinUI reapply styles or topmost in other situations (activation, monitor changes, shell restart)? | The pager must stay topmost and borderless | | Topmost reassert verified on the secondary tick; activation, monitor changes, and shell restart remain in Phase 12 |
-| Is the converter from cached `HICON` to a reactor image source fast enough for many windows? | The pager refreshes every 200 ms | | Resolved 2026-11-06: 18 icons converted at startup and cached; refreshes reuse the encoded sources and log no failures |
+| Is the converter from cached `HICON` to a reactor image source fast enough for many windows? | The pager refreshes every 200 ms | | Resolved 2026-11-06: 18 icons converted at startup and cached; refreshes reuse the encoded sources and log no failures. Icons are now copied to the display size before encoding |
+| How can the pager show a move cursor during drag over WinUI content? | The C# pager uses `Cursors.SizeAll` | | Deferred 2026-11-06 by user request: `SetCursor`, class cursors, and `WM_SETCURSOR` are reset by WinUI; revisit with a reactor cursor API |
 | Does a reactor `Menu` behave correctly on a layered, tool-window pager? | Right-click is the only entry point to settings/about/exit | | Resolved 2026-11-06: 0.100 `Menu` is a button flyout. Phase 9 uses a temporary native `TrackPopupMenu`; true menu support waits for a reactor upgrade |
 | Should the toolchain be pinned to an exact version? | `1.99.1` is currently installed without `cargo.exe`, so `stable` (also 1.99.1) is used | | Open |
 | Framework-dependent or self-contained Windows App Runtime packaging? | Affects release size and prerequisites | | Phase 12 |
@@ -278,7 +292,7 @@ narrative.
 | 2026-10-30 | 7 | Live reactor window probe on build 26200: `WS_POPUP`/no title bar, `WS_EX_TOOLWINDOW`, `WS_EX_LAYERED` alpha, and topmost reassertion applied to a WinUI window; screenshot shows desktop through the content; topmost was reset once and reasserted |
 | 2026-10-30 | 7 | Architecture docs updated for the WinUI 3 pivot; native v1 and C# retained; no application behavior changed |
 | 2026-11-06 | 8 | Reactor shell on build 26200: `WS_POPUP` with no caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, `probe pinned` = true, layered alpha 191 at `0.75`, and `WM_CLOSE` exited the process; `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo build --examples`, and 21 tests pass; the release native binary still imports no Windows App Runtime DLLs |
-| 2026-11-06 | 9 | Reactor content on build 26200: DIP layout/hit testing, mixed Micro/Preview desktops, keyed icon cell views, 18 `HICON`→PNG conversions, native context menu with the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`), Toggle/Position/grayed Settings/About/Exit, persisted `RendererViewModes=1,0`, topmost dropped during the menu and restored afterward, and a synthetic `WM_MOUSEWHEEL` toggled the mode under the cursor both ways; `cargo fmt --check`, Clippy, examples build, and 31 tests pass; click/drag state machines are unit-tested, live multi-desktop drag/focus is deferred to Phase 12 |
+| 2026-11-06 | 9 | Reactor content on build 26200: DIP layout/hit testing, mixed Micro/Preview desktops, keyed icon cell views, display-sized `HICON`→PNG conversions, compact native context menu with the C# glyph labels (`↔`, `⌖`, `⚙`, `ℹ`, `✕`), view-mode changes persisted, topmost dropped/restored around the menu, real Shift+wheel toggled under the cursor both ways, and a probe window dragged from desktop 0 to 1 without switching the current desktop; `cargo fmt --check`, Clippy, examples build, and 31 tests pass; drag cursor feedback is deferred, click-to-switch/focus remains for the Phase 12 live pass |
 
 ## Code map and glossary
 

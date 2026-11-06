@@ -15,11 +15,21 @@ use crate::windows::{WindowIcon, WindowSnapshot};
 #[derive(Default)]
 pub(super) struct IconSources {
     entries: HashMap<usize, (WindowIcon, EncodedImage)>,
+    size_px: i32,
 }
 
 impl IconSources {
-    /// Updates the cache for a snapshot, encoding only new or changed icons.
-    pub fn refresh(&mut self, snapshot: &WindowSnapshot) {
+    /// Updates the cache for a snapshot at the target pixel size.
+    ///
+    /// A DPI change clears the cache because the encoded bitmaps are rendered
+    /// at the exact display size to stay crisp.
+    pub fn refresh(&mut self, snapshot: &WindowSnapshot, size_px: i32) {
+        let size_px = size_px.max(1);
+        if self.size_px != size_px {
+            self.entries.clear();
+            self.size_px = size_px;
+        }
+
         let mut active = HashSet::with_capacity(snapshot.windows.len());
 
         for window in &snapshot.windows {
@@ -37,7 +47,7 @@ impl IconSources {
                 continue;
             }
 
-            match icon.png_bytes() {
+            match icon.png_bytes(size_px) {
                 Some(bytes) => {
                     self.entries.insert(key, (icon, EncodedImage::new(bytes)));
                 }
@@ -57,5 +67,10 @@ impl IconSources {
     /// Returns the encoded icon for a window, if conversion succeeded.
     pub fn get(&self, hwnd: usize) -> Option<&EncodedImage> {
         self.entries.get(&hwnd).map(|(_, image)| image)
+    }
+
+    /// Current encoded pixel size.
+    pub fn size_px(&self) -> i32 {
+        self.size_px
     }
 }

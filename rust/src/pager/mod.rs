@@ -54,7 +54,6 @@ pub enum Message {
     PointerMoved {
         x: f64,
         y: f64,
-        left: bool,
     },
     PointerReleased {
         x: f64,
@@ -168,6 +167,7 @@ impl Component for Pager {
             } => {
                 if right {
                     self.input.right_press();
+                    native_window::set_drag_cursor(false);
                     self.menu_point = (x, y);
                     if let Some(hwnd) = self.window.as_ref().map(PagerWindow::hwnd)
                         && let Some(command) = native_window::show_context_menu(hwnd)
@@ -187,9 +187,12 @@ impl Component for Pager {
                         cursor,
                         origin,
                     });
+                    if matches!(self.input.drag(), Some(input::Drag::Pager { .. })) {
+                        native_window::set_drag_cursor(true);
+                    }
                 }
             }
-            Message::PointerMoved { x, y, left } => {
+            Message::PointerMoved { x, y } => {
                 if let Some(input::Drag::Pager {
                     start_cursor,
                     start_origin,
@@ -203,19 +206,34 @@ impl Component for Pager {
                             start_origin.1 + cursor.1 - start_cursor.1,
                         );
                     }
-                } else {
-                    self.input.pointer_moved(x, y, left);
+                    // WinUI may reset its cursor during the pointer move, so
+                    // reapply the move cursor after each drag update.
+                    native_window::set_drag_cursor(true);
+                } else if self.input.pointer_moved(x, y) {
+                    native_window::set_drag_cursor(true);
                 }
             }
-            Message::PointerReleased { x, y } => match self.input.release(&self.layout, x, y) {
-                ReleaseAction::None => {}
-                ReleaseAction::Click { desktop, hwnd } => self.click(desktop, hwnd, context),
-                ReleaseAction::MoveWindow {
-                    hwnd,
-                    target_desktop,
-                } => self.move_window(hwnd, target_desktop),
-            },
-            Message::PointerCaptureLost => self.input.cancel(),
+            Message::PointerReleased { x, y } => {
+                native_window::set_drag_cursor(false);
+                match self.input.release(&self.layout, x, y) {
+                    ReleaseAction::None => {}
+                    ReleaseAction::Click { desktop, hwnd } => self.click(desktop, hwnd, context),
+                    ReleaseAction::MoveWindow {
+                        hwnd,
+                        target_desktop,
+                    } => self.move_window(hwnd, target_desktop),
+                }
+            }
+            Message::PointerCaptureLost => {
+                // Reactor can lose capture while a view rebuild follows a
+                // pointer move. Keep an active gesture alive; the release still
+                // arrives with the final coordinates. Only clear when no drag
+                // is in progress.
+                if self.input.drag().is_none() {
+                    self.input.cancel();
+                    native_window::set_drag_cursor(false);
+                }
+            }
             Message::Wheel { x, y, shift } => {
                 if shift {
                     self.toggle_mode(x, y);
@@ -247,7 +265,7 @@ impl Pager {
             .map_err(|error| error.to_string())?;
         let view_modes = initial_view_modes(&settings, snapshot.desktop_count, monitors.len());
         let mut icons = IconSources::default();
-        icons.refresh(&snapshot);
+        icons.refresh(&snapshot, icon_pixels(native_window::system_dpi()));
         let layout = layout::build(&snapshot, &monitors, &view_modes, &settings);
         let client_size = positive_size(&layout);
 
@@ -346,7 +364,7 @@ impl Pager {
                     self.resize_view_modes(desktop_count, self.monitors.len());
                 }
                 if hash_changed {
-                    self.icons.refresh(&self.snapshot);
+                    self.refresh_icons();
                 }
                 if hash_changed || desktop_count_changed {
                     self.rebuild_layout();
@@ -362,7 +380,9 @@ impl Pager {
             self.monitors = monitors;
             self.resize_view_modes(self.snapshot.desktop_count.max(1), self.monitors.len());
             self.rebuild_layout();
+            self.refresh_icons();
         }
+        self.sync_icon_size();
 
         let Some(desktop) = self.desktop.as_ref() else {
             return;
@@ -439,6 +459,7 @@ impl Pager {
         }
 
         let sender = self.sender.clone();
+        let wheel_target = native_window::find_content_window(hwnd).unwrap_or(hwnd);
         match WheelHook::install(hwnd, move |x, y, shift| {
             if shift {
                 sender.send(Message::Wheel { x, y, shift })
@@ -446,7 +467,12 @@ impl Pager {
                 false
             }
         }) {
-            Ok(hook) => self.wheel_hook = Some(hook),
+            Ok(hook) => {
+                self.wheel_hook = Some(hook);
+                crate::logging::info(format!(
+                    "wheel/cursor hooks installed; cursor subclass on {wheel_target:?}"
+                ));
+            }
             Err(error) => {
                 crate::logging::warn(format!("installing the wheel hook failed: {error}"))
             }
@@ -455,6 +481,27 @@ impl Pager {
         self.install_foreground(hwnd);
         crate::logging::info(format!("reactor pager window attached: {hwnd:?}"));
         self.window = Some(window);
+        self.refresh_icons();
+    }
+
+    fn refresh_icons(&mut self) {
+        let dpi = self
+            .window
+            .as_ref()
+            .map(|window| native_window::window_dpi(window.hwnd()))
+            .unwrap_or_else(native_window::system_dpi);
+        self.icons.refresh(&self.snapshot, icon_pixels(dpi));
+    }
+
+    fn sync_icon_size(&mut self) {
+        let dpi = self
+            .window
+            .as_ref()
+            .map(|window| native_window::window_dpi(window.hwnd()))
+            .unwrap_or_else(native_window::system_dpi);
+        if self.icons.size_px() != icon_pixels(dpi) {
+            self.refresh_icons();
+        }
     }
 
     fn install_foreground(&mut self, hwnd: HWND) {
@@ -638,6 +685,12 @@ impl Pager {
     }
 }
 
+impl Drop for Pager {
+    fn drop(&mut self) {
+        native_window::set_drag_cursor(false);
+    }
+}
+
 fn initial_view_modes(
     settings: &Settings,
     desktop_count: u32,
@@ -666,6 +719,10 @@ fn flatten_view_modes(modes: &[Vec<ViewMode>]) -> Vec<ViewMode> {
 
 fn positive_size(layout: &PagerLayout) -> (f64, f64) {
     (layout.width.max(1.0), layout.height.max(1.0))
+}
+
+fn icon_pixels(dpi: u32) -> i32 {
+    (layout::ICON_SIZE * f64::from(dpi) / 96.0).round().max(1.0) as i32
 }
 
 fn empty_snapshot() -> WindowSnapshot {

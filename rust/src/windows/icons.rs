@@ -3,7 +3,8 @@
 //! The shell returns borrowed `HICON` handles; the application must not call
 //! `DestroyIcon` on them, because the window or its class owns them. The
 //! fallback icon (`IDI_APPLICATION`) is a shared system icon for the same
-//! reason.
+//! reason. A scaled copy made with `CopyImage` is owned by this module and is
+//! destroyed after conversion.
 //!
 //! Phase 3 stores the handle and detects icon changes. Phase 4 converts it to a
 //! GDI bitmap when rendering; that is also when a sized bitmap cache matters.
@@ -13,7 +14,7 @@ use std::ffi::c_void;
 use std::hash::{Hash, Hasher};
 use std::mem::size_of;
 
-use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits,
     GetObjectW, HGDIOBJ, ReleaseDC,
@@ -29,8 +30,9 @@ use windows::Win32::System::Com::StructuredStorage::{
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GCLP_HICON, GetClassLongPtrW, GetIconInfo, HICON, ICON_SMALL2, ICONINFO, IDI_APPLICATION,
-    LoadIconW, SMTO_ABORTIFHUNG, SMTO_BLOCK, SendMessageTimeoutW, WM_GETICON,
+    CopyImage, DestroyIcon, GCLP_HICON, GetClassLongPtrW, GetIconInfo, HICON, ICON_SMALL2,
+    ICONINFO, IDI_APPLICATION, IMAGE_ICON, LR_COPYFROMRESOURCE, LoadIconW, SMTO_ABORTIFHUNG,
+    SMTO_BLOCK, SendMessageTimeoutW, WM_GETICON,
 };
 use windows::core::Interface;
 
@@ -50,10 +52,42 @@ impl WindowIcon {
 
     /// Encodes the icon as a PNG for a reactor image source.
     ///
-    /// The shell icon is a shared handle, so this only reads it. The returned
-    /// bytes own no native resources and can be cached across snapshots.
-    pub(crate) fn png_bytes(self) -> Option<Vec<u8>> {
-        encode_png(self.0)
+    /// The shell icon is a shared handle, so this only reads it. A scaled copy
+    /// is created at the target pixel size so WinUI does not resample a larger
+    /// icon frame down to 16 DIP. The returned bytes own no native resources
+    /// and can be cached across snapshots.
+    pub(crate) fn png_bytes(self, size_px: i32) -> Option<Vec<u8>> {
+        let scaled = if size_px > 0 {
+            // SAFETY: `CopyImage` reads the shared icon and returns a new icon
+            // handle that is destroyed below.
+            unsafe {
+                CopyImage(
+                    HANDLE(self.0.0),
+                    IMAGE_ICON,
+                    size_px,
+                    size_px,
+                    LR_COPYFROMRESOURCE,
+                )
+                .ok()
+            }
+        } else {
+            None
+        };
+
+        match scaled {
+            Some(handle) => {
+                let icon = HICON(handle.0);
+                let result = encode_png(icon);
+                // SAFETY: `CopyImage` returned an owned icon handle.
+                unsafe {
+                    let _ = DestroyIcon(icon);
+                }
+                result
+            }
+            // Some icons are not backed by a resource and cannot be copied.
+            // Fall back to the original frame; it is better than no icon.
+            None => encode_png(self.0),
+        }
     }
 }
 
