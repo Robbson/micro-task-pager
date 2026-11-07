@@ -1,9 +1,9 @@
 //! Pure working-copy model for the Settings dialog.
 //!
 //! The dialog never edits the live [`Settings`] value. It edits a
-//! [`SettingsDraft`], which remembers the value the window opened with, the
-//! last applied baseline, and the current working copy. Reverting an option and
-//! resetting a section are pure state transitions and are unit-tested here.
+//! [`SettingsDraft`], which remembers the value the window opened with and the
+//! current working copy. Reverting an option and resetting a section are pure
+//! state transitions and are unit-tested here.
 
 use crate::settings::{DesktopBorderStyle, Settings, ViewMode};
 
@@ -64,10 +64,9 @@ impl Section {
     }
 }
 
-/// The working copy, the last applied baseline, and the original settings.
+/// The values the dialog opened with and the current working copy.
 pub(super) struct SettingsDraft {
     original: Settings,
-    baseline: Settings,
     working: Settings,
 }
 
@@ -75,7 +74,6 @@ impl SettingsDraft {
     pub(super) fn new(initial: Settings) -> Self {
         Self {
             original: initial.clone(),
-            baseline: initial.clone(),
             working: initial,
         }
     }
@@ -84,66 +82,56 @@ impl SettingsDraft {
         &self.working
     }
 
-    pub(super) fn baseline(&self) -> &Settings {
-        &self.baseline
-    }
-
-    #[allow(dead_code)]
     pub(super) fn original(&self) -> &Settings {
         &self.original
     }
 
-    /// Marks the working copy as committed; per-option revert now targets it.
-    pub(super) fn accept(&mut self) {
-        self.baseline = self.working.clone();
-    }
-
-    /// Restores one option from the last applied baseline.
+    /// Restores one option to the value the dialog opened with.
     pub(super) fn revert(&mut self, field: Field) {
         match field {
             Field::ViewModeDefault => {
-                self.working.view_mode_default = self.baseline.view_mode_default;
+                self.working.view_mode_default = self.original.view_mode_default;
             }
-            Field::PagerHeight => self.working.pager_height = self.baseline.pager_height,
-            Field::IconPaddingX => self.working.icon_padding_x = self.baseline.icon_padding_x,
-            Field::IconPaddingY => self.working.icon_padding_y = self.baseline.icon_padding_y,
+            Field::PagerHeight => self.working.pager_height = self.original.pager_height,
+            Field::IconPaddingX => self.working.icon_padding_x = self.original.icon_padding_x,
+            Field::IconPaddingY => self.working.icon_padding_y = self.original.icon_padding_y,
             Field::BackgroundOpacity => {
-                self.working.background_opacity = self.baseline.background_opacity;
+                self.working.background_opacity = self.original.background_opacity;
             }
             Field::DesktopBorderStyle => {
-                self.working.desktop_border_style = self.baseline.desktop_border_style;
+                self.working.desktop_border_style = self.original.desktop_border_style;
             }
             Field::DesktopBackgroundColor => {
-                self.working.desktop_background_color = self.baseline.desktop_background_color;
+                self.working.desktop_background_color = self.original.desktop_background_color;
             }
             Field::DesktopBorderColor => {
-                self.working.desktop_border_color = self.baseline.desktop_border_color;
+                self.working.desktop_border_color = self.original.desktop_border_color;
             }
             Field::ActiveDesktopBorderColor => {
                 self.working.active_desktop_border_color =
-                    self.baseline.active_desktop_border_color;
+                    self.original.active_desktop_border_color;
             }
             Field::WindowBackgroundColor => {
-                self.working.window_background_color = self.baseline.window_background_color;
+                self.working.window_background_color = self.original.window_background_color;
             }
             Field::WindowBorderColor => {
-                self.working.window_border_color = self.baseline.window_border_color;
+                self.working.window_border_color = self.original.window_border_color;
             }
             Field::ActiveWindowBorderColor => {
-                self.working.active_window_border_color = self.baseline.active_window_border_color;
+                self.working.active_window_border_color = self.original.active_window_border_color;
             }
             Field::ActiveWindowBackgroundColor => {
                 self.working.active_window_background_color =
-                    self.baseline.active_window_background_color;
+                    self.original.active_window_background_color;
             }
             Field::PrimaryUpdateDelay => {
-                self.working.primary_update_delay = self.baseline.primary_update_delay;
+                self.working.primary_update_delay = self.original.primary_update_delay;
             }
             Field::SecondaryUpdateDelay => {
-                self.working.secondary_update_delay = self.baseline.secondary_update_delay;
+                self.working.secondary_update_delay = self.original.secondary_update_delay;
             }
             Field::ShowAppInTaskbar => {
-                self.working.show_app_in_taskbar = self.baseline.show_app_in_taskbar;
+                self.working.show_app_in_taskbar = self.original.show_app_in_taskbar;
             }
         }
         self.clamp_pager_height();
@@ -180,45 +168,45 @@ impl SettingsDraft {
         self.clamp_pager_height();
     }
 
-    /// Whether an option differs from the last applied baseline.
+    /// Whether an option differs from the value the dialog opened with.
     pub(super) fn is_modified(&self, field: Field) -> bool {
         let working = &self.working;
-        let baseline = &self.baseline;
+        let original = &self.original;
         match field {
-            Field::ViewModeDefault => working.view_mode_default != baseline.view_mode_default,
-            Field::PagerHeight => working.pager_height != baseline.pager_height,
-            Field::IconPaddingX => working.icon_padding_x != baseline.icon_padding_x,
-            Field::IconPaddingY => working.icon_padding_y != baseline.icon_padding_y,
-            Field::BackgroundOpacity => working.background_opacity != baseline.background_opacity,
+            Field::ViewModeDefault => working.view_mode_default != original.view_mode_default,
+            Field::PagerHeight => working.pager_height != original.pager_height,
+            Field::IconPaddingX => working.icon_padding_x != original.icon_padding_x,
+            Field::IconPaddingY => working.icon_padding_y != original.icon_padding_y,
+            Field::BackgroundOpacity => working.background_opacity != original.background_opacity,
             Field::DesktopBorderStyle => {
-                working.desktop_border_style != baseline.desktop_border_style
+                working.desktop_border_style != original.desktop_border_style
             }
             Field::DesktopBackgroundColor => {
-                working.desktop_background_color != baseline.desktop_background_color
+                working.desktop_background_color != original.desktop_background_color
             }
             Field::DesktopBorderColor => {
-                working.desktop_border_color != baseline.desktop_border_color
+                working.desktop_border_color != original.desktop_border_color
             }
             Field::ActiveDesktopBorderColor => {
-                working.active_desktop_border_color != baseline.active_desktop_border_color
+                working.active_desktop_border_color != original.active_desktop_border_color
             }
             Field::WindowBackgroundColor => {
-                working.window_background_color != baseline.window_background_color
+                working.window_background_color != original.window_background_color
             }
-            Field::WindowBorderColor => working.window_border_color != baseline.window_border_color,
+            Field::WindowBorderColor => working.window_border_color != original.window_border_color,
             Field::ActiveWindowBorderColor => {
-                working.active_window_border_color != baseline.active_window_border_color
+                working.active_window_border_color != original.active_window_border_color
             }
             Field::ActiveWindowBackgroundColor => {
-                working.active_window_background_color != baseline.active_window_background_color
+                working.active_window_background_color != original.active_window_background_color
             }
             Field::PrimaryUpdateDelay => {
-                working.primary_update_delay != baseline.primary_update_delay
+                working.primary_update_delay != original.primary_update_delay
             }
             Field::SecondaryUpdateDelay => {
-                working.secondary_update_delay != baseline.secondary_update_delay
+                working.secondary_update_delay != original.secondary_update_delay
             }
-            Field::ShowAppInTaskbar => working.show_app_in_taskbar != baseline.show_app_in_taskbar,
+            Field::ShowAppInTaskbar => working.show_app_in_taskbar != original.show_app_in_taskbar,
         }
     }
 
@@ -327,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn revert_restores_one_option_from_the_baseline() {
+    fn revert_restores_one_option_from_the_opening_values() {
         let mut draft = draft();
         draft.set_number(Field::PagerHeight, 120.0);
         draft.set_number(Field::IconPaddingX, 8.0);
@@ -361,16 +349,20 @@ mod tests {
     }
 
     #[test]
-    fn accept_moves_the_revert_target_to_the_applied_values() {
+    fn revert_targets_the_opening_values() {
         let mut draft = draft();
         draft.set_number(Field::PagerHeight, 120.0);
-        draft.accept();
-
         draft.set_number(Field::PagerHeight, 160.0);
         draft.revert(Field::PagerHeight);
 
-        assert_eq!(draft.working().pager_height, 120);
-        assert_eq!(draft.baseline().pager_height, 120);
+        assert_eq!(
+            draft.working().pager_height,
+            Settings::default().pager_height
+        );
+        assert_eq!(
+            draft.original().pager_height,
+            Settings::default().pager_height
+        );
     }
 
     #[test]

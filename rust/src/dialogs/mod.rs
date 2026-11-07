@@ -10,6 +10,7 @@
 //! example.
 
 pub mod about;
+pub(crate) mod placement;
 pub mod settings;
 
 use std::rc::Rc;
@@ -21,7 +22,7 @@ use crate::settings::Settings;
 pub enum DialogEvent {
     /// A live preview of the working settings. It is not persisted.
     Preview(Settings),
-    /// The user pressed Apply or OK. The settings must be persisted.
+    /// The user pressed OK. The settings must be persisted.
     Applied(Settings),
     /// The dialog was cancelled or closed. Restore these settings without
     /// persisting them.

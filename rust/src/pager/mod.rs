@@ -19,6 +19,7 @@ use windows::core::w;
 use windows_reactor::{App, Component, ComponentContext, LocalSender, View, ViewContext};
 
 use crate::desktop::{self, SupervisedDesktop, VirtualDesktopApi};
+use crate::dialogs::placement;
 use crate::dialogs::{DialogEvent, DialogLink, about, settings as settings_dialog};
 use crate::foreground::ForegroundTracker;
 use crate::monitors::{self, MonitorInfo};
@@ -69,6 +70,8 @@ pub enum Message {
     RestoreLastActive(u32),
     /// A live preview or close notification from an About/Settings window.
     Dialog(DialogEvent),
+    /// A short-delay retry that positions a newly created dialog.
+    PositionDialog,
     /// Closes the window, used by the startup-error view.
     Close,
 }
@@ -100,6 +103,10 @@ pub struct Pager {
     /// Ticks since the dialog window disappeared; a fallback for a missing
     /// close notification.
     dialog_missing_ticks: u32,
+    /// Pager bounds captured when the Settings window opened.
+    dialog_owner: Option<placement::Rect>,
+    /// Fast placement retries since the Settings window was requested.
+    dialog_position_attempts: u32,
 }
 
 /// Starts the reactor pager window.
@@ -254,6 +261,17 @@ impl Component for Pager {
             }
             Message::RestoreLastActive(desktop) => self.restore_last_active(desktop),
             Message::Dialog(event) => self.handle_dialog_event(event),
+            Message::PositionDialog => {
+                let found = self.maintain_dialog();
+                if !found
+                    && self.dialog_open
+                    && self.dialog_owner.is_some()
+                    && self.dialog_position_attempts < 100
+                {
+                    self.dialog_position_attempts += 1;
+                    Self::schedule_dialog_position(context);
+                }
+            }
             Message::Close => {
                 let _ = context.window().request_close();
             }
@@ -320,6 +338,8 @@ impl Pager {
             dialog_open: false,
             dialog_seen: false,
             dialog_missing_ticks: 0,
+            dialog_owner: None,
+            dialog_position_attempts: 0,
         })
     }
 
@@ -346,6 +366,8 @@ impl Pager {
             dialog_open: false,
             dialog_seen: false,
             dialog_missing_ticks: 0,
+            dialog_owner: None,
+            dialog_position_attempts: 0,
         }
     }
 
@@ -354,6 +376,15 @@ impl Pager {
         let _ = context.spawn_background(move |_| {
             std::thread::sleep(delay);
             Message::PrimaryTick
+        });
+    }
+
+    /// Gives a just-created dialog a chance to be positioned before its first
+    /// visible frame, without waiting for the next primary tick.
+    fn schedule_dialog_position(context: &ComponentContext<Self>) {
+        let _ = context.spawn_background(|_| {
+            std::thread::sleep(Duration::from_millis(1));
+            Message::PositionDialog
         });
     }
 
@@ -700,10 +731,18 @@ impl Pager {
 
         let input =
             settings_dialog::SettingsInput::linked(self.settings.clone(), self.dialog_link());
+        let owner = self
+            .window
+            .as_ref()
+            .and_then(PagerWindow::window_rect)
+            .map(placement::Rect::from);
         if context.open_window(View::component::<settings_dialog::SettingsDialog>(input)) {
             self.dialog_open = true;
             self.dialog_seen = false;
             self.dialog_missing_ticks = 0;
+            self.dialog_position_attempts = 0;
+            self.dialog_owner = owner;
+            Self::schedule_dialog_position(context);
             crate::logging::info("opened the Settings window");
         } else {
             crate::logging::warn("the Settings window request was rejected");
@@ -720,6 +759,8 @@ impl Pager {
             self.dialog_open = true;
             self.dialog_seen = false;
             self.dialog_missing_ticks = 0;
+            self.dialog_position_attempts = 0;
+            self.dialog_owner = None;
             crate::logging::info("opened the About window");
         } else {
             crate::logging::warn("the About window request was rejected");
@@ -735,6 +776,8 @@ impl Pager {
                 self.dialog_open = false;
                 self.dialog_seen = false;
                 self.dialog_missing_ticks = 0;
+                self.dialog_position_attempts = 0;
+                self.dialog_owner = None;
                 if let Some(window) = &self.window {
                     let _ = window.reassert_topmost();
                 }
@@ -782,21 +825,35 @@ impl Pager {
 
     /// Keeps the open dialog above the topmost pager and clears a stale
     /// `dialog_open` flag if its window disappeared without a close message.
-    fn maintain_dialog(&mut self) {
+    ///
+    /// Returns whether the dialog HWND was found. The first sighting cloaks
+    /// the window, places it, and reveals it, so its default position is never
+    /// presented.
+    fn maintain_dialog(&mut self) -> bool {
         if !self.dialog_open {
-            return;
+            return false;
         }
 
         let hwnd = native_window::find_pager_window(settings_dialog::WINDOW_TITLE)
             .or_else(|| native_window::find_pager_window(about::WINDOW_TITLE));
 
         if let Some(hwnd) = hwnd {
+            if !self.dialog_seen {
+                let cloak = self.dialog_owner.is_some();
+                if cloak && !native_window::set_cloaked(hwnd, true) {
+                    crate::logging::warn("cloaking the Settings window failed");
+                }
+                self.position_dialog(hwnd);
+                if cloak && !native_window::set_cloaked(hwnd, false) {
+                    crate::logging::warn("revealing the Settings window failed");
+                }
+            }
             self.dialog_seen = true;
             self.dialog_missing_ticks = 0;
             if let Err(error) = native_window::reassert_topmost(hwnd) {
                 crate::logging::warn(format!("reasserting dialog topmost failed: {error}"));
             }
-            return;
+            return true;
         }
 
         self.dialog_missing_ticks = self.dialog_missing_ticks.saturating_add(1);
@@ -805,10 +862,36 @@ impl Pager {
             self.dialog_open = false;
             self.dialog_seen = false;
             self.dialog_missing_ticks = 0;
+            self.dialog_position_attempts = 0;
+            self.dialog_owner = None;
             if let Some(window) = &self.window {
                 let _ = window.reassert_topmost();
             }
             crate::logging::warn("dialog window disappeared without a close notification");
+        }
+        false
+    }
+
+    /// Places the Settings window using the C# right/left/below/above sequence.
+    fn position_dialog(&self, hwnd: HWND) {
+        let Some(owner) = self.dialog_owner else {
+            return;
+        };
+        let Some(rect) = native_window::window_rect(hwnd) else {
+            return;
+        };
+
+        let size = (rect.right - rect.left, rect.bottom - rect.top);
+        let work_areas: Vec<placement::Rect> = self
+            .monitors
+            .iter()
+            .map(|monitor| monitor.work_rect.into())
+            .collect();
+        let (x, y) = placement::find_placement(owner, size, &work_areas);
+        if let Err(error) = native_window::set_position(hwnd, x, y) {
+            crate::logging::warn(format!("positioning the Settings window failed: {error}"));
+        } else {
+            crate::logging::info(format!("positioned the Settings window at {x},{y}"));
         }
     }
 

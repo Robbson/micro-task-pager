@@ -2,7 +2,7 @@
 //!
 //! The dialog is a secondary WinUI window with the C# dialog's Layout, Theme,
 //! and Misc sections. All edits target a working copy; the pager receives live
-//! previews and only persists settings when Apply or OK is pressed.
+//! previews and only persists settings when OK is pressed.
 
 mod draft;
 mod view;
@@ -69,7 +69,6 @@ enum MessageKind {
     ColorDialogClosed(ContentDialogResult),
     Revert(Field),
     ResetSection,
-    Apply,
     Ok,
     Cancel,
     Preview,
@@ -157,12 +156,6 @@ impl Component for SettingsDialog {
                 self.draft.reset_section(self.section);
                 self.mark_changed(context);
             }
-            MessageKind::Apply => {
-                self.draft.accept();
-                if let Some(link) = &self.link {
-                    link.send(DialogEvent::Applied(self.draft.working().clone()));
-                }
-            }
             MessageKind::Ok => {
                 if let Some(link) = &self.link {
                     link.send(DialogEvent::Applied(self.draft.working().clone()));
@@ -172,7 +165,7 @@ impl Component for SettingsDialog {
             }
             MessageKind::Cancel => {
                 if let Some(link) = &self.link {
-                    link.send(DialogEvent::Cancelled(self.draft.baseline().clone()));
+                    link.send(DialogEvent::Cancelled(self.draft.original().clone()));
                 }
                 self.finished = true;
                 let _ = context.window().request_close();
@@ -220,7 +213,7 @@ impl Drop for SettingsDialog {
     fn drop(&mut self) {
         if let Some(link) = &self.link {
             if !self.finished {
-                link.send(DialogEvent::Cancelled(self.draft.baseline().clone()));
+                link.send(DialogEvent::Cancelled(self.draft.original().clone()));
             }
             link.send(DialogEvent::Closed);
         }

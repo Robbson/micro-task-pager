@@ -16,6 +16,7 @@
 use std::cell::{Cell, RefCell};
 
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAK, DwmSetWindowAttribute};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_SHIFT};
@@ -59,6 +60,54 @@ pub fn find_pager_window(title: &str) -> Option<HWND> {
     };
 
     search.found
+}
+
+/// Full window rectangle for any window owned by this process.
+pub fn window_rect(hwnd: HWND) -> Option<RECT> {
+    let mut rect = RECT::default();
+    // SAFETY: `GetWindowRect` only reads the window rectangle.
+    unsafe {
+        GetWindowRect(hwnd, &mut rect).ok()?;
+    }
+    Some(rect)
+}
+
+/// Moves a window without resizing it or changing its z-order.
+pub fn set_position(hwnd: HWND, x: i32, y: i32) -> Result<(), windows::core::Error> {
+    // SAFETY: the handle is an existing window owned by this process; the call
+    // changes only its screen position.
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            x,
+            y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        )
+    }
+}
+
+/// Hides or reveals a window through DWM without changing its visible state.
+///
+/// A cloaked window is still logically visible and receives input, but the
+/// compositor does not draw it. The Settings dialog is cloaked while it moves
+/// from its default position to the computed placement so the default position
+/// is never presented.
+pub fn set_cloaked(hwnd: HWND, cloaked: bool) -> bool {
+    let value = BOOL::from(cloaked);
+    // SAFETY: the handle is an existing window owned by this process; DWM only
+    // reads the BOOL pointed to for the duration of the call.
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAK,
+            &value as *const BOOL as *const core::ffi::c_void,
+            std::mem::size_of::<BOOL>() as u32,
+        )
+        .is_ok()
+    }
 }
 
 /// Reasserts topmost for an arbitrary window owned by this process.

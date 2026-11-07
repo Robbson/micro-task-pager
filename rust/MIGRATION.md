@@ -21,7 +21,7 @@ content; link to the relevant section instead.
 | 7. WinUI architecture and docs | Complete | 2026-10-30 | 2026-10-30 | Adopted WinUI 3 via `windows-reactor`; architecture, agent rules, and notices updated                                                                                                                                                                                                |
 | 8. Reactor pager shell         | Complete | 2026-11-06 | 2026-11-06 | Borderless/tool-window/layered/topmost reactor window, HWND shim, pinning, and ticks verified on 26200; native v1 remains the main binary until Phase 11                                                                                                                             |
 | 9. Reactor pager content       | Complete | 2026-11-06 | 2026-11-06 | DIP layout/hit testing, Preview and Micro views, crisp display-sized icons, pointer drag/click, low-level Shift+wheel hook, and compact native context menu verified on 26200; drag cursor feedback is a follow-up, Settings/About wait for Phase 10                                 |
-| 10. Reactor dialogs            | Complete | 2026-11-06 | 2026-11-06 | Promoted About, added the Settings window with working copy, Apply/OK/Cancel, per-option revert, per-section defaults, validation, coalesced live preview, C#-compatible persistence, and dialog topmost handling; native v1 keeps its transitional About until the Phase 11 cutover |
+| 10. Reactor dialogs            | Complete | 2026-11-06 | 2026-11-07 | Promoted About, added the Settings window with working copy, OK/Cancel, per-option revert to the opening values, per-section defaults, validation, coalesced live preview, C#-compatible persistence, C#-style dialog placement, dialog topmost handling, and discoverable numeric steppers |
 | 11. Cutover and cleanup        | Complete | 2026-11-07 | 2026-11-07 | Main binary now starts the reactor pager; native `app.rs`, `window.rs`, `about.rs`, and `render/` removed; docs and agent rules updated; Windows 10 1809 is now the app floor |
 | 12. Verification and packaging | Pending  |            |            | Checklist, OS floor, runtime packaging, supported builds                                                                                                                                                                                                                             |
 
@@ -175,8 +175,9 @@ Follow-up fixes after user testing:
 - [x] Promote `examples/reactor_about.rs` to `src/dialogs/about.rs`; the example now runs the library
       component.
 - [x] Build `src/dialogs/settings/` with Layout/Theme/Misc sections, a Pivot, and settings cards.
-- [x] Implement the working copy, Apply/OK/Cancel, per-option revert, reset per section, validation,
-      and coalesced live preview.
+- [x] Implement the working copy, OK/Cancel, per-option revert to the opening values, reset per
+      section, validation, and coalesced live preview.
+- [x] Port the C# Settings window placement (right, left, below, above, then centered).
 - [x] Delete the native `src/about.rs` with the other native UI at the Phase 11 cutover.
 - [x] Acceptance: About and Settings match the C# behavior and look modern.
 
@@ -264,6 +265,10 @@ These items are not scheduled and do not block the next phase.
 | 2026-11-06 | Keep the native v1 About dialog through Phase 10 | The native v1 is still the main binary; deleting `src/about.rs` now would remove a working menu action. The reactor About is already the target implementation, and the native file is removed at cutover | Phase 11 |
 | 2026-11-07 | Cut the main binary over to the reactor pager and delete the native UI | The dialogs and context menu must be reachable in the app, not only in examples. The C# implementation remains the behavioral reference | ARCHITECTURE §13 |
 | 2026-11-07 | Add explicit step buttons to Settings numeric rows | `windows-reactor` 0.100 does not expose `NumberBox.SpinButtonPlacementMode`, so the WinUI spin buttons are hidden. Standard Reactor `Button`s with `Symbol::Remove`/`Symbol::Add` provide discoverable single-step changes and remain enabled/disabled at the clamp limits | ARCHITECTURE §9.2 |
+| 2026-11-07 | Remove the Settings Apply button | Live preview already updates the pager; OK is the single commit action and Cancel/window close restores the opening values. Apply added no unique state and duplicated OK without closing | ARCHITECTURE §9.2, §12 |
+| 2026-11-07 | Position the Settings window with the C# placement sequence | Reactor 0.100 has no initial-window-position API, so the pager captures its own rect, computes right/left/below/above/center over the monitor work areas, and moves the secondary HWND when it first appears | ARCHITECTURE §9.2 |
+| 2026-11-07 | Scale the revert icon through a `Viewbox` | A raw 18 px glyph is clipped by the Button content padding; a 40x32 button with a `Viewbox`-scaled `Symbol::Undo` renders cleanly | ARCHITECTURE §9.2 |
+| 2026-11-07 | Cloak the Settings window during placement | Reactor shows a secondary window immediately at its default position. The pager retries every 1 ms, applies `DWMWA_CLOAK`, moves the HWND, and reveals it, preventing the default position from being presented | ARCHITECTURE §9.2 |
 
 ## Verified Windows builds
 
@@ -316,6 +321,8 @@ narrative.
 | 2026-11-06 | 10    | `reactor_about` and `reactor_settings` built and launched against Windows App Runtime 2.6.4; both processes stayed alive without a startup error during a 10-second launch check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 2026-11-06 | 10 | Live pager handoff on build 26200, 3440x1440 at 100%: a scripted right-click on the reactor pager and a click on the Settings menu item opened the "Micro Task Pager Settings" window; Layout, Theme, and Misc pages rendered with Pivot tabs, settings cards, NumberBox/ComboBox/Slider/CheckBox rows, color previews, and the pinning InfoBar; a Choose button opened the nested ColorDialog and ColorPicker; the dialog had `WS_EX_TOPMOST` set; changing Pager Height to 70 resized the live pager to 214x70 after the 80 ms preview, closing the window restored it to 214x45 without a registry write, Apply wrote `PagerHeight=70` and `RendererViewModes` unchanged (`01 00`), and OK persisted and closed; the original registry key was restored afterward; `cargo fmt --check`, Clippy, and 42 tests pass |
 | 2026-11-07 | 11 | Cutover verified on build 26200: `cargo run` now starts the reactor pager; the context menu opens both About and Settings from the main binary; the Settings Layout rows show minus/plus step buttons; live preview, cancel-restore, Apply persistence, and OK close still work; the native `app.rs`, `window.rs`, `about.rs`, and `render/` files are deleted; `cargo fmt --check`, Clippy, and 38 tests pass |
+| 2026-11-07 | 10 | Settings follow-up on build 26200, 3440x1440 at 100%: Apply was removed (OK persists and closes, Cancel/window close restores the opening values); the dialog opened at `x = pager.right + 8`, `y = work_area.bottom - dialog_height`, matching the C# right-placement sequence; changing Pager Height showed a scaled undo icon in a 40x32 revert button; 44 tests, `cargo fmt --check`, and Clippy pass |
+| 2026-11-07 | 10 | Placement flash follow-up: the first sighting of the Settings HWND now applies `DWMWA_CLOAK`, moves the window, and reveals it; the 40 ms retry was replaced with a 1 ms retry chain capped at 100 attempts; `DwmSetWindowAttribute` failures are logged. `cargo fmt --check`, Clippy, and 44 tests pass; the visual no-flash check is left for the next manual run |
 
 ## Code map and glossary
 
@@ -337,6 +344,7 @@ documentation mirrors this table.
 | `src/dialogs/settings/mod.rs`        | Settings component: state, messages, update loop, and coalesced preview.                            |
 | `src/dialogs/settings/draft.rs`      | Pure working-copy model: revert, reset-per-section, clamps, and tests.                              |
 | `src/dialogs/settings/view.rs`       | Declarative Pivot/cards Settings view, step buttons, and modal color picker.                        |
+| `src/dialogs/placement.rs`           | Pure C#-compatible Settings window placement and tests.                                             |
 | `src/native_window.rs`               | HWND lookup, styles, topmost, layered alpha, position, wheel hook, cursor helpers, and pin handoff. |
 | `src/monitors.rs`                    | Monitor enumeration and work areas.                                                                 |
 | `src/com.rs`                         | RAII guard that initializes the COM apartment on the calling thread.                                |

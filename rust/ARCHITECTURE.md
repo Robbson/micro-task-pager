@@ -351,6 +351,7 @@ rust/
         mod.rs                   # Settings component and preview loop
         draft.rs                 # pure working copy, revert, clamps
         view.rs                  # Pivot/cards view and color dialog
+      placement.rs               # C#-compatible dialog placement
     native_window.rs             # HWND lookup and pager-specific window styles
     settings.rs                  # model, defaults, registry import/export
     logging.rs
@@ -654,27 +655,33 @@ removed at the Phase 11 cutover.
 The Settings dialog is a reactor secondary window:
 
 - Sections corresponding to the C# tabs: Layout, Theme, Misc, shown through a `Pivot`.
-- A working copy of `Settings`; edits do not touch the live settings until Apply/OK. The pure
-  `SettingsDraft` keeps the working copy, the last applied baseline for per-option revert, and the
-  clamp rules.
-- Apply, OK, Cancel, and reset-per-section. Apply persists and keeps the window open; OK persists and
-  closes; Cancel restores the last applied settings without persisting.
-- Per-option revert where the C# dialog supports it. The revert target moves to the working copy when
-  Apply is pressed.
+- A working copy of `Settings`; edits are previewed live but only OK persists. The pure
+  `SettingsDraft` keeps the working copy, the values the dialog opened with for per-option revert, and
+  the clamp rules.
+- OK and Cancel plus reset-per-section. OK persists and closes; Cancel restores the values the dialog
+  opened with without persisting, and closing the window behaves like Cancel.
+- Per-option revert where the C# dialog supports it. The revert target is always the value the dialog
+  opened with.
 - Live preview for safe changes (opacity, colors, height, view mode) by publishing a preview settings
   object to the pager component. Edits are coalesced at 80 ms so a held NumberBox arrow or slider drag
   does not rebuild the pager layout for every increment.
 - Numeric clamps and validation before writing. Pager height is always at least the icon padding plus
   16 DIPs; primary/secondary delays are at least 1/100 ms; opacity is 25-100 percent.
 - Registry write through the existing `settings.rs` model; keep C#-compatible value names and types.
-  Applying also writes the live per-desktop view modes so a later settings save cannot discard a
+  OK also writes the live per-desktop view modes so a later settings save cannot discard a
   Shift+wheel toggle.
+- The window is positioned with the C# `FindPlacement` sequence: right of the pager, then left,
+  below, above, and finally centered over it. The whole dialog must fit inside one monitor's work
+  area; the vertical/horizontal coordinate is clamped to that work area. The placement runs when the
+  secondary HWND first appears. The pager retries every millisecond, cloaks the HWND through DWM,
+  moves it, and reveals it, so the default position is not presented.
 - Rows use standard WinUI controls: `ComboBox`, `NumberBox`, `Slider`, `CheckBox`, `Button`, and a
   `ContentDialog` hosting a `ColorPicker`. Sections are cards rather than recreated WinForms group
   boxes.
 
 The component is split into `src/dialogs/settings/mod.rs` (state and update loop), `draft.rs` (pure
-working-copy model), and `view.rs` (declarative view).
+working-copy model), `view.rs` (declarative view), and `src/dialogs/placement.rs` (pure window
+placement).
 
 ## 10. Settings and Persistence
 
@@ -797,8 +804,8 @@ as it is made.
   topmost while the modal menu is open and restore it afterward.
 - About and Settings are independent secondary windows owned by the pager, not modal `ShowDialog`
   calls. The pager prevents a second dialog while one is open, and the context menu grays both entries.
-- The Settings dialog has an Apply button in addition to OK and Cancel. Apply persists and updates the
-  per-option revert baseline; the C# dialog only has Save/Cancel/defaults.
+- Settings uses OK/Cancel with transient live preview; only OK persists. The C# dialog uses
+  Save/Cancel, so there is no extra Apply step.
 - Color editing uses a reactor `ContentDialog` with a `ColorPicker` instead of the WinForms
   `ColorDialog`. Alpha is not editable, matching the C# color dialog's result.
 - While a dialog is open, the pager skips reasserting its own topmost and reasserts the dialog's

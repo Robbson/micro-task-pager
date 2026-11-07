@@ -2,15 +2,15 @@
 //!
 //! Rows are built from standard WinUI controls: ComboBox, NumberBox, Slider,
 //! CheckBox, and a modal ColorPicker. Each row exposes a small revert button
-//! while its option differs from the last applied baseline.
+//! while its option differs from the value the dialog opened with.
 
 use windows_reactor::{
     Border, Brush, Button, ButtonStyle, CheckBox, ChildrenControl, ColorPicker, ComboBox,
     ContentControl, ContentDialog, FontWeight, Grid, GridChildExt, GridLength, HorizontalAlignment,
     InfoBar, InfoBarSeverity, KeyedView, LayoutControl, NumberBox, Orientation, Pivot, PivotItem,
-    PivotSlot, ScrollBarVisibility, ScrollViewer, Slider, SlotsControl, StackPanel, Symbol,
-    SymbolIcon, TextBlock, ThemeBrush, Thickness, TooltipExt, VerticalAlignment, View, ViewContext,
-    WindowTheme, WindowVisuals,
+    PivotSlot, ScrollBarVisibility, ScrollViewer, Slider, SlotsControl, StackPanel, Stretch,
+    Symbol, SymbolIcon, TextBlock, ThemeBrush, Thickness, TooltipExt, VerticalAlignment, View,
+    ViewContext, Viewbox, ViewboxSlot, WindowTheme, WindowVisuals,
 };
 
 use super::draft::{Field, MAX_DELAY, MAX_ICON_PADDING, MAX_PAGER_HEIGHT};
@@ -390,12 +390,18 @@ fn row(
     ];
 
     if dialog.draft.is_modified(field) {
+        let icon = Viewbox::new()
+            .stretch(Stretch::Uniform)
+            .width(18.0)
+            .height(18.0)
+            .slot(ViewboxSlot::Child, SymbolIcon::new().symbol(Symbol::Undo));
         let revert = Button::new()
-            .width(32.0)
-            .height(28.0)
+            .width(40.0)
+            .height(32.0)
             .on_click(context.message(Message(MessageKind::Revert(field))))
             .grid_column(2)
-            .content("↺");
+            .content(icon)
+            .tooltip("Revert to the value the dialog opened with");
         children.push(KeyedView::new("revert", revert));
     }
 
@@ -485,9 +491,6 @@ fn footer(context: &mut ViewContext<SettingsDialog>) -> View {
         .text("Reset the current section")
         .font_size(12.0)
         .vertical_alignment(VerticalAlignment::Center);
-    let apply = Button::new()
-        .on_click(context.message(Message(MessageKind::Apply)))
-        .content("Apply");
     let cancel = Button::new()
         .on_click(context.message(Message(MessageKind::Cancel)))
         .content("Cancel");
@@ -505,7 +508,7 @@ fn footer(context: &mut ViewContext<SettingsDialog>) -> View {
         .orientation(Orientation::Horizontal)
         .spacing(8.0)
         .grid_column(1)
-        .children((apply, cancel, ok));
+        .children((cancel, ok));
 
     let buttons = Grid::new()
         .columns([GridLength::STAR, GridLength::Auto])
