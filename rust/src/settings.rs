@@ -48,6 +48,14 @@ pub enum DesktopBorderStyle {
 }
 
 impl DesktopBorderStyle {
+    /// Value written to the registry, matching the C# enum.
+    pub fn as_u32(self) -> u32 {
+        match self {
+            Self::Box => 0,
+            Self::Underline => 1,
+        }
+    }
+
     fn from_u32(value: u32) -> Self {
         match value {
             1 => Self::Underline,
@@ -175,6 +183,44 @@ impl Settings {
         ) != 0;
 
         settings
+    }
+
+    /// Writes every value in the C#-compatible registry format.
+    ///
+    /// `renderer_view_modes` is written as the flat `REG_BINARY` array, exactly
+    /// like [`save_view_modes`]. Callers that own the live per-desktop modes
+    /// should set that field from the current layout before saving so a later
+    /// settings write does not discard a view-mode toggle.
+    pub fn save(&self) {
+        let Ok(key) = CURRENT_USER.create(REGISTRY_PATH) else {
+            return;
+        };
+
+        let _ = key.set_u32("ViewModeDefault", u32::from(self.view_mode_default.as_u8()));
+        let modes: Vec<u8> = self
+            .renderer_view_modes
+            .iter()
+            .map(|mode| mode.as_u8())
+            .collect();
+        let _ = key.set_bytes("RendererViewModes", Type::Bytes, &modes);
+        let _ = key.set_u32("DesktopBorderStyle", self.desktop_border_style.as_u32());
+        let _ = key.set_string("BackgroundOpacity", self.background_opacity.to_string());
+        let _ = key.set_u32("PagerHeight", self.pager_height as u32);
+        let _ = key.set_u32("IconPaddingX", self.icon_padding_x as u32);
+        let _ = key.set_u32("IconPaddingY", self.icon_padding_y as u32);
+        let _ = key.set_u32("DesktopBackgroundColor", self.desktop_background_color);
+        let _ = key.set_u32("DesktopBorderColor", self.desktop_border_color);
+        let _ = key.set_u32("ActiveDesktopBorderColor", self.active_desktop_border_color);
+        let _ = key.set_u32("WindowBackgroundColor", self.window_background_color);
+        let _ = key.set_u32(
+            "ActiveWindowBackgroundColor",
+            self.active_window_background_color,
+        );
+        let _ = key.set_u32("WindowBorderColor", self.window_border_color);
+        let _ = key.set_u32("ActiveWindowBorderColor", self.active_window_border_color);
+        let _ = key.set_u32("PrimaryUpdateDelay", self.primary_update_delay);
+        let _ = key.set_u32("SecondaryUpdateDelay", self.secondary_update_delay);
+        let _ = key.set_u32("ShowAppInTaskbar", u32::from(self.show_app_in_taskbar));
     }
 }
 

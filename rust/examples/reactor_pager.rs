@@ -1,9 +1,8 @@
-//! Runs the Phase 8 reactor pager shell.
+//! Runs the reactor pager.
 //!
-//! Run from `rust/` with `cargo run --example reactor_pager`. The native v1 in
-//! `src/main.rs` stays the main binary until Phase 11. This example is the
-//! runnable shell used to verify borderless, topmost, layered, and pinned
-//! behavior with the target UI stack.
+//! Run from `rust/` with `cargo run --example reactor_pager`. Since the Phase 11 cutover this is the
+//! same component as the main binary; the example remains a convenient smoke runner. It uses the
+//! release mutex, so stop any other pager first.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

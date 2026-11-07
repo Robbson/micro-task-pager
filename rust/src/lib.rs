@@ -1,17 +1,17 @@
-//! Micro Task Pager, a native Windows virtual desktop pager.
+//! Micro Task Pager, a WinUI 3 virtual desktop pager.
 //!
 //! The crate is intentionally split into small modules so the Windows-specific
 //! and unsafe code stays away from the application logic:
 //!
-//! - [`about`] shows the native modal About dialog.
 //! - [`com`] initializes the COM apartment on the UI thread.
 //! - [`desktop`] is the safe wrapper around the undocumented virtual desktop
 //!   COM interfaces. Start with [`desktop::open`], which returns a
 //!   [`desktop::SupervisedDesktop`].
+//! - [`dialogs`] contains the WinUI About and Settings windows.
 //! - [`logging`] writes a small daily log file.
 //! - [`native_window`] applies pager-specific Win32 window properties that
 //!   `windows-reactor` does not expose.
-//! - [`pager`] is the target WinUI 3 pager component.
+//! - [`pager`] is the WinUI 3 pager component and the application UI.
 //! - [`settings`] reads the C#-compatible registry values and provides defaults.
 //! - [`single_instance`] prevents two pagers from running at the same time.
 //!
@@ -19,17 +19,14 @@
 //! same code path. The probe is not a separate test framework; it is a small
 //! command-line program built from `examples/probe/main.rs`.
 
-pub mod about;
-pub mod app;
 pub mod com;
 pub mod desktop;
+pub mod dialogs;
 pub mod foreground;
 pub mod logging;
 pub mod monitors;
 pub mod native_window;
 pub mod pager;
-pub mod render;
 pub mod settings;
 pub mod single_instance;
-pub mod window;
 pub mod windows;

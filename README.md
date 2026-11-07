@@ -11,7 +11,10 @@
 <p align="center">
   <a href="https://github.com/Robbson/micro-task-pager/releases/latest"><img src="https://img.shields.io/github/v/release/Robbson/micro-task-pager" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey" alt="Platform: Windows 10 and 11">
+  <img
+    src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey"
+    alt="Platform: Windows 10 and 11"
+  >
 </p>
 
 **Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
@@ -29,7 +32,10 @@ Unlike a simple desktop switcher, it can display each desktop in one of two ways
 Each desktop screen can use its own view, so you can mix both styles however you like.
 
 <p align="center">
-  <img src="src/Resources/pager-example.png" alt="Micro Task Pager showing multiple virtual desktops">
+  <img
+    src="src/Resources/pager-example.png"
+    alt="Micro Task Pager showing multiple virtual desktops"
+  >
   <br>
   <em>Micro Task Pager with several desktops, using both preview and Micro Taskbar views.</em>
 </p>
@@ -41,7 +47,7 @@ Windows virtual desktops are useful, but the native experience has limitations: 
 Micro Task Pager fills that gap with a small panel that stays out of the way and is always ready when you need it. It uses the native virtual desktop features of Windows, so it works alongside other window managers and desktop tools instead of replacing them.
 
 > [!NOTE]
-> Windows has no native support for oversized desktops, so the pager does not implement virtual desktop *pages* as some classic Linux tools do.
+> Windows has no native support for oversized desktops, so the pager does not implement virtual desktop _pages_ as some classic Linux tools do.
 
 ## Features
 
@@ -84,17 +90,17 @@ On first launch, the pager appears at the bottom center of the primary screen's 
 
 ## Using the pager
 
-| Action | How |
-| --- | --- |
-| Switch to a desktop | Left-click anywhere on that desktop's area. |
-| Bring a window to the front | Left-click its miniature or icon while its desktop is active. |
-| Move a window to another desktop | Drag its miniature or icon onto the target desktop. |
-| Change a desktop's view | Right-click with the pointer over that desktop and choose **Toggle View Mode**. |
-| Move the pager | Drag it with the middle mouse button, or hold `Shift` and drag with the left mouse button. |
-| Open the menu | Right-click the pager. |
-| Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**. |
-| Open settings | Right-click the pager and choose **Settings**. |
-| Exit | Right-click the pager and choose **Exit**. |
+| Action                             | How                                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| Switch to a desktop                | Left-click anywhere on that desktop's area.                                                |
+| Bring a window to the front        | Left-click its miniature or icon while its desktop is active.                              |
+| Move a window to another desktop   | Drag its miniature or icon onto the target desktop.                                        |
+| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**.            |
+| Move the pager                     | Drag it with the middle mouse button, or hold `Shift` and drag with the left mouse button. |
+| Open the menu                      | Right-click the pager.                                                                     |
+| Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**.         |
+| Open settings                      | Right-click the pager and choose **Settings**.                                             |
+| Exit                               | Right-click the pager and choose **Exit**.                                                 |
 
 ### Preview view
 

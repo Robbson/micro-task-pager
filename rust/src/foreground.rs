@@ -6,8 +6,8 @@
 //! message loop.
 //!
 //! The callback cannot access the desktop API, so it only stores the handle in
-//! an atomic. The next timer tick in [`crate::app::App`] consumes it and maps
-//! the window to a desktop. This keeps COM calls on the UI thread and keeps the
+//! an atomic. The pager's next primary tick consumes it and maps the window to
+//! a desktop. This keeps COM calls on the UI thread and keeps the
 //! `extern "system"` callback tiny.
 
 use std::collections::HashMap;

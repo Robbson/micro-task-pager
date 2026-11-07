@@ -19,6 +19,7 @@ use windows::core::w;
 use windows_reactor::{App, Component, ComponentContext, LocalSender, View, ViewContext};
 
 use crate::desktop::{self, SupervisedDesktop, VirtualDesktopApi};
+use crate::dialogs::{DialogEvent, DialogLink, about, settings as settings_dialog};
 use crate::foreground::ForegroundTracker;
 use crate::monitors::{self, MonitorInfo};
 use crate::native_window::{self, ContextCommand, PagerWindow, WheelHook};
@@ -37,7 +38,7 @@ const RESTORE_DELAY_MS: u64 = 150;
 const ERROR_WINDOW_SIZE: (f64, f64) = (420.0, 160.0);
 
 /// Messages handled on the reactor UI thread.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     /// Snapshot and layout refresh.
     PrimaryTick,
@@ -66,6 +67,8 @@ pub enum Message {
         shift: bool,
     },
     RestoreLastActive(u32),
+    /// A live preview or close notification from an About/Settings window.
+    Dialog(DialogEvent),
     /// Closes the window, used by the startup-error view.
     Close,
 }
@@ -90,6 +93,13 @@ pub struct Pager {
     menu_point: (f64, f64),
     foreground: Option<ForegroundTracker>,
     startup_foreground: Option<HWND>,
+    /// True while a secondary About or Settings window is open.
+    dialog_open: bool,
+    /// Whether the open dialog's HWND has been observed yet.
+    dialog_seen: bool,
+    /// Ticks since the dialog window disappeared; a fallback for a missing
+    /// close notification.
+    dialog_missing_ticks: u32,
 }
 
 /// Starts the reactor pager window.
@@ -138,6 +148,7 @@ impl Component for Pager {
                 self.attach_window();
                 self.sync_window_size();
                 self.poll_foreground();
+                self.maintain_dialog();
                 let delay = if self.window.is_some() {
                     self.settings.primary_update_delay
                 } else {
@@ -149,6 +160,7 @@ impl Component for Pager {
                 self.refresh_environment();
                 self.attach_window();
                 self.maintain_window();
+                self.maintain_dialog();
                 self.try_pin();
                 let delay = if self.window.is_some() {
                     self.settings.secondary_update_delay
@@ -170,7 +182,8 @@ impl Component for Pager {
                     native_window::set_drag_cursor(false);
                     self.menu_point = (x, y);
                     if let Some(hwnd) = self.window.as_ref().map(PagerWindow::hwnd)
-                        && let Some(command) = native_window::show_context_menu(hwnd)
+                        && let Some(command) =
+                            native_window::show_context_menu(hwnd, self.dialog_open)
                     {
                         self.run_menu_command(command, context);
                     }
@@ -240,6 +253,7 @@ impl Component for Pager {
                 }
             }
             Message::RestoreLastActive(desktop) => self.restore_last_active(desktop),
+            Message::Dialog(event) => self.handle_dialog_event(event),
             Message::Close => {
                 let _ = context.window().request_close();
             }
@@ -303,6 +317,9 @@ impl Pager {
             menu_point: (0.0, 0.0),
             foreground: None,
             startup_foreground,
+            dialog_open: false,
+            dialog_seen: false,
+            dialog_missing_ticks: 0,
         })
     }
 
@@ -326,6 +343,9 @@ impl Pager {
             menu_point: (0.0, 0.0),
             foreground: None,
             startup_foreground: None,
+            dialog_open: false,
+            dialog_seen: false,
+            dialog_missing_ticks: 0,
         }
     }
 
@@ -555,6 +575,10 @@ impl Pager {
         if let Err(error) = window.ensure_size(self.client_size.0, self.client_size.1) {
             crate::logging::warn(format!("maintaining pager size failed: {error}"));
         }
+        // While a dialog is open, its window must stay above the pager.
+        if self.dialog_open {
+            return;
+        }
         if let Err(error) = window.reassert_topmost() {
             crate::logging::warn(format!("reasserting pager topmost failed: {error}"));
         }
@@ -662,6 +686,132 @@ impl Pager {
         ));
     }
 
+    fn dialog_link(&self) -> DialogLink {
+        let sender = self.sender.clone();
+        DialogLink::new(move |event| {
+            let _ = sender.send(Message::Dialog(event));
+        })
+    }
+
+    fn open_settings(&mut self, context: &ComponentContext<Self>) {
+        if self.dialog_open {
+            return;
+        }
+
+        let input =
+            settings_dialog::SettingsInput::linked(self.settings.clone(), self.dialog_link());
+        if context.open_window(View::component::<settings_dialog::SettingsDialog>(input)) {
+            self.dialog_open = true;
+            self.dialog_seen = false;
+            self.dialog_missing_ticks = 0;
+            crate::logging::info("opened the Settings window");
+        } else {
+            crate::logging::warn("the Settings window request was rejected");
+        }
+    }
+
+    fn open_about(&mut self, context: &ComponentContext<Self>) {
+        if self.dialog_open {
+            return;
+        }
+
+        let input = about::AboutInput::linked(self.dialog_link());
+        if context.open_window(View::component::<about::About>(input)) {
+            self.dialog_open = true;
+            self.dialog_seen = false;
+            self.dialog_missing_ticks = 0;
+            crate::logging::info("opened the About window");
+        } else {
+            crate::logging::warn("the About window request was rejected");
+        }
+    }
+
+    fn handle_dialog_event(&mut self, event: DialogEvent) {
+        match event {
+            DialogEvent::Preview(settings) => self.apply_settings(settings, false),
+            DialogEvent::Applied(settings) => self.apply_settings(settings, true),
+            DialogEvent::Cancelled(settings) => self.apply_settings(settings, false),
+            DialogEvent::Closed => {
+                self.dialog_open = false;
+                self.dialog_seen = false;
+                self.dialog_missing_ticks = 0;
+                if let Some(window) = &self.window {
+                    let _ = window.reassert_topmost();
+                }
+            }
+        }
+    }
+
+    /// Applies a complete settings snapshot to the live pager.
+    ///
+    /// Color and opacity changes are picked up by the next view publication.
+    /// Layout-affecting values rebuild the layout immediately so a preview of
+    /// the pager height or icon padding is visible while the dialog is open.
+    fn apply_settings(&mut self, settings: Settings, persist: bool) {
+        let pager_height_changed = settings.pager_height != self.settings.pager_height;
+        let icon_padding_changed = settings.icon_padding_x != self.settings.icon_padding_x
+            || settings.icon_padding_y != self.settings.icon_padding_y;
+        let taskbar_changed = settings.show_app_in_taskbar != self.settings.show_app_in_taskbar;
+        let opacity_changed = settings.background_opacity != self.settings.background_opacity;
+
+        self.settings = settings;
+
+        if let Some(window) = self.window.as_mut() {
+            if taskbar_changed {
+                window.set_show_in_taskbar(self.settings.show_app_in_taskbar);
+            }
+            if opacity_changed {
+                window.set_opacity(self.settings.background_opacity);
+            }
+            if taskbar_changed && let Err(error) = window.ensure_styles() {
+                crate::logging::warn(format!("applying settings styles failed: {error}"));
+            }
+        }
+
+        if pager_height_changed || icon_padding_changed {
+            self.rebuild_layout();
+            self.sync_window_size();
+        }
+
+        if persist {
+            self.settings.renderer_view_modes = flatten_view_modes(&self.view_modes);
+            self.settings.save();
+            crate::logging::info("settings applied and saved");
+        }
+    }
+
+    /// Keeps the open dialog above the topmost pager and clears a stale
+    /// `dialog_open` flag if its window disappeared without a close message.
+    fn maintain_dialog(&mut self) {
+        if !self.dialog_open {
+            return;
+        }
+
+        let hwnd = native_window::find_pager_window(settings_dialog::WINDOW_TITLE)
+            .or_else(|| native_window::find_pager_window(about::WINDOW_TITLE));
+
+        if let Some(hwnd) = hwnd {
+            self.dialog_seen = true;
+            self.dialog_missing_ticks = 0;
+            if let Err(error) = native_window::reassert_topmost(hwnd) {
+                crate::logging::warn(format!("reasserting dialog topmost failed: {error}"));
+            }
+            return;
+        }
+
+        self.dialog_missing_ticks = self.dialog_missing_ticks.saturating_add(1);
+        let limit = if self.dialog_seen { 2 } else { 25 };
+        if self.dialog_missing_ticks > limit {
+            self.dialog_open = false;
+            self.dialog_seen = false;
+            self.dialog_missing_ticks = 0;
+            if let Some(window) = &self.window {
+                let _ = window.reassert_topmost();
+            }
+            crate::logging::warn("dialog window disappeared without a close notification");
+        }
+    }
+
     fn run_menu_command(&mut self, command: ContextCommand, context: &ComponentContext<Self>) {
         match command {
             ContextCommand::RestorePosition => {
@@ -684,12 +834,8 @@ impl Pager {
             ContextCommand::ToggleViewMode => {
                 self.toggle_mode(self.menu_point.0, self.menu_point.1)
             }
-            ContextCommand::Settings => {
-                crate::logging::info("Settings dialog is implemented in Phase 10");
-            }
-            ContextCommand::About => {
-                crate::logging::info("About dialog is implemented in Phase 10");
-            }
+            ContextCommand::Settings => self.open_settings(context),
+            ContextCommand::About => self.open_about(context),
             ContextCommand::Exit => {
                 let _ = context.window().request_close();
             }

@@ -61,6 +61,26 @@ pub fn find_pager_window(title: &str) -> Option<HWND> {
     search.found
 }
 
+/// Reasserts topmost for an arbitrary window owned by this process.
+///
+/// Used for the secondary About and Settings windows; they must sit above the
+/// topmost pager while they are open.
+pub fn reassert_topmost(hwnd: HWND) -> Result<(), windows::core::Error> {
+    // SAFETY: the handle was returned by `find_pager_window`, so it belongs to
+    // this process; `SetWindowPos` only changes z-order on this UI thread.
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        )
+    }
+}
+
 /// Finds WinUI's visible content window inside the pager.
 ///
 /// WinUI 3 hosts the XAML island in a `DesktopChildSiteBridge` child window.
@@ -363,7 +383,9 @@ const MENU_EXIT: u32 = 7;
 /// documented Win32 shim until reactor exposes transient menus. Topmost is
 /// dropped for the modal menu and restored before returning, because a topmost
 /// pager would otherwise cover its own popup.
-pub fn show_context_menu(hwnd: HWND) -> Option<ContextCommand> {
+///
+/// `dialog_open` grays out Settings and About while a secondary window is open.
+pub fn show_context_menu(hwnd: HWND, dialog_open: bool) -> Option<ContextCommand> {
     let mut screen = POINT::default();
     // SAFETY: reads the global cursor position; no window state is changed.
     unsafe {
@@ -405,18 +427,18 @@ pub fn show_context_menu(hwnd: HWND) -> Option<ContextCommand> {
         // first is not guaranteed to render later.
         let _ = AppendMenuW(menu, MF_POPUP, position.0 as usize, w!("⌖  Position"));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        let dialog_flags = if dialog_open {
+            MF_STRING | MF_GRAYED
+        } else {
+            MF_STRING
+        };
         let _ = AppendMenuW(
             menu,
-            MF_STRING | MF_GRAYED,
+            dialog_flags,
             MENU_SETTINGS as usize,
             w!("⚙  Settings"),
         );
-        let _ = AppendMenuW(
-            menu,
-            MF_STRING | MF_GRAYED,
-            MENU_ABOUT as usize,
-            w!("ℹ  About"),
-        );
+        let _ = AppendMenuW(menu, dialog_flags, MENU_ABOUT as usize, w!("ℹ  About"));
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         let _ = AppendMenuW(menu, MF_STRING, MENU_EXIT as usize, w!("✕  Exit"));
 

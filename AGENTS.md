@@ -4,20 +4,19 @@ Instructions for AI agents working in this repository.
 
 ## Project
 
-Micro Task Pager is a Windows-only virtual desktop pager. The repository currently contains two
-implementations:
+Micro Task Pager is a Windows-only virtual desktop pager. The repository contains:
 
-- `src/` - the existing C#/.NET Framework 4.8 Windows Forms application. It is the behavioral
-  reference and remains the shipping implementation during the migration.
-- `rust/` - the Rust port. The native Win32 v1 is complete and remains runnable, but the **target UI
-  is WinUI 3 through `windows-reactor`**. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before
-  making structural changes.
+- `src/` - the original C#/.NET Framework 4.8 Windows Forms application. It remains the behavioral
+  reference and ships separately while parity is verified.
+- `rust/` - the Rust implementation and the shipping WinUI 3 pager. It uses
+  `windows-reactor` for all UI. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before making
+  structural changes.
 
 Both use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual desktop
 interop must be handled carefully and tested on real Windows builds.
 
-New UI work belongs in reactor components. Do not extend the native Win32 window, GDI renderer, or
-native dialog code; those modules are transitional and are removed after the WinUI cutover.
+New UI work belongs in reactor components. Do not reintroduce a native Win32 window, GDI renderer, or
+native dialog runtime.
 
 ## Tooling available to agents
 
@@ -31,18 +30,18 @@ persistent `PATH` settings without explicit user confirmation.
 
 Installed command-line tools:
 
-| Tool | Version | Command | Notes |
-|---|---|---|---|
-| PowerShell | 7.4.22 | `pwsh` | Use PowerShell syntax and cmdlets (`Get-ChildItem`, `Select-Object`, `Get-Content`). |
-| ripgrep | 15.2.0 | `rg` | Preferred content search. Supports PCRE2 (`rg --pcre2`); the default engine has no lookaround. Use instead of `Select-String`. |
-| fd | 8.3.2 | `fd` | Fast file-name search. Use instead of recursive `Get-ChildItem -Filter`. The winget 10.5.0 copy is currently shadowed; see PATH notes. |
-| jq | 1.8.2 | `jq` | JSON processing. |
-| 7-Zip | 26.05 | `7z` | Archive inspection and creation. |
-| WinDbg | 1.2610.1001.0 | `WinDbgX` | Microsoft Store build, app execution alias. See Debugging below. |
-| Rust | 1.99.1 | `rustc`, `cargo` | MSVC toolchain. |
-| rustfmt | 1.10.0 | `cargo fmt` | Formatting. |
-| Clippy | 0.1.99 | `cargo clippy` | Linting. |
-| .NET SDK | 8.0.427 | `dotnet` | Builds the `net48` C# project. |
+| Tool       | Version       | Command          | Notes                                                                                                                                  |
+| ---------- | ------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| PowerShell | 7.4.22        | `pwsh`           | Use PowerShell syntax and cmdlets (`Get-ChildItem`, `Select-Object`, `Get-Content`).                                                   |
+| ripgrep    | 15.2.0        | `rg`             | Preferred content search. Supports PCRE2 (`rg --pcre2`); the default engine has no lookaround. Use instead of `Select-String`.         |
+| fd         | 8.3.2         | `fd`             | Fast file-name search. Use instead of recursive `Get-ChildItem -Filter`. The winget 10.5.0 copy is currently shadowed; see PATH notes. |
+| jq         | 1.8.2         | `jq`             | JSON processing.                                                                                                                       |
+| 7-Zip      | 26.05         | `7z`             | Archive inspection and creation.                                                                                                       |
+| WinDbg     | 1.2610.1001.0 | `WinDbgX`        | Microsoft Store build, app execution alias. See Debugging below.                                                                       |
+| Rust       | 1.99.1        | `rustc`, `cargo` | MSVC toolchain.                                                                                                                        |
+| rustfmt    | 1.10.0        | `cargo fmt`      | Formatting.                                                                                                                            |
+| Clippy     | 0.1.99        | `cargo clippy`   | Linting.                                                                                                                               |
+| .NET SDK   | 8.0.427       | `dotnet`         | Builds the `net48` C# project.                                                                                                         |
 
 ### PATH notes
 
@@ -65,7 +64,7 @@ Installed command-line tools:
 
 ## Build and verification
 
-### Rust (target implementation)
+### Rust (implementation)
 
 Run Cargo commands from the `rust/` directory; the repository root is not a Cargo workspace.
 
@@ -87,30 +86,29 @@ cargo test
 - Add unit tests next to the modules they cover. There is no separate test crate.
 - `rust-toolchain.toml` currently selects `stable`, which is 1.99.1. The exact `1.99.1` rustup
   toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
-- `cargo run` builds and starts the pager GUI. `build.rs` compiles `app.rc` (icon and version) and
-  embeds `app.manifest` through the MSVC linker flags.
-- The current `cargo run` binary is the native Win32 v1. The target implementation is a
-  `windows-reactor` (WinUI 3) component; see `rust/ARCHITECTURE.md` §3 and §13.
-- `windows-reactor` 0.100 is a normal dependency. Phase 8 added the reactor pager shell;
-  `src/main.rs` remains the native v1 until the Phase 11 cutover.
+- `cargo run` builds and starts the WinUI 3 pager GUI. `build.rs` compiles `app.rc` (icon and
+  version) and embeds `app.manifest` through the MSVC linker flags.
+- `windows-reactor` 0.100 is a normal dependency. The pager, About, and Settings are reactor
+  components; `src/main.rs` starts the reactor pager.
 - WinUI 3 requires the Windows App Runtime 2.x framework package. It is installed on this machine
   (2.6.4); the reactor examples are the quickest smoke test:
 
   ```powershell
   cargo run --example reactor_about
+  cargo run --example reactor_settings
   cargo run --example reactor_pager
   ```
 
-  `reactor_pager` is the Phase 8 shell. Stop the native v1 first: both use the release mutex and would
-  otherwise fight over pinning and topmost.
+  `reactor_pager` starts the same component as the main binary. Stop any running pager first: both
+  use the release mutex and would otherwise fight over pinning and topmost.
 
-- The WinUI target requires Windows 10 1809 (build 17763) or later. The virtual-desktop backend still
-  supports build 10240 and later, but the native v1 is the only implementation that can run below
-  17763. Update user-facing requirements at cutover.
-- The native v1 GUI renders both view modes and supports click-to-switch, click-to-focus, pager
-  dragging, window dragging between desktops, Shift+wheel mode toggle, and the context menu. It also
-  pins itself to all desktops when `ShowAppInTaskbar` is enabled, re-shows when covered, and restores
-  the last active window per desktop after a switch.
+- The app requires Windows 10 1809 (build 17763) or later because of the Windows App Runtime. The
+  virtual-desktop backend still supports build 10240 and later, but the WinUI app cannot run below
+  17763.
+- The WinUI pager renders both view modes and supports click-to-switch, click-to-focus, pager
+  dragging, window dragging between desktops, Shift+wheel mode toggle, and the context menu with
+  Settings and About. It also pins itself to all desktops when `ShowAppInTaskbar` is enabled,
+  re-shows when covered, and restores the last active window per desktop after a switch.
 - The virtual-desktop backend supports build 10240 and later. Builds below 22000 use the Win10 layout
   (covering Win10 and Win10LTSC); build 22000 and later use the Win11 layout. Older builds return
   `ApiError::NotSupported`.
@@ -183,19 +181,18 @@ Guidance:
 - `rust/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
 - `rust/MIGRATION.md` - phase status, verification log, and open questions.
 - `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
-  model, and the transitional native Win32 v1).
+  model, and the WinUI 3 pager).
 - `rust/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
   restart supervisor.
 - `rust/src/windows/` - window enumeration, filtering, snapshot model, and icon cache.
-- `rust/src/render/` - transitional native layout, hit testing, `Painter` trait, and GDI backend.
-  Removed after the WinUI cutover; pure layout/hit testing moves to `pager/`.
-- `rust/src/pager/` - target reactor pager component, view, layout, input, and icon conversion.
-- `rust/src/dialogs/` - target reactor About and Settings windows.
-- `rust/src/native_window.rs` - target HWND/pinning/topmost/opacity shim for the reactor pager.
+- `rust/src/pager/` - reactor pager component, view, layout, input, and icon conversion.
+- `rust/src/dialogs/` - reactor About and Settings windows.
+- `rust/src/native_window.rs` - HWND/pinning/topmost/opacity shim for the reactor pager.
 - `rust/app.rc`, `rust/app.manifest`, `rust/build.rs` - icon, version resource, and manifest.
 - `rust/examples/probe/` - standalone virtual-desktop COM probe.
 - `rust/examples/reactor_about.rs` - reactor About reference and regression sample.
-- `rust/examples/reactor_pager.rs` - Phase 8 reactor pager shell runner.
+- `rust/examples/reactor_settings.rs` - standalone Settings window runner.
+- `rust/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
 
 ## Notes
 
@@ -215,10 +212,10 @@ Guidance:
 - Keep `unsafe` confined to the platform modules (`desktop/com`, `windows`, `monitors`, `foreground`,
   `single_instance`, `logging`, `native_window`, and the COM bootstrap in `main.rs`) and document each
   block. Components, layout, hit testing, settings, and the supervisor stay safe Rust.
-- The native v1 context menu is modal (`TrackPopupMenu`). This note applies only while the native v1
-  remains: if an automated test sends `WM_RBUTTONUP`, the pager stops its timers until the menu is
-  dismissed. Use `WM_COMMAND` to test menu actions, or click outside/close the menu afterward. The
-  WinUI target uses a reactor `Menu` instead.
+- The context menu is a native `TrackPopupMenu` shim (`TrackPopupMenu` is modal): if an automated
+  test sends `WM_RBUTTONUP`, the pager stops its timers until the menu is dismissed. Use a normal
+  mouse click to choose an item, or click outside/close the menu afterward. `windows-reactor` 0.100
+  has no right-click context menu API.
 - Keep the C# and Rust settings registry values compatible while both implementations exist.
 - The Windows App Runtime 2.x framework package is a prerequisite for the WinUI target. The app must
   either require it or bundle it self-contained; decide during Phase 12.

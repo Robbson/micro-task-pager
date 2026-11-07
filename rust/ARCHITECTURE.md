@@ -1,9 +1,9 @@
 # Rust Migration – Architecture and Development Guidelines
 
-Status: active architecture. The **target UI is WinUI 3 through `windows-reactor`**. The native Win32
-v1 implementation is complete and remains in the repository as the behavioral reference and shipping
-implementation until the WinUI cutover. New UI work must follow this document, not extend the native
-Win32 UI.
+Status: active architecture. The application UI is **WinUI 3 through `windows-reactor`**. The retired
+native Win32 v1 is preserved only in migration history; the C# implementation remains the behavioral
+reference. New UI work must follow this document; do not reintroduce a native Win32 UI, GDI renderer,
+or dialog runtime.
 
 ## 1. Project Overview
 
@@ -79,7 +79,7 @@ This section describes the behavior that has to survive the migration. It is the
 Each desktop is drawn as a row of one renderer per physical monitor. Each renderer independently uses
 one of two modes, remembered per desktop/screen:
 
-**Preview** is a *scaled geometry map*, not a live screen image. For every visible window on the
+**Preview** is a _scaled geometry map_, not a live screen image. For every visible window on the
 desktop and monitor it:
 
 1. Takes the window rectangle in screen coordinates and subtracts the monitor origin.
@@ -225,9 +225,9 @@ Rules:
 - About and Settings are secondary windows opened with `ComponentContext::open_window`.
 - Secondary windows can be opened and closed repeatedly; the one-shot `Application.Start` lifecycle
   is not a problem because the pager application remains alive.
-- There are no native `DialogBox` calls in the target UI. The Phase 9 context menu is the one
-  temporary exception: `native_window::show_context_menu` uses `TrackPopupMenu` because reactor 0.100
-  has no right-click context menu. Replace it when reactor exposes transient menus.
+- There are no native `DialogBox` calls in the UI. The context menu is the one temporary exception:
+  `native_window::show_context_menu` uses `TrackPopupMenu` because reactor 0.100 has no right-click
+  context menu. Replace it when reactor exposes transient menus.
 
 ### 3.5 Reactivity and Timers
 
@@ -296,37 +296,37 @@ These rules exist to keep the application understandable without building a cust
 
 ## 4. Technology Stack
 
-| Area | Technology | Status |
-|---|---|---|
-| Programming language | Rust (stable, MSVC toolchain) | decided |
-| UI framework | `windows-reactor` 0.100 (WinUI 3) | decided |
-| Native Windows bindings | `windows` 0.62 / `windows-core` | decided |
-| COM interoperability | `windows-core` and hand-written shell vtables | decided |
-| Main window | Reactor root component + `native_window` shim | decided |
-| Rendering | WinUI composition (`Canvas`, `Grid`, `Border`, `Image`, `TextBlock`) | decided |
-| Window previews | Scaled window rectangles + shell icons (no DWM) | decided |
-| Application icons | Shell APIs converted to reactor image sources | decided |
-| Context menu | Native `TrackPopupMenu` in `native_window` (temporary) | decided |
-| Settings UI | Reactor secondary window | decided |
-| About | Reactor secondary window | decided |
-| Settings storage | Windows registry, C#-compatible | decided |
-| Runtime | Windows App Runtime 2.x | decided |
-| Minimum OS | Windows 10 1809 (build 17763) | decided |
-| Logging | In-house file logger, daily file, 14-day retention | decided |
-| Build system | Cargo | decided |
-| Testing | `cargo test`, reactor component tests, `examples/probe` | decided |
-| GDI / `Painter` / Direct2D | Removed after the WinUI cutover | deprecated |
-| Native Win32 dialogs | Removed after the WinUI cutover | deprecated |
+| Area                       | Technology                                                           | Status     |
+| -------------------------- | -------------------------------------------------------------------- | ---------- |
+| Programming language       | Rust (stable, MSVC toolchain)                                        | decided    |
+| UI framework               | `windows-reactor` 0.100 (WinUI 3)                                    | decided    |
+| Native Windows bindings    | `windows` 0.62 / `windows-core`                                      | decided    |
+| COM interoperability       | `windows-core` and hand-written shell vtables                        | decided    |
+| Main window                | Reactor root component + `native_window` shim                        | decided    |
+| Rendering                  | WinUI composition (`Canvas`, `Grid`, `Border`, `Image`, `TextBlock`) | decided    |
+| Window previews            | Scaled window rectangles + shell icons (no DWM)                      | decided    |
+| Application icons          | Shell APIs converted to reactor image sources                        | decided    |
+| Context menu               | Native `TrackPopupMenu` in `native_window` (temporary)               | decided    |
+| Settings UI                | Reactor secondary window                                             | decided    |
+| About                      | Reactor secondary window                                             | decided    |
+| Settings storage           | Windows registry, C#-compatible                                      | decided    |
+| Runtime                    | Windows App Runtime 2.x                                              | decided    |
+| Minimum OS                 | Windows 10 1809 (build 17763)                                        | decided    |
+| Logging                    | In-house file logger, daily file, 14-day retention                   | decided    |
+| Build system               | Cargo                                                                | decided    |
+| Testing                    | `cargo test`, reactor component tests, `examples/probe`              | decided    |
+| GDI / `Painter` / Direct2D | Removed at the WinUI cutover                                       | removed    |
+| Native Win32 dialogs       | Removed at the WinUI cutover                                       | removed    |
 
 Do not add another GUI framework (`winsafe`, `egui`, another WinUI wrapper) alongside reactor. Do not
 extend the native Win32 UI.
 
 ## 5. Repository Structure
 
-The Rust implementation lives in `rust/` inside the existing Git repository. The C# implementation
-remains available during migration and is the reference for behavior.
+The Rust application lives in `rust/` inside the existing Git repository. The C# implementation
+remains available as the behavioral reference.
 
-The target module layout is:
+The module layout is:
 
 ```
 rust/
@@ -345,8 +345,12 @@ rust/
       input.rs                   # pure hit testing and drag state
       icons.rs                   # HICON -> reactor image source
     dialogs/
+      mod.rs                     # DialogLink/events
       about.rs                   # reactor About window
-      settings.rs                # reactor Settings window
+      settings/
+        mod.rs                   # Settings component and preview loop
+        draft.rs                 # pure working copy, revert, clamps
+        view.rs                  # Pivot/cards view and color dialog
     native_window.rs             # HWND lookup and pager-specific window styles
     settings.rs                  # model, defaults, registry import/export
     logging.rs
@@ -366,11 +370,12 @@ rust/
   examples/
     probe/                       # standalone COM verification binary
     reactor_about.rs             # reactor About reference / regression sample
-    reactor_pager.rs             # Phase 8 reactor pager shell runner
+    reactor_settings.rs          # standalone Settings window runner
+    reactor_pager.rs             # reactor pager runner (Phases 8-11)
 ```
 
-The native v1 modules `window.rs`, `render/`, and `about.rs` are transitional. They are removed after
-the reactor pager reaches parity.
+The native v1 modules `window.rs`, `render/`, and `about.rs` were removed at the Phase 11 cutover.
+`src/main.rs` now starts the reactor pager.
 
 ## 6. Native Windows Integration
 
@@ -386,9 +391,9 @@ Use the official crates:
 `windows-reactor` uses the 0.100 line of `windows-core`; the application's raw `windows` bindings use
 0.62. The two can coexist. Keep the versions pinned and verify APIs against the actual crate source.
 
-Enable only the `windows` features that are used. After the cutover, the UI-related features shrink to
-the platform modules: COM, shell, threading, library loader, accessibility, file system, registry,
-monitors, and the small `native_window` surface.
+Enable only the `windows` features that are used. The UI-related features are limited to the platform
+modules: COM, shell, threading, library loader, accessibility, file system, registry, monitors, and
+the small `native_window` surface.
 
 ### 6.2 Native Surface
 
@@ -431,9 +436,9 @@ UI components must not contain raw handles, message constants, or `unsafe` block
 ### 6.5 WinUI Bootstrap and Packaging
 
 - `windows-reactor` bootstraps the Windows App Runtime 2.x framework package.
-- The target minimum OS is Windows 10 1809 (build 17763), the minimum supported by the runtime.
+- The minimum OS is Windows 10 1809 (build 17763), the minimum supported by the runtime.
 - Keep the application manifest `asInvoker`. WinUI 3 provides DPI-aware layout; verify the final
-  DPI-awareness manifest entry during Phase 12 instead of relying on the native v1 system-DPI setting.
+  DPI-awareness manifest entry during Phase 12 instead of relying on the C# system-DPI setting.
 - Decide between framework-dependent (small app, runtime installed) and self-contained (larger app)
   during the packaging phase. The architecture supports either.
 
@@ -481,7 +486,7 @@ These details are easy to get wrong and are not visible in the C# declarations:
   C# variants. Its vtable starts with `IUnknown`, then `IInspectable`
   (`GetIids`, `GetRuntimeClassName`, `GetTrustLevel`), and only then `SetFocus`. Treating it as a plain
   `IUnknown`-derived interface shifts every method.
-- `IVirtualDesktop` and `IVirtualDesktopManagerInternal` have different GUIDs *and* different vtables
+- `IVirtualDesktop` and `IVirtualDesktopManagerInternal` have different GUIDs _and_ different vtables
   per build family. Win10/Win10LTSC use `IVirtualDesktop` `FF72FFDD-BE7E-43FC-9C03-AD81681E88E4` with
   only `IsViewVisible`/`GetId`; Win11/Win11_ use `3F07F4BE-B107-441A-AF0F-39D82529072C` with
   `GetName`/`GetWallpaperPath`/`IsRemote` appended. Win10/Win10LTSC use internal manager GUID
@@ -502,15 +507,15 @@ These details are easy to get wrong and are not visible in the C# declarations:
 
 ### 7.3 Version Selection
 
-| Build | Rust layout | Notes |
-|---|---|---|
-| `< 10240` | none | Not supported by the virtual-desktop backend |
-| `10240 – 21999` | Win10 | Covers Win10 and Win10LTSC; manager `F31574D6`, desktop `FF72FFDD` |
-| `>= 22000` | Win11 | Covers 21H2 and later; manager `53F5CA0B`, desktop `3F07F4BE` |
+| Build           | Rust layout | Notes                                                              |
+| --------------- | ----------- | ------------------------------------------------------------------ |
+| `< 10240`       | none        | Not supported by the virtual-desktop backend                       |
+| `10240 – 21999` | Win10       | Covers Win10 and Win10LTSC; manager `F31574D6`, desktop `FF72FFDD` |
+| `>= 22000`      | Win11       | Covers 21H2 and later; manager `53F5CA0B`, desktop `3F07F4BE`      |
 
 The virtual-desktop backend still supports build 10240 and later. The **application** requires Windows
 10 1809 (17763) or later because of the Windows App Runtime. Builds below 17763 cannot run the WinUI
-target; document this in the user-facing requirements at cutover.
+app.
 
 The C# selector distinguishes `Win10LTSC`, `Win10`, `Win11`, and `Win11_`. The Rust port uses two
 layouts because the methods it calls share the same GUIDs and vtable prefix inside each pair. The
@@ -640,25 +645,36 @@ The About dialog is a reactor secondary window:
 - Title "About Micro Task Pager".
 - Light theme, white background, centered content.
 
-`examples/reactor_about.rs` is the reference implementation. Promote it into
-`src/dialogs/about.rs` during Phase 10 and delete the native `src/about.rs`.
+`examples/reactor_about.rs` is the reference runner. The component lives in
+`src/dialogs/about.rs` and is opened by the pager as a secondary window. The native `src/about.rs` was
+removed at the Phase 11 cutover.
 
 ### 9.2 Settings
 
 The Settings dialog is a reactor secondary window:
 
-- Sections corresponding to the C# tabs: Layout, Theme, Misc.
-- A working copy of `Settings`; edits do not touch the live settings until Apply/OK.
-- Apply, OK, Cancel, and reset-per-section.
-- Per-option revert where the C# dialog supports it.
+- Sections corresponding to the C# tabs: Layout, Theme, Misc, shown through a `Pivot`.
+- A working copy of `Settings`; edits do not touch the live settings until Apply/OK. The pure
+  `SettingsDraft` keeps the working copy, the last applied baseline for per-option revert, and the
+  clamp rules.
+- Apply, OK, Cancel, and reset-per-section. Apply persists and keeps the window open; OK persists and
+  closes; Cancel restores the last applied settings without persisting.
+- Per-option revert where the C# dialog supports it. The revert target moves to the working copy when
+  Apply is pressed.
 - Live preview for safe changes (opacity, colors, height, view mode) by publishing a preview settings
-  object to the pager component.
-- Numeric clamps and validation before writing.
+  object to the pager component. Edits are coalesced at 80 ms so a held NumberBox arrow or slider drag
+  does not rebuild the pager layout for every increment.
+- Numeric clamps and validation before writing. Pager height is always at least the icon padding plus
+  16 DIPs; primary/secondary delays are at least 1/100 ms; opacity is 25-100 percent.
 - Registry write through the existing `settings.rs` model; keep C#-compatible value names and types.
+  Applying also writes the live per-desktop view modes so a later settings save cannot discard a
+  Shift+wheel toggle.
+- Rows use standard WinUI controls: `ComboBox`, `NumberBox`, `Slider`, `CheckBox`, `Button`, and a
+  `ContentDialog` hosting a `ColorPicker`. Sections are cards rather than recreated WinForms group
+  boxes.
 
-Preferred WinUI controls: `NumberBox`, `Slider`, `ColorPicker` or color fields, `ToggleSwitch`,
-`ComboBox`, `Button`, and `TabView` or a sectioned `NavigationView`. Do not recreate WinForms controls
-or build custom widgets.
+The component is split into `src/dialogs/settings/mod.rs` (state and update loop), `draft.rs` (pure
+working-copy model), and `view.rs` (declarative view).
 
 ## 10. Settings and Persistence
 
@@ -671,25 +687,25 @@ The settings dialog is part of the WinUI target. It is no longer out of scope.
 Path: `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`. Keep the existing value names and types during the
 migration:
 
-| Value | Type | Default |
-|---|---|---|
-| `ViewModeDefault` | `REG_DWORD` | `1` (MicroTaskbar) |
-| `RendererViewModes` | `REG_BINARY` | empty (one byte per desktop/screen) |
-| `DesktopBorderStyle` | `REG_DWORD` | `0` (Box) |
-| `BackgroundOpacity` | `REG_SZ` | `"1"` (stored as a string by C#) |
-| `PagerHeight` | `REG_DWORD` | `40` |
-| `IconPaddingX`, `IconPaddingY` | `REG_DWORD` | `0` |
-| `DesktopBackgroundColor` | `REG_DWORD` | ARGB `0xFF404040` |
-| `DesktopBorderColor` | `REG_DWORD` | ARGB `0xFF202020` |
-| `ActiveDesktopBorderColor` | `REG_DWORD` | ARGB `0xFFADD8E6` (light blue) |
-| `WindowBackgroundColor` | `REG_DWORD` | ARGB `0xFF808080` (gray) |
-| `ActiveWindowBackgroundColor` | `REG_DWORD` | ARGB `0xFFC0C0C0` (silver) |
-| `WindowBorderColor` | `REG_DWORD` | ARGB `0xFFC0C0C0` (silver) |
-| `ActiveWindowBorderColor` | `REG_DWORD` | ARGB `0xFFFFFFFF` (white) |
-| `PrimaryUpdateDelay` | `REG_DWORD` | `200` |
-| `SecondaryUpdateDelay` | `REG_DWORD` | `500` |
-| `ShowAppInTaskbar` | `REG_DWORD` | `1` |
-| `PagerLocationX`, `PagerLocationY` | `REG_DWORD` | absent (use default position) |
+| Value                              | Type         | Default                             |
+| ---------------------------------- | ------------ | ----------------------------------- |
+| `ViewModeDefault`                  | `REG_DWORD`  | `1` (MicroTaskbar)                  |
+| `RendererViewModes`                | `REG_BINARY` | empty (one byte per desktop/screen) |
+| `DesktopBorderStyle`               | `REG_DWORD`  | `0` (Box)                           |
+| `BackgroundOpacity`                | `REG_SZ`     | `"1"` (stored as a string by C#)    |
+| `PagerHeight`                      | `REG_DWORD`  | `40`                                |
+| `IconPaddingX`, `IconPaddingY`     | `REG_DWORD`  | `0`                                 |
+| `DesktopBackgroundColor`           | `REG_DWORD`  | ARGB `0xFF404040`                   |
+| `DesktopBorderColor`               | `REG_DWORD`  | ARGB `0xFF202020`                   |
+| `ActiveDesktopBorderColor`         | `REG_DWORD`  | ARGB `0xFFADD8E6` (light blue)      |
+| `WindowBackgroundColor`            | `REG_DWORD`  | ARGB `0xFF808080` (gray)            |
+| `ActiveWindowBackgroundColor`      | `REG_DWORD`  | ARGB `0xFFC0C0C0` (silver)          |
+| `WindowBorderColor`                | `REG_DWORD`  | ARGB `0xFFC0C0C0` (silver)          |
+| `ActiveWindowBorderColor`          | `REG_DWORD`  | ARGB `0xFFFFFFFF` (white)           |
+| `PrimaryUpdateDelay`               | `REG_DWORD`  | `200`                               |
+| `SecondaryUpdateDelay`             | `REG_DWORD`  | `500`                               |
+| `ShowAppInTaskbar`                 | `REG_DWORD`  | `1`                                 |
+| `PagerLocationX`, `PagerLocationY` | `REG_DWORD`  | absent (use default position)       |
 
 Read tolerantly: accept both DWORD and string where a value may have been written by a different
 version. Write the same types C# writes, so both implementations can share the key.
@@ -779,12 +795,24 @@ as it is made.
   colors.
 - Use a native `TrackPopupMenu` in `native_window` until reactor exposes transient menus; drop
   topmost while the modal menu is open and restore it afterward.
+- About and Settings are independent secondary windows owned by the pager, not modal `ShowDialog`
+  calls. The pager prevents a second dialog while one is open, and the context menu grays both entries.
+- The Settings dialog has an Apply button in addition to OK and Cancel. Apply persists and updates the
+  per-option revert baseline; the C# dialog only has Save/Cancel/defaults.
+- Color editing uses a reactor `ContentDialog` with a `ColorPicker` instead of the WinForms
+  `ColorDialog`. Alpha is not editable, matching the C# color dialog's result.
+- While a dialog is open, the pager skips reasserting its own topmost and reasserts the dialog's
+  topmost by window title. Closing the dialog restores the pager topmost. A title/watchdog check
+  clears the dialog flag if the close notification is lost.
+- Numeric rows have explicit minus/plus buttons because `windows-reactor` 0.100 does not expose
+  `NumberBox.SpinButtonPlacementMode`. The buttons send a one-step edit to the working copy and are
+  disabled at the clamp limits.
 
 ## 13. Migration Strategy
 
-The native Win32 v1 completed Phases 1-6. The UI migration to WinUI 3 is a new phase sequence. Do not
-rewrite everything at once, and keep the native v1 runnable until the reactor pager passes the
-checklist.
+The native Win32 v1 completed Phases 1-6 and was removed at the Phase 11 cutover. The C# application
+remains the behavioral reference. The UI migration to WinUI 3 was staged so each phase stayed
+verifiable on its own; the current app is the reactor pager.
 
 ### Phase 7: Architecture and Documentation
 
@@ -800,8 +828,7 @@ checklist.
 - Find the HWND and pin to all desktops.
 - Add the self-rescheduling tick and refresh the snapshot.
 - Acceptance: pinned, topmost, opacity works, no title bar, clean shutdown, no COM off the UI thread.
-- The shell is runnable as `examples/reactor_pager.rs`; `src/main.rs` stays on the native v1 until the
-  Phase 11 cutover.
+- The shell was runnable as `examples/reactor_pager.rs`; from Phase 11 the main binary runs it.
 
 ### Phase 9: Pager Content
 
@@ -814,17 +841,17 @@ checklist.
 ### Phase 10: Dialogs
 
 - Promote `examples/reactor_about.rs` to `dialogs/about.rs`.
-- Build `dialogs/settings.rs` with tabs, working copy, validation, apply/cancel, and live preview.
-- Delete the native `about.rs`; the native v1 never had a Settings dialog.
+- Build `dialogs/settings/` with sections, working copy, validation, apply/cancel, and live preview.
+- Remove the native `about.rs` with the other native UI in Phase 11.
 - Acceptance: About and Settings match the C# behavior and look modern.
 
 ### Phase 11: Cutover and Cleanup
 
-- Make the reactor pager the main binary.
+- Make the reactor pager the main binary. Done.
 - Delete `window.rs`, `render/`, native `about.rs`, and the `windows` UI features that are no longer
-  used.
-- Remove `Paint`/GDI references from docs and tests.
-- Keep `examples/reactor_about.rs` only if it remains a useful regression sample.
+  used. Done.
+- Remove `Paint`/GDI references from docs and tests. Done.
+- Keep `examples/reactor_about.rs` as a useful regression sample. Done.
 
 ### Phase 12: Verification and Packaging
 
@@ -893,27 +920,27 @@ safe Rust.
 
 ## 17. Important Architectural Decisions
 
-| Decision | Direction |
-|---|---|
-| Repository layout | Separate `rust/` directory |
-| Rust project | Single Cargo crate initially |
-| UI framework | WinUI 3 through `windows-reactor` |
-| Main window | Reactor root component + native window shim |
-| Rendering | WinUI composition |
-| Window previews | Scaled geometries + shell icons |
-| Live thumbnails | Not planned |
-| Context menu | Native `TrackPopupMenu` in `native_window` (temporary) |
-| Settings UI | Reactor secondary window |
-| About | Reactor secondary window |
-| Native Win32 | Platform glue only |
-| Virtual desktops | One safe API + Win10/Win11 layout modules |
-| Threading | Reactor UI thread, single STA for COM |
-| Application icons | Shell APIs converted to reactor image sources |
-| Application state | Pure Rust |
-| Runtime | Windows App Runtime 2.x |
-| Minimum OS | Windows 10 1809 (17763) |
-| .NET dependency | Removed in the final implementation |
-| C# implementation | Reference and shipping until the WinUI cutover |
+| Decision          | Direction                                              |
+| ----------------- | ------------------------------------------------------ |
+| Repository layout | Separate `rust/` directory                             |
+| Rust project      | Single Cargo crate initially                           |
+| UI framework      | WinUI 3 through `windows-reactor`                      |
+| Main window       | Reactor root component + native window shim            |
+| Rendering         | WinUI composition                                      |
+| Window previews   | Scaled geometries + shell icons                        |
+| Live thumbnails   | Not planned                                            |
+| Context menu      | Native `TrackPopupMenu` in `native_window` (temporary) |
+| Settings UI       | Reactor secondary window                               |
+| About             | Reactor secondary window                               |
+| Native Win32      | Platform glue only                                     |
+| Virtual desktops  | One safe API + Win10/Win11 layout modules              |
+| Threading         | Reactor UI thread, single STA for COM                  |
+| Application icons | Shell APIs converted to reactor image sources          |
+| Application state | Pure Rust                                              |
+| Runtime           | Windows App Runtime 2.x                                |
+| Minimum OS        | Windows 10 1809 (17763)                                |
+| .NET dependency   | Removed in the final implementation                    |
+| C# implementation | Behavioral reference; Rust is the shipping WinUI app   |
 
 ## 18. Instructions for AI Coding Assistants
 
