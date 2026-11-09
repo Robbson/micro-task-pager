@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Builds the production releases for both Micro Task Pager implementations.
+    Builds the production releases for the Micro Task Pager implementations.
 
 .DESCRIPTION
     Produces a self-contained release folder and a versioned ZIP archive for each
@@ -10,23 +10,28 @@
 
     - csharp-winforms: .NET Framework 4.8 WinForms build (prod\winforms)
     - rust-winui:      Rust WinUI 3 build (prod\winui)
+    - rust-winsafe:    native Win32 winsafe build (prod\winsafe)
 
     The WinForms build increments the build number in version.txt on every run.
-    The WinUI build uses the version from Cargo.toml.
+    The Rust builds use the version from their Cargo.toml.
 
 .PARAMETER Target
-    Which implementation to build: all (default), winforms, or winui.
+    Which implementation to build: all (default), winforms, winui, or winsafe.
 
 .PARAMETER NoZip
     Build and stage the release but skip ZIP creation.
 
 .EXAMPLE
     pwsh .\build.ps1
-    Builds both production releases.
+    Builds all production releases.
 
 .EXAMPLE
     pwsh .\build.ps1 -Target rust-winui
     Builds only the Rust WinUI 3 release.
+
+.EXAMPLE
+    pwsh .\build.ps1 -Target winsafe
+    Builds only the native winsafe release.
 
 .EXAMPLE
     pwsh .\build.ps1 -Target winforms -NoZip
@@ -34,7 +39,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'winforms', 'winui', 'rust-winui')]
+    [ValidateSet('all', 'winforms', 'winui', 'rust-winui', 'winsafe', 'rust-winsafe')]
     [string]$Target = 'all',
 
     [switch]$NoZip
@@ -152,6 +157,43 @@ function Build-WinUi {
     New-ReleaseArchive -Stage $stage -ArchiveName "MicroTaskPager-winui-v$version.zip" -Files $files
 }
 
+function Build-Winsafe {
+    $projectDir = Join-Path $root 'rust-winsafe'
+    $stage = Join-Path $prodRoot 'winsafe'
+
+    Write-Host '==> Building Rust winsafe native release'
+    Reset-Stage -Path $stage
+
+    Push-Location $projectDir
+    try {
+        cargo build --release
+
+        $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+        $package = $metadata.packages | Where-Object { $_.name -eq 'micro-task-pager' }
+        if (-not $package) {
+            throw 'Unable to read the micro-task-pager version from Cargo metadata.'
+        }
+        $version = $package.version
+
+        $builtExe = Join-Path $projectDir 'target/release/micro-task-pager.exe'
+        if (-not (Test-Path -LiteralPath $builtExe)) {
+            throw "Expected release executable not found: $builtExe"
+        }
+        Copy-Item -LiteralPath $builtExe -Destination (Join-Path $stage 'MicroTaskPager.exe') -Force
+    }
+    finally {
+        Pop-Location
+    }
+
+    if ($NoZip) {
+        Write-Host "Skipped ZIP creation for $stage"
+        return
+    }
+
+    $files = @((Join-Path $stage 'MicroTaskPager.exe')) + $sharedDocs
+    New-ReleaseArchive -Stage $stage -ArchiveName "MicroTaskPager-winsafe-v$version.zip" -Files $files
+}
+
 switch ($Target) {
     'winforms' {
         Build-WinForms
@@ -162,9 +204,16 @@ switch ($Target) {
     'rust-winui' {
         Build-WinUi
     }
+    'winsafe' {
+        Build-Winsafe
+    }
+    'rust-winsafe' {
+        Build-Winsafe
+    }
     'all' {
         Build-WinForms
         Build-WinUi
+        Build-Winsafe
     }
     default {
         throw "Unknown target '$Target'."

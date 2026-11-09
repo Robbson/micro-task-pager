@@ -1,6 +1,7 @@
 # C# WinForms vs Rust WinUI 3
 
-Deployment, footprint, and code comparison for the two Micro Task Pager implementations.
+Deployment, footprint, and code comparison for the C# WinForms and Rust WinUI 3 implementations.
+An experimental third build (`rust-winsafe`) is summarized at the end of this document.
 
 Measured on 2026-11-09. The C#/.NET implementation is the current release; the rust-winui/WinUI 3 port
 is feature-complete but unreleased.
@@ -302,3 +303,27 @@ Resource measurements used `Get-Process` (`WorkingSet64`, `PrivateMemorySize64`,
 `PagedMemorySize64`, `Handles`, `Threads`, `TotalProcessorTime`) plus `GetGuiResources` from
 `user32.dll`. The code metrics were produced with a one-off analyzer; the counting rules are listed
 in the measurement setup above so the numbers can be reproduced or challenged.
+
+## Experimental rust-winsafe build
+
+A third implementation in `rust-winsafe/` uses native Win32 through `winsafe` and has no separate UI
+runtime. It is experimental and not the shipping build. Measured on 2026-11-09 on the same machine;
+source-line metrics are intentionally omitted for this comparison. Full status is in
+[`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md).
+
+| Metric | rust-winsafe | C# WinForms | Rust WinUI 3 |
+|---|---:|---:|---:|
+| Deployed size | 1.06 MiB in 1 file | 1.49 MiB in 13 files | 3.37 MiB in 1 file |
+| Runtime prerequisite | None beyond Windows | .NET Framework 4.8 (inbox) | Windows App Runtime 2.4+ (~111-119 MiB) |
+| Idle CPU, one core | 3.7-4.1 % | 7.2 % | 5.9 % |
+| Idle CPU, total system | 0.155-0.170 % | 0.30 % | 0.25 % |
+| Working set | 23.1 MiB | 58.8-62.1 MiB | 98.8-99.3 MiB |
+| Private bytes | 3.1 MiB | 33.3-36.8 MiB | 63.4-63.8 MiB |
+| Handles / threads | 198 / 8 | 396-399 / 18 | 1 733-1 738 / 65-66 |
+| GDI / USER objects | 10 / 16 | 24 / 26 | 9 / 35-36 |
+| Startup (warm) | 144 ms | 220 ms | 236 ms |
+
+The winsafe figures use the same 60 s CPU method and 20 s steady-state memory sample as the rest of
+this document. Startup is a single 25 ms-resolution run with a warm file cache. The implementation
+trades WinUI's declarative views for native winsafe controls and a GDI renderer; the pager, About,
+and Settings are all fixed-size native windows.

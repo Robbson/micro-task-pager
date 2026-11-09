@@ -2,7 +2,7 @@
 
 Micro Task Pager uses the third-party components listed below. Their licenses and attributions are reproduced here as required by their respective terms.
 
-These notices cover the bundled C# assemblies and the dependencies of the Rust port. Micro Task Pager's own source code is licensed under the MIT License; see [LICENSE](LICENSE).
+These notices cover the bundled C# assemblies and the dependencies of the Rust ports. Micro Task Pager's own source code is licensed under the MIT License; see [LICENSE](LICENSE).
 
 Microsoft .NET Framework is a system prerequisite and is not included in this distribution.
 
@@ -32,6 +32,26 @@ The Rust port is not part of the current C# release package yet. Its runtime dep
 - Copyright: Copyright © Microsoft Corporation
 - License: Microsoft Windows App SDK license terms
 - Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. Release packaging is framework-dependent and requires Windows App Runtime 2.4 or later.
+
+## Rust winsafe implementation (experimental)
+
+The native Win32 build does not use `windows-reactor` or the Windows App Runtime. Its additional runtime dependencies are:
+
+### winsafe 0.0.29
+
+- Project: <https://github.com/rodrigocfd/winsafe>
+- Copyright: Copyright © the winsafe contributors
+- License: MIT
+- Notes: Safe Win32 wrappers used for the pager window and native dialogs.
+
+### png 0.18
+
+- Project: <https://github.com/image-rs/image-png>
+- Copyright: Copyright © the image-rs contributors
+- License: MIT OR Apache-2.0
+- Notes: Decodes the embedded About dialog logo.
+
+The `windows` / `windows-core` crates listed above are also used by this build for GDI, COM, timers, menus, and the color picker.
 
 ## Runtime components
 

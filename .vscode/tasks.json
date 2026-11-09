@@ -40,6 +40,69 @@
         "/consoleloggerparameters:NoSummary"
       ],
       "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "rust-winui build",
+      "command": "cargo",
+      "type": "process",
+      "args": [
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/rust-winui"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "rust-winui run",
+      "command": "cargo",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/rust-winui"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "rust-winsafe build",
+      "command": "cargo",
+      "type": "process",
+      "args": [
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/rust-winsafe"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "rust-winsafe run",
+      "command": "cargo",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/rust-winsafe"
+      },
+      "problemMatcher": "$rustc"
+    },
+    {
+      "label": "publish rust-winsafe",
+      "command": "pwsh",
+      "type": "process",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/build.ps1",
+        "-Target",
+        "winsafe"
+      ],
+      "problemMatcher": []
     }
   ]
 }

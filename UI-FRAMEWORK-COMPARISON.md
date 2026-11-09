@@ -9,7 +9,10 @@ Companion documents:
 - [`COMPARISON.md`](COMPARISON.md) - measured C# WinForms vs current Rust WinUI 3 deployment and
   resource comparison.
 - [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) - current behavior contract and UI direction.
-- [`AGENTS.md`](AGENTS.md) - current repository rule: all UI goes through `windows-reactor`.
+- [`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md) - the experimental native `winsafe`
+  implementation, which does not use `windows-reactor`.
+- [`AGENTS.md`](AGENTS.md) - current repository rules: `rust-winui` UI goes through `windows-reactor`;
+  `rust-winsafe` deliberately uses native winsafe controls and dialogs.
 
 Measured on 2026-11-09. Estimates for alternative stacks are order-of-magnitude figures, not
 measurements, and are marked as such.

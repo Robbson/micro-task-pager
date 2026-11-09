@@ -11,12 +11,17 @@ Micro Task Pager is a Windows-only virtual desktop pager. The repository contain
 - `rust-winui/` - the Rust implementation and the shipping WinUI 3 pager. It uses
   `windows-reactor` for all UI. Read `rust-winui/ARCHITECTURE.md` and `rust-winui/MIGRATION.md` before making
   structural changes.
+- `rust-winsafe/` - an experimental third implementation: native Win32 through `winsafe`, with no
+  Windows App Runtime or reactor dependency. Read `rust-winsafe/MIGRATION.md`. It is not the shipping
+  build.
 
-Both use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual desktop
-interop must be handled carefully and tested on real Windows builds.
+All three use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual
+desktop interop must be handled carefully and tested on real Windows builds.
 
-New UI work belongs in reactor components. Do not reintroduce a native Win32 window, GDI renderer, or
-native dialog runtime.
+For `rust-winui`, new UI work belongs in reactor components. Do not reintroduce a native Win32 window,
+GDI renderer, or native dialog runtime there. The separate `rust-winsafe` crate deliberately uses
+winsafe controls, a GDI renderer, and native dialog templates; keep that work inside `rust-winsafe`
+and do not mix the two UI stacks.
 
 ## Tooling available to agents
 
@@ -66,18 +71,19 @@ Installed command-line tools:
 
 ### Production releases
 
-Build one or both production releases from the repository root with PowerShell 7:
+Build one or more production releases from the repository root with PowerShell 7:
 
 ```powershell
-pwsh ./build.ps1                    # both implementations
+pwsh ./build.ps1                    # all three implementations
 pwsh ./build.ps1 -Target winforms   # C# WinForms only
 pwsh ./build.ps1 -Target winui      # Rust WinUI 3 only
-pwsh ./build.ps1 -Target all -NoZip # stage both without ZIP archives
+pwsh ./build.ps1 -Target winsafe    # native winsafe only
+pwsh ./build.ps1 -Target all -NoZip # stage all without ZIP archives
 ```
 
-Outputs are written to `prod/winforms/` and `prod/winui/`, each with a versioned
+Outputs are written to `prod/winforms/`, `prod/winui/`, and `prod/winsafe/`, each with a versioned
 `MicroTaskPager-<target>-v<version>.zip`. The C# build increments `csharp-winforms/version.txt`; the
-Rust archive uses the version from `rust-winui/Cargo.toml`.
+Rust archives use the version from their `Cargo.toml` (`rust-winui` or `rust-winsafe`).
 
 ### Rust (implementation)
 
@@ -153,9 +159,35 @@ cargo test
   `window` to create a probe-owned throwaway window instead of moving a real application.
 
 - Do not declare work complete while `cargo fmt --check` or `cargo clippy -D warnings` fails.
-- Do not run the GUI while the C# application is running: both implementations pin themselves to all
+- Do not run the GUI while the C# application is running: the implementations pin themselves to all
   desktops and fight over topmost. The release mutex prevents this; a development build may use a
   different mutex for side-by-side comparison.
+
+### Rust winsafe (native Win32, experimental)
+
+Run Cargo commands from the `rust-winsafe/` directory; the repository root is not a Cargo workspace.
+
+```powershell
+cargo build
+cargo build --release
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+```
+
+- The crate is reactor-free and does not require the Windows App Runtime. It links only OS DLLs plus
+  the static MSVC runtime.
+- `winsafe` is pinned at `0.0.29`. The raw `windows` crate stays in use for GDI, COM, timers, menus,
+  layered windows, and the color picker.
+- The pager window is a winsafe `gui::WindowMain`; About is a `gui::WindowModal`; Settings is a fixed
+  `.rc` dialog loaded with `new_dlg`. `app.rc` includes `settings.rc`, and `settings_ids.h` must stay in
+  sync with `src/dialogs/settings/ids.rs`.
+- `src/dialogs/settings/draft.rs` and `src/dialogs/placement.rs` are copied from `rust-winui`. Keep the
+  behavior and tests compatible when changing either side.
+- The release executable is `rust-winsafe/target/release/micro-task-pager.exe`.
+- Do not declare work complete while fmt, clippy with `-D warnings`, or tests fail.
+- Do not run the winsafe build while another pager is running; all implementations share the
+  single-instance mutex and the topmost/pinning behavior.
 
 ### C# (reference implementation)
 
@@ -211,29 +243,40 @@ Guidance:
 - `rust-winui/examples/reactor_about.rs` - reactor About reference and regression sample.
 - `rust-winui/examples/reactor_settings.rs` - standalone Settings window runner.
 - `rust-winui/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
+- `rust-winsafe/MIGRATION.md` - winsafe variant status, source commit, verification log, and gaps.
+- `rust-winsafe/src/` - native implementation (app state, GDI renderer, COM, winsafe window host).
+- `rust-winsafe/src/dialogs/` - winsafe About and `.rc`-backed Settings dialog and placement.
+- `rust-winsafe/app.rc`, `rust-winsafe/settings.rc`, `rust-winsafe/settings_ids.h` - icon/version,
+  fixed Settings dialog templates, and the shared control IDs.
+- `rust-winsafe/examples/probe/` - standalone virtual-desktop COM probe for the winsafe crate.
 
 ## Notes
 
 - Virtual-desktop COM interfaces are undocumented and version-sensitive. Test interop changes on the
   supported Windows versions rather than assuming one layout.
 - The desktop API is apartment-threaded. Initialize `micro_task_pager::com::Apartment` on the thread
-  that will use it and keep all `desktop` calls on that thread. In the WinUI target, that thread is the
-  reactor UI thread.
+  that will use it and keep all `desktop` calls on that thread. In `rust-winui` that thread is the
+  reactor UI thread; in `rust-winsafe` it is the winsafe UI thread.
 - Windows belonging to the pager process are intentionally excluded from the pager.
 - The Rust implementation must preserve the behavior described in `rust-winui/ARCHITECTURE.md` §11.
   Intentional deviations from the C# implementation are listed in §12 there.
-- **Use WinUI 3 through `windows-reactor` for all UI work.** Do not build a custom UI framework,
-  widget toolkit, dialog runtime, or drawing abstraction on Win32. `winsafe`, `egui`, and other GUI
-  frameworks are not used.
-- Do not add DWM thumbnails, a custom Direct2D/GDI renderer, or ARM64 support unless the user explicitly
-  asks. WinUI composition replaces the custom renderer.
-- Keep `unsafe` confined to the platform modules (`desktop/com`, `windows`, `monitors`, `foreground`,
-  `single_instance`, `logging`, `native_window`, and the COM bootstrap in `main.rs`) and document each
-  block. Components, layout, hit testing, settings, and the supervisor stay safe Rust.
+- **For `rust-winui`, use WinUI 3 through `windows-reactor` for all UI work.** Do not build a custom UI
+  framework, widget toolkit, dialog runtime, or drawing abstraction on Win32 there. `winsafe`, `egui`,
+  and other GUI frameworks are not used in `rust-winui`.
+- `rust-winsafe` is a separate native implementation built on `winsafe`. Keep its winsafe controls,
+  GDI renderer, and `.rc` dialogs inside that crate; do not mix the two UI stacks.
+- For `rust-winui`, do not add DWM thumbnails, a custom Direct2D/GDI renderer, or ARM64 support unless
+  the user explicitly asks. WinUI composition replaces the custom renderer. The winsafe crate already
+  uses a GDI renderer by design.
+- Keep `unsafe` confined to platform modules and document each block. In `rust-winui` that includes
+  `desktop/com`, `windows`, `monitors`, `foreground`, `single_instance`, `logging`, `native_window`,
+  and the COM bootstrap in `main.rs`; components, layout, hit testing, settings, and the supervisor
+  stay safe Rust. In `rust-winsafe`, keep drawing, Win32, and dialog interop in the platform modules
+  and dialogs.
 - The context menu is a native `TrackPopupMenu` shim (`TrackPopupMenu` is modal): if an automated
   test sends `WM_RBUTTONUP`, the pager stops its timers until the menu is dismissed. Use a normal
   mouse click to choose an item, or click outside/close the menu afterward. `windows-reactor` 0.100
   has no right-click context menu API.
-- Keep the C# and Rust settings registry values compatible while both implementations exist.
+- Keep the C# and Rust settings registry values compatible while multiple implementations exist.
 - The Windows App Runtime 2.x framework package (2.4 or later) is a prerequisite for the WinUI target.
   Packaging is framework-dependent; the executable does not bundle the runtime.

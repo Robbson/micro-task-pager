@@ -1,19 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.5.1
 
-### Internal
-
-- The two implementations now live in tech-named folders: `csharp-winforms/` for the original C#
-  WinForms app and `rust-winui/` for the Rust WinUI 3 app. Both can be built together from the
-  repository root with `pwsh ./build.ps1`, which accepts `-Target all|winforms|winui`.
-- The Rust port now targets WinUI 3 through `windows-reactor` and is the main Rust binary. The C#
-  implementation remains the behavioral reference and current release.
-- The Rust build requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime
-  2.4 or later framework package. Packaging is framework-dependent; the runtime is not bundled.
-- The WinUI manifest declares `PerMonitorV2` DPI awareness; the pager rebuilds its pixel grid and icon
-  cache when the window DPI changes.
-- Architecture, migration, agent, and third-party notice documentation updated for the WinUI target.
+- improved performance leads to less CPU usage
+- there are now 3 versions of the application available, each with their own benefits / limitations (see README):
+  - C# / .NET 4.8 using WinForms
+  - Rust / Reactor using Win UI 3
+  - Rust / winsafe using plain Win32
 
 ## v1.5.0
 

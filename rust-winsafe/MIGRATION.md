@@ -30,7 +30,7 @@ not refactored into UI-independent modules, so `rust-winui` is untouched.
 | Context menu | Copied | Raw `TrackPopupMenu` shim |
 | About dialog | **Migrated to winsafe** | `gui::WindowModal` + `Label` + `Button`; PNG decoded with `png`, logo painted with GDI |
 | Settings dialog | **Implemented (v1)** | Fixed `.rc` template, winsafe `new_dlg` controls, tab pages, Save/Cancel/Defaults |
-| Build pipeline (`build.ps1`, CI, VS Code) | Not wired | Only Cargo commands are verified so far |
+| Build pipeline (`build.ps1`, VS Code, AGENTS.md) | **Wired** | `-Target winsafe` stages `prod/winsafe`; VS Code build/run/launch entries added |
 
 ## What changed versus the baseline
 
@@ -105,6 +105,27 @@ The first manual run confirmed the pager and About dialog work, and exposed thre
   optimization that cut idle CPU by 2.5x in `rust-winui` and 3.8x in C#. A unit test covers the
   cached-list resolution (`desktop_index_resolves_against_the_fetched_list`).
 
+### Measured results (2026-11-09)
+
+Runtime and deployment figures only; source-line counts are intentionally omitted for this comparison.
+
+| Metric | rust-winsafe | Reference |
+|---|---|---|
+| Executable | 1,111,552 bytes (1.06 MiB) | C# 1.49 MiB in 13 files; WinUI 3.37 MiB in 1 file |
+| Runtime prerequisite | None beyond Windows (static MSVC runtime) | C# .NET Framework 4.8 (inbox); WinUI Windows App Runtime 2.4+ (~111-119 MiB) |
+| Idle CPU, one core | 3.7-4.1 % | C# 7.2 %; WinUI 5.9 % |
+| Idle CPU, total system | 0.155-0.170 % of 24 logical CPUs | C# 0.30 %; WinUI 0.25 % |
+| Working set | 23.1 MiB | C# 59-62 MiB; WinUI 99 MiB |
+| Private bytes | 3.1 MiB | C# 33-37 MiB; WinUI 63-64 MiB |
+| Handles / threads | 198 / 8 | C# ~397 / 18; WinUI ~1 736 / 65-66 |
+| GDI / USER objects | 10 / 16 | C# 24 / 26; WinUI 9 / 35-36 |
+| Startup | 144 ms (one warm run) | C# 220 ms warm; WinUI 236 ms warm |
+
+The idle-CPU figures are 60 s process-CPU averages on the same machine and window set used in
+`../COMPARISON.md`: one local run measured 3.72 % / 0.155 %, and an earlier user run measured
+4.09 % / 0.170 %. Startup is a single 25 ms-resolution run with a warm file cache. Working set and
+private bytes are the 20 s steady-state samples. Source-line counts are intentionally omitted.
+
 ### Settings dialog implementation (2026-11-09)
 
 - `settings.rc` defines the fixed `DIALOGEX` main dialog and three page dialogs (Layout, Theme,
@@ -157,10 +178,11 @@ Interaction verification is otherwise still pending. The checklist that needs a 
    copied from the baseline. Do not refactor `rust-winui` to share them until this variant is
    accepted; if both survive, use a workspace with a shared core (`UI-FRAMEWORK-COMPARISON.md` §10
    Option B).
-5. **Measurement.** Compare executable size, idle working set/private bytes, handles/threads, startup,
-   and source lines against `../COMPARISON.md`.
-6. **Repository wiring.** Add `rust-winsafe` to `build.ps1`, the VS Code tasks, and `AGENTS.md` only
-   after the interaction checklist passes.
+5. **Measurement.** Done: executable size, runtime prerequisite, idle CPU, working set, private bytes,
+   handles/threads, GDI/USER objects, and startup are recorded above. Source-line counts are
+   intentionally omitted.
+6. **Repository wiring.** Done: `build.ps1 -Target winsafe`, VS Code build/run/launch entries, and
+   `AGENTS.md`/`README.md`/`THIRD-PARTY-NOTICES.md` are updated.
 
 ### Settings dialog decision
 

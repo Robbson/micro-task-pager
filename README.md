@@ -19,18 +19,6 @@
 
 **Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
 
-> [!NOTE]
-> Two implementations are available from the same repository: the original C# WinForms app in
-> `csharp-winforms/` and the native Rust WinUI 3 app in `rust-winui/`. The C# build remains the
-> current published release; the Rust build is feature-complete and can be built from source. The
-> Rust build requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4
-> or later framework package, which is installed separately. See
-> [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
-> [`rust-winui/MIGRATION.md`](rust-winui/MIGRATION.md), the
-> [implementation comparison](COMPARISON.md) for dependencies, size, resource use, and code metrics,
-> and the [UI framework comparison](UI-FRAMEWORK-COMPARISON.md) for alternative stacks and their
-> trade-offs.
-
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
 - **Preview** — a miniature of the real screen, including window positions and z-order.
@@ -76,23 +64,48 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 
 ## Getting started
 
+### Select the implementation you like
+
+Three implementations are available from the same repository. The C# build is the current published
+release, the WinUI 3 build is feature-complete and can be built from source, and the native winsafe
+build is an experimental no-runtime variant. The table compares them by requirements, app footprint,
+performance, runtime memory, and look.
+
+| Aspect                         | C# WinForms                                        | Rust WinUI 3                                                       | Rust winsafe                                |
+| ------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| Runtime requirement            | Windows 10/11 x64; .NET Framework 4.8 (inbox 1903+) | Windows 10 1809+ x64; Windows App Runtime 2.4+ (~111-119 MiB, install) | Windows 10/11 x64; no extra runtime         |
+| App footprint                  | 1.49 MiB in 13 files                               | 3.37 MiB in 1 file                                                 | 1.06 MiB in 1 file                          |
+| Idle CPU                       | 7.2% of one core / 0.30% total                     | 5.9% of one core / 0.25% total                                     | 3.7-4.1% of one core / 0.155-0.170% total   |
+| Warm startup                   | 220 ms                                             | 236 ms                                                             | 144 ms                                      |
+| Runtime memory                 | 59-62 MiB working set, 33-37 MiB private            | 99 MiB working set, 63-64 MiB private                              | 23.1 MiB working set, 3.1 MiB private       |
+| Look                           | Native WinForms; functional                        | Modern Fluent/WinUI 3; the only genuinely polished one             | Native Win32 controls; functional, plain    |
+
+Details: [`COMPARISON.md`](COMPARISON.md),
+[`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
+[`rust-winui/MIGRATION.md`](rust-winui/MIGRATION.md),
+[`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md), and
+[`UI-FRAMEWORK-COMPARISON.md`](UI-FRAMEWORK-COMPARISON.md).
+
 ### Requirements
 
 - Windows 10 or Windows 11, 64-bit. Current Windows 11 releases, including 26H2, are tested.
-- .NET Framework 4.8 or newer. It is included in Windows 10 version 1903 and later, as well as Windows 11.
+- For the C# build: .NET Framework 4.8 or newer. It is included in Windows 10 version 1903 and later, as well as Windows 11.
 - On ARM64 devices running Windows 11, the x64 build runs through Windows emulation; there is no native ARM64 build yet.
 
-The unreleased Rust build has different prerequisites: Windows 10 version 1809 (build 17763) or
-later, and the Windows App Runtime 2.4 or later framework package. It is distributed
-framework-dependent and does not bundle the runtime.
+The three builds have different runtime prerequisites; the comparison table above lists them. The
+WinUI build is framework-dependent and does not bundle the Windows App Runtime.
 
 ### Installation
 
-1. Download the release for the implementation you want: `MicroTaskPager-winforms-v*.zip` (C#) or `MicroTaskPager-winui-v*.zip` (Rust) from the [releases page](https://github.com/Robbson/micro-task-pager/releases/latest).
+1. Download the release for the implementation you want: `MicroTaskPager-winforms-v*.zip` (C#),
+   `MicroTaskPager-winui-v*.zip` (Rust WinUI 3), or `MicroTaskPager-winsafe-v*.zip` (experimental
+   native Rust, when published) from the
+   [releases page](https://github.com/Robbson/micro-task-pager/releases/latest), or build it from
+   source as described below.
 2. Extract the archive.
 3. Run `MicroTaskPager.exe`.
 
-No installer is required. Keep the extracted files together: the WinForms executable needs the bundled DLLs and `MicroTaskPager.exe.config`, while the WinUI build ships as a single executable and requires the Windows App Runtime 2.4 or later. Each archive also contains this README, the changelog, the license, and the third-party notices.
+No installer is required. Keep the extracted files together: the WinForms executable needs the bundled DLLs and `MicroTaskPager.exe.config`, while the Rust WinUI build ships as a single executable and requires the Windows App Runtime 2.4 or later. The winsafe build is also a single executable and has no runtime prerequisite. Each archive also contains this README, the changelog, the license, and the third-party notices.
 
 > [!IMPORTANT]
 > The application is not code-signed yet. Windows SmartScreen may therefore show a warning the first time you start it.
@@ -163,30 +176,34 @@ dotnet build csharp-winforms/MicroTaskPager.csproj
 
 Alternatively, open `MicroTaskPager.sln` in Visual Studio and build the solution.
 
-Build the Rust implementation (from the `rust-winui` directory):
+Build the Rust implementations (from their own directories):
 
 ```powershell
 cd rust-winui
 cargo build --release
+
+cd ../rust-winsafe
+cargo build --release
 ```
 
-See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the Rust build prerequisites, which
+See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the WinUI build prerequisites, which
 include the MSVC build tools, the Windows SDK, and the Windows App Runtime 2.4 or later framework
-package.
+package. The winsafe build needs only the MSVC build tools and Windows SDK.
 
 ### Create release packages
 
-Build one or both production releases from the repository root:
+Build one or more production releases from the repository root:
 
 ```powershell
-pwsh .\build.ps1                    # both implementations
+pwsh .\build.ps1                    # all three implementations
 pwsh .\build.ps1 -Target winforms   # C# WinForms only
 pwsh .\build.ps1 -Target winui      # Rust WinUI 3 only
+pwsh .\build.ps1 -Target winsafe    # native winsafe only
 ```
 
-The script writes each release to its own folder under `prod\` (`prod\winforms` and `prod\winui`) and
-creates a versioned ZIP archive there. The C# build automatically increments the version in
-`csharp-winforms\version.txt`; the Rust archive uses the version from `rust-winui\Cargo.toml`.
+The script writes each release to its own folder under `prod\` (`prod\winforms`, `prod\winui`, and
+`prod\winsafe`) and creates a versioned ZIP archive there. The C# build automatically increments the
+version in `csharp-winforms\version.txt`; the Rust archives use the version from their `Cargo.toml`.
 
 `csharp-winforms\Publish.cmd` remains as a thin wrapper for building only the WinForms release.
 

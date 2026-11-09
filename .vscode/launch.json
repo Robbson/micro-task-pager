@@ -19,6 +19,28 @@
       "name": ".NET Core Attach",
       "type": "coreclr",
       "request": "attach"
+    },
+    {
+      "name": "Rust WinUI Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "preLaunchTask": "rust-winui build",
+      "program": "${workspaceFolder}/rust-winui/target/debug/micro-task-pager.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/rust-winui",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Rust winsafe Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "preLaunchTask": "rust-winsafe build",
+      "program": "${workspaceFolder}/rust-winsafe/target/debug/micro-task-pager.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/rust-winsafe",
+      "console": "internalConsole",
+      "stopAtEntry": false
     }
   ]
 }
