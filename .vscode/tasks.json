@@ -7,7 +7,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/MicroTaskPager.csproj",
+        "${workspaceFolder}/csharp-winforms/MicroTaskPager.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
@@ -22,7 +22,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}/../build.ps1",
+        "${workspaceFolder}/build.ps1",
         "-Target",
         "winforms"
       ],
@@ -35,7 +35,7 @@
       "args": [
         "watch",
         "run",
-        "${workspaceFolder}/MicroTaskPager.csproj",
+        "${workspaceFolder}/csharp-winforms/MicroTaskPager.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],

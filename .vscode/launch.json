@@ -6,7 +6,7 @@
       "type": "clr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/bin/Debug/net48/MicroTaskPager.exe",
+      "program": "${workspaceFolder}/csharp-winforms/bin/Debug/net48/MicroTaskPager.exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",

@@ -38,9 +38,12 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         {
             Graphics g = e.Graphics;
 
+            // Only windows that belong to this renderer's monitor take part in the mode. Counting
+            // windows from other monitors here would mis-center and mis-wrap the Micro Taskbar tiles.
             var visibleWindows = Form.Windows.Where(x =>
                 x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex &&
-                !WinAPI.IsIconic(x.Handle));
+                !WinAPI.IsIconic(x.Handle) &&
+                Screen.FromHandle(x.Handle).DeviceName == AttachedScreen.DeviceName);
 
             Window[] windows = Mode == ViewMode.Preview
 
@@ -68,8 +71,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         {
             foreach (var wnd in windows)
             {
-                if (Screen.FromHandle(wnd.Handle).DeviceName != AttachedScreen.DeviceName) continue;
-
                 // --- Calculating ---
 
                 var x = wnd.Dimensions.X;
@@ -191,8 +192,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             int col = 0, row = 0;
             foreach (var wnd in windows)
             {
-                if (Screen.FromHandle(wnd.Handle).DeviceName != AttachedScreen.DeviceName) continue;
-
                 // Calc tile position
                 int yPos = row * tileHeight;
                 int xPos = col * tileWidth;

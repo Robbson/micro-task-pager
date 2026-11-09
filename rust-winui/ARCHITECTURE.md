@@ -798,10 +798,6 @@ as it is made.
 - Clip each monitor's preview to its pager rectangle, so a window that extends across monitors cannot
   paint into the neighboring screen.
 - Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
-- Filter windows by screen before counting and centering Micro Taskbar tiles. The C# renderer counts
-  every window on the desktop and then skips windows from other screens while drawing, which can
-  mis-center or mis-wrap the icons of secondary screens. The Rust layout uses only the windows that
-  belong to each screen.
 - Replace OLE drag-and-drop with an internal pointer-capture drag: the payload is only a window handle
   and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. The drag ghost is a
   reactor element. Keep the gesture alive through pointer-capture loss; reactor's release event still
