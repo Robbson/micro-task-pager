@@ -6,6 +6,7 @@
 - rust-winsafe settings dialog is closer to the C# version
 - csharp-winforms settings dialog now sticks to the system colors
 - csharp-winforms pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
+- added `run.ps1` to build and start any implementation from the repository root
 
 ## v1.5.1
 

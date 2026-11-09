@@ -190,6 +190,23 @@ See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the WinUI bui
 include the MSVC build tools, the Windows SDK, and the Windows App Runtime 2.4 or later framework
 package. The winsafe build needs only the MSVC build tools and Windows SDK.
 
+### Run from source
+
+`run.ps1` builds and starts one implementation from the repository root, so there is no need to
+change into the project directories:
+
+```powershell
+pwsh .\run.ps1                    # C# WinForms (default)
+pwsh .\run.ps1 winui              # Rust WinUI 3
+pwsh .\run.ps1 winsafe            # native winsafe
+pwsh .\run.ps1 winui -Configuration release
+pwsh .\run.ps1 winforms -NoBuild  # start an existing build
+```
+
+The application is started in its own process so the terminal stays usable. Add `-Wait` to keep the
+script attached until the application exits. Run only one pager at a time: all implementations share
+a single-instance mutex and the topmost/pinning state.
+
 ### Create release packages
 
 Build one or more production releases from the repository root:
