@@ -14,7 +14,7 @@
 //! Mouse handling uses the same layout that was painted, so hit testing cannot
 //! disagree with the visible cells.
 
-use windows::Win32::Foundation::{HWND, LPARAM, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::InvalidateRect;
 use windows::Win32::UI::Controls::{
     HIMAGELIST, ILC_COLOR32, ILC_MASK, ImageList_BeginDrag, ImageList_Create, ImageList_Destroy,
@@ -24,10 +24,12 @@ use windows::Win32::UI::Controls::{
 use windows::Win32::UI::HiDpi::GetDpiForSystem;
 use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowRect, HWND_TOPMOST, IDC_ARROW,
-    IDC_SIZEALL, KillTimer, LoadCursorW, PostMessageW, SM_CXDRAG, SM_CYDRAG, SW_SHOWNOACTIVATE,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetForegroundWindow, SetTimer,
-    SetWindowPos, ShowWindowAsync, WM_CLOSE, WindowFromPoint,
+    GWL_EXSTYLE, GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowLongPtrW,
+    GetWindowRect, HWND_TOPMOST, IDC_ARROW, IDC_SIZEALL, KillTimer, LWA_ALPHA, LoadCursorW,
+    PostMessageW, SM_CXDRAG, SM_CYDRAG, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetCursor, SetForegroundWindow,
+    SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindowAsync,
+    WM_CLOSE, WS_EX_APPWINDOW, WindowFromPoint,
 };
 use windows::core::{PCWSTR, w};
 
@@ -46,6 +48,7 @@ pub const CMD_POSITION_SAVE: u32 = 3;
 pub const CMD_POSITION_DEFAULT: u32 = 4;
 pub const CMD_ABOUT: u32 = 5;
 pub const CMD_EXIT: u32 = 6;
+pub const CMD_SETTINGS: u32 = 7;
 
 pub const TIMER_PRIMARY: usize = 1;
 pub const TIMER_SECONDARY: usize = 2;
@@ -569,6 +572,7 @@ impl App {
                 self.move_to(x, y);
             }
             CMD_ABOUT => self.show_about(parent),
+            CMD_SETTINGS => self.show_settings(parent),
             CMD_EXIT => unsafe {
                 let _ = PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
             },
@@ -697,6 +701,104 @@ impl App {
             logging::error(format!("about dialog failed: {error}"));
         }
         self.set_menu_open(false);
+    }
+
+    fn show_settings(&mut self, parent: &winsafe::gui::WindowMain) {
+        self.set_menu_open(true);
+        // Stop polling while the modal dialog is open; the preview is applied
+        // only when the user saves, and the pager must not repaint underneath.
+        if !self.hwnd.0.is_null() {
+            unsafe {
+                let _ = KillTimer(Some(self.hwnd), TIMER_PRIMARY);
+                let _ = KillTimer(Some(self.hwnd), TIMER_SECONDARY);
+            }
+        }
+
+        let initial = self.settings.clone();
+        if let Some(settings) = crate::dialogs::settings::show(parent, &initial) {
+            self.apply_settings(settings);
+        }
+        self.restart_timers();
+
+        self.set_menu_open(false);
+        self.reassert_topmost();
+    }
+
+    /// Persists accepted settings and applies the parts that can change live.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        let taskbar_changed = settings.show_app_in_taskbar != self.settings.show_app_in_taskbar;
+        self.settings = settings;
+        self.settings.renderer_view_modes = self.view_modes.clone();
+        self.settings.save();
+
+        self.restart_timers();
+        self.apply_opacity();
+        if taskbar_changed {
+            self.apply_taskbar_style();
+            if self.settings.show_app_in_taskbar {
+                self.is_app_pinned = false;
+                self.try_pin();
+            } else {
+                if let Err(error) = self.desktop.unpin_application(self.hwnd) {
+                    logging::warn(format!("unpinning the pager failed: {error}"));
+                }
+                self.is_app_pinned = false;
+            }
+        }
+
+        self.refresh(true);
+    }
+
+    fn restart_timers(&self) {
+        if self.hwnd.0.is_null() {
+            return;
+        }
+
+        unsafe {
+            let _ = KillTimer(Some(self.hwnd), TIMER_PRIMARY);
+            let _ = KillTimer(Some(self.hwnd), TIMER_SECONDARY);
+            let _ = SetTimer(
+                Some(self.hwnd),
+                TIMER_PRIMARY,
+                self.settings.primary_update_delay.max(16),
+                None,
+            );
+            let _ = SetTimer(
+                Some(self.hwnd),
+                TIMER_SECONDARY,
+                self.settings.secondary_update_delay.max(100),
+                None,
+            );
+        }
+    }
+
+    fn apply_opacity(&self) {
+        let opacity = self.settings.background_opacity.clamp(0.25, 1.0);
+        let alpha = (opacity * 255.0).round() as u8;
+        unsafe {
+            let _ = SetLayeredWindowAttributes(self.hwnd, COLORREF(0), alpha, LWA_ALPHA);
+        }
+    }
+
+    fn apply_taskbar_style(&self) {
+        unsafe {
+            let mut style = GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE);
+            if self.settings.show_app_in_taskbar {
+                style |= WS_EX_APPWINDOW.0 as isize;
+            } else {
+                style &= !(WS_EX_APPWINDOW.0 as isize);
+            }
+            SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, style);
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+        }
     }
 
     fn reassert_topmost(&self) {

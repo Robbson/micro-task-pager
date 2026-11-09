@@ -1,5 +1,7 @@
 1 ICON "../csharp-winforms/Resources/icon.ico"
 
+#include "settings.rc"
+
 
 1 VERSIONINFO
 FILEVERSION 0,1,0,0

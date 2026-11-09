@@ -1,0 +1,93 @@
+#include "settings_ids.h"
+
+/* Numeric Win32 style bits: the RC compiler in this build does not include
+   the Windows SDK headers, so avoid DS_/WS_/CBS_/ES_/BS_/TBS_ symbols. */
+
+IDD_SETTINGS DIALOGEX 0, 0, 360, 396
+STYLE 0x40 | 0x80 | 0x80000000 | 0x00C00000 | 0x00080000
+CAPTION "Micro Task Pager Settings"
+FONT 9, "Segoe UI"
+BEGIN
+    CONTROL "", IDC_SETTINGS_TABS, "SysTabControl32", 0x00010000, 7, 7, 346, 368
+    DEFPUSHBUTTON "Save", IDOK, 245, 379, 50, 14
+    PUSHBUTTON "Cancel", IDCANCEL, 300, 379, 50, 14
+    PUSHBUTTON "Defaults", IDC_SETTINGS_DEFAULTS, 7, 379, 50, 14
+END
+
+IDD_SETTINGS_LAYOUT DIALOGEX 0, 0, 334, 340
+STYLE 0x40 | 0x40000000
+FONT 9, "Segoe UI"
+BEGIN
+    GROUPBOX "Rendering", -1, 6, 6, 322, 66
+    LTEXT "View Mode Default", -1, 16, 22, 120, 10
+    COMBOBOX IDC_VIEW_MODE, 140, 20, 120, 60, 0x0003 | 0x00200000 | 0x00010000
+    PUSHBUTTON "R", IDC_REVERT_VIEW_MODE, 300, 20, 16, 14
+    LTEXT "Pager Height", -1, 16, 46, 120, 10
+    EDITTEXT IDC_PAGER_HEIGHT, 140, 44, 60, 14, 0x0080
+    PUSHBUTTON "R", IDC_REVERT_PAGER_HEIGHT, 300, 44, 16, 14
+
+    GROUPBOX "Icons Settings", -1, 6, 78, 322, 66
+    LTEXT "Icon Padding X", -1, 16, 94, 120, 10
+    EDITTEXT IDC_ICON_PAD_X, 140, 92, 60, 14, 0x0080
+    PUSHBUTTON "R", IDC_REVERT_ICON_PAD_X, 300, 92, 16, 14
+    LTEXT "Icon Padding Y", -1, 16, 118, 120, 10
+    EDITTEXT IDC_ICON_PAD_Y, 140, 116, 60, 14, 0x0080
+    PUSHBUTTON "R", IDC_REVERT_ICON_PAD_Y, 300, 116, 16, 14
+END
+
+IDD_SETTINGS_THEME DIALOGEX 0, 0, 334, 340
+STYLE 0x40 | 0x40000000
+FONT 9, "Segoe UI"
+BEGIN
+    GROUPBOX "General", -1, 6, 6, 322, 50
+    LTEXT "Background Opacity", -1, 16, 22, 110, 10
+    CONTROL "", IDC_OPACITY, "msctls_trackbar32", 0x0001 | 0x00010000, 130, 18, 120, 20
+    LTEXT "100%", IDC_OPACITY_LABEL, 254, 22, 40, 10
+    PUSHBUTTON "R", IDC_REVERT_OPACITY, 300, 20, 16, 14
+
+    GROUPBOX "Desktops", -1, 6, 62, 322, 126
+    LTEXT "Border Style", -1, 16, 78, 110, 10
+    COMBOBOX IDC_BORDER_STYLE, 130, 76, 120, 60, 0x0003 | 0x00200000 | 0x00010000
+    PUSHBUTTON "R", IDC_REVERT_BORDER_STYLE, 300, 76, 16, 14
+    LTEXT "Background Color", -1, 16, 100, 110, 10
+    PUSHBUTTON "", IDC_DESKTOP_BG, 130, 98, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_DESKTOP_BG, 300, 98, 16, 14
+    LTEXT "Border Color", -1, 16, 122, 110, 10
+    PUSHBUTTON "", IDC_DESKTOP_BORDER, 130, 120, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_DESKTOP_BORDER, 300, 120, 16, 14
+    LTEXT "Border Color (Active)", -1, 16, 144, 110, 10
+    PUSHBUTTON "", IDC_ACTIVE_DESKTOP_BORDER, 130, 142, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_ACTIVE_DESKTOP_BORDER, 300, 142, 16, 14
+
+    GROUPBOX "Preview Windows", -1, 6, 194, 322, 140
+    LTEXT "Background Color", -1, 16, 210, 110, 10
+    PUSHBUTTON "", IDC_WINDOW_BG, 130, 208, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_WINDOW_BG, 300, 208, 16, 14
+    LTEXT "Border Color", -1, 16, 232, 110, 10
+    PUSHBUTTON "", IDC_WINDOW_BORDER, 130, 230, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_WINDOW_BORDER, 300, 230, 16, 14
+    LTEXT "Border Color (Active)", -1, 16, 254, 110, 10
+    PUSHBUTTON "", IDC_ACTIVE_WINDOW_BORDER, 130, 252, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_ACTIVE_WINDOW_BORDER, 300, 252, 16, 14
+    LTEXT "Background Color (Active)", -1, 16, 276, 110, 10
+    PUSHBUTTON "", IDC_ACTIVE_WINDOW_BG, 130, 274, 120, 14
+    PUSHBUTTON "R", IDC_REVERT_ACTIVE_WINDOW_BG, 300, 274, 16, 14
+END
+
+IDD_SETTINGS_MISC DIALOGEX 0, 0, 334, 340
+STYLE 0x40 | 0x40000000
+FONT 9, "Segoe UI"
+BEGIN
+    GROUPBOX "Performance", -1, 6, 6, 322, 74
+    LTEXT "Primary Update Delay (ms)", -1, 16, 22, 140, 10
+    EDITTEXT IDC_PRIMARY_DELAY, 170, 20, 60, 14, 0x0080
+    PUSHBUTTON "R", IDC_REVERT_PRIMARY_DELAY, 300, 20, 16, 14
+    LTEXT "Secondary Update Delay (ms)", -1, 16, 46, 140, 10
+    EDITTEXT IDC_SECONDARY_DELAY, 170, 44, 60, 14, 0x0080
+    PUSHBUTTON "R", IDC_REVERT_SECONDARY_DELAY, 300, 44, 16, 14
+
+    GROUPBOX "App Pinning", -1, 6, 88, 322, 140
+    CONTROL "Show App In Taskbar", IDC_SHOW_TASKBAR, "Button", 0x0003 | 0x00010000, 16, 104, 150, 12
+    PUSHBUTTON "R", IDC_REVERT_SHOW_TASKBAR, 300, 104, 16, 14
+    LTEXT "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the Active Applications screen (Win + Tab).", -1, 16, 124, 300, 90
+END

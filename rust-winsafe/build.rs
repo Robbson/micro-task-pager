@@ -1,5 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=app.rc");
+    println!("cargo:rerun-if-changed=settings.rc");
+    println!("cargo:rerun-if-changed=settings_ids.h");
     println!("cargo:rerun-if-changed=app.manifest");
     println!("cargo:rerun-if-changed=../csharp-winforms/Resources/icon.ico");
 

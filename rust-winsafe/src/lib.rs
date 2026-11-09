@@ -20,6 +20,7 @@ pub mod about;
 pub mod app;
 pub mod com;
 pub mod desktop;
+pub mod dialogs;
 pub mod foreground;
 pub mod logging;
 pub mod monitors;

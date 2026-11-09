@@ -29,7 +29,7 @@ const MK_SHIFT: u16 = 0x0004;
 
 use crate::app::{
     App, CMD_ABOUT, CMD_EXIT, CMD_POSITION_DEFAULT, CMD_POSITION_RESTORE, CMD_POSITION_SAVE,
-    CMD_TOGGLE_VIEW, TIMER_PRIMARY, TIMER_RESTORE, TIMER_SECONDARY,
+    CMD_SETTINGS, CMD_TOGGLE_VIEW, TIMER_PRIMARY, TIMER_RESTORE, TIMER_SECONDARY,
 };
 
 thread_local! {
@@ -302,6 +302,12 @@ fn show_context_menu(hwnd: WinHWND, app: &mut App, parent: &gui::WindowMain) {
             windows::core::w!("⌖  Position"),
         );
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, windows::core::PCWSTR::null());
+        let _ = AppendMenuW(
+            menu,
+            MF_STRING,
+            CMD_SETTINGS as usize,
+            windows::core::w!("⚙  Settings"),
+        );
         let _ = AppendMenuW(
             menu,
             MF_STRING,

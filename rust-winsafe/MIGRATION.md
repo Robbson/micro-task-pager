@@ -28,8 +28,8 @@ not refactored into UI-independent modules, so `rust-winui` is untouched.
 | Pager window host | **Migrated to winsafe** | `gui::WindowMain` + typed events, no `WNDCLASSW`/`WndProc`/manual message loop |
 | Pager rendering | Copied | Raw GDI `Painter`; winsafe adds no drawing value here |
 | Context menu | Copied | Raw `TrackPopupMenu` shim |
-| About dialog | **Migrated to winsafe** | `gui::WindowModal` + `Label` + `Button`; WIC/GDI logo paint retained |
-| Settings dialog | Not implemented | Was a non-goal in the baseline; planned as a later step |
+| About dialog | **Migrated to winsafe** | `gui::WindowModal` + `Label` + `Button`; PNG decoded with `png`, logo painted with GDI |
+| Settings dialog | **Implemented (v1)** | Fixed `.rc` template, winsafe `new_dlg` controls, tab pages, Save/Cancel/Defaults |
 | Build pipeline (`build.ps1`, CI, VS Code) | Not wired | Only Cargo commands are verified so far |
 
 ## What changed versus the baseline
@@ -48,8 +48,8 @@ not refactored into UI-independent modules, so `rust-winui` is untouched.
   - the hand-built `DLGTEMPLATE`, `about_proc`, `WM_CTLCOLORSTATIC`, and manual `CreateWindowExW`
     control creation are gone;
   - the dialog is a `gui::WindowModal` with winsafe `Label` and `Button` controls;
-  - the embedded PNG logo is still decoded with WIC and drawn in `wm_paint`, because winsafe has no
-    image control.
+  - the embedded PNG is decoded with the pure-Rust `png` crate and painted with GDI, because winsafe
+    has no image control.
 - `App::on_command` and `App::show_about` take the owning `gui::WindowMain`; `about::show` takes that
   parent instead of a raw `HWND`.
 - `app.rc` and `build.rs` now reference `../csharp-winforms/Resources/` instead of the old `../src/`
@@ -66,8 +66,8 @@ cargo test
 cargo build --release
 ```
 
-Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 21 unit tests
-pass, and the release executable is 976,384 bytes (0.93 MiB).
+Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 34 unit tests
+pass, and the release executable is 1,103,872 bytes (1.05 MiB).
 
 ### Follow-up fixes after the first interaction test (2026-11-09)
 
@@ -105,6 +105,25 @@ The first manual run confirmed the pager and About dialog work, and exposed thre
   optimization that cut idle CPU by 2.5x in `rust-winui` and 3.8x in C#. A unit test covers the
   cached-list resolution (`desktop_index_resolves_against_the_fetched_list`).
 
+### Settings dialog implementation (2026-11-09)
+
+- `settings.rc` defines the fixed `DIALOGEX` main dialog and three page dialogs (Layout, Theme,
+  Misc); `settings_ids.h` holds the shared control IDs, and `app.rc` includes the resource.
+- `src/dialogs/settings/mod.rs` loads the dialog with `gui::WindowModal::new_dlg`, turns the three
+  pages into `gui::TabPage::new_dlg` children of a `gui::Tab`, and wraps every control with the
+  matching `new_dlg` constructor. Tab switching and page resizing are handled by winsafe.
+- `src/dialogs/settings/draft.rs` and `src/dialogs/placement.rs` are copied from `rust-winui` with
+  their 12 tests; `Settings::save()` and `DesktopBorderStyle::as_u32()` were added to `settings.rs`.
+- Save/Cancel/Defaults use `IDOK`/`IDCANCEL`; Escape uses `wm_command_acc_menu(co::DLGID::CANCEL)`.
+  Per-row revert buttons start hidden and appear when the option differs from the opening value.
+- Color rows use `ChooseColorW`; the button shows the RGB hex value. The trackbar drives opacity;
+  numeric edits are parsed and clamped by the draft.
+- On Save the pager updates timers, layered opacity, taskbar style/pinning, layout, and persists the
+  settings. Cancel leaves the running settings untouched.
+- The dialog is topmost and placed next to the pager with the reused C# placement algorithm.
+- Not yet implemented: live preview while editing, color swatches instead of hex text, and
+  `UpDown` spinners on the numeric rows. The dialog is fixed-size and does not resize.
+
 Interaction verification is otherwise still pending. The checklist that needs a real desktop session:
 
 - borderless topmost pager appears without stealing focus;
@@ -116,12 +135,16 @@ Interaction verification is otherwise still pending. The checklist that needs a 
 - context menu commands work, with the glyph labels and no check column;
 - About opens, shows a sharp logo on a white background, closes with the button and Escape, and does
   not leave the pager disabled;
+- Settings opens next to the pager; Layout/Theme/Misc switch correctly; values match the registry;
+  Save applies timers, opacity, taskbar/pinning and layout; Cancel leaves them untouched; Defaults
+  resets only the active page; the color picker and per-row revert buttons work;
 - taskbar pinning / all-desktop pinning still works when `ShowAppInTaskbar` is enabled.
 
 ## Known gaps and next steps
 
-1. **Settings dialog.** Implement it later with winsafe `Tab` pages and native controls. winsafe has
-   no layout engine, so rows need explicit positions or a small helper, similar to the C# code.
+1. **Settings dialog polish.** The v1 uses the fixed `.rc` template. Remaining work: live preview
+   while editing, color swatches instead of hex text, `UpDown` spinners, and checking the dialog's
+   sizing at non-100% DPI.
 2. **Remaining raw window calls.** Timers, `TrackPopupMenu`, opacity, topmost, and layered styles are
    still raw `windows` calls. Move them to winsafe wrappers only where that clearly reduces code.
 3. **About polish.** The winsafe labels use the default UI font; the baseline used per-element fonts
@@ -135,11 +158,49 @@ Interaction verification is otherwise still pending. The checklist that needs a 
 6. **Repository wiring.** Add `rust-winsafe` to `build.ps1`, the VS Code tasks, and `AGENTS.md` only
    after the interaction checklist passes.
 
+### Settings dialog decision
+
+The Settings dialog will use a compiled dialog template, not programmatic layout:
+
+- Author `rust-winsafe/settings.rc` with a `DIALOGEX` template (fixed-size `DS_MODALFRAME` dialog,
+  no `WS_THICKFRAME`, no resize). `build.rs` compiles it through the existing `embed-resource` step,
+  together with `app.rc`.
+- Load it with `gui::WindowModal::new_dlg(IDD_SETTINGS)`.
+- Attach each control with the matching `new_dlg` constructor
+  (`gui::Label::new_dlg`, `gui::Edit::new_dlg`, `gui::ComboBox::new_dlg`, `gui::CheckBox::new_dlg`,
+  `gui::TrackBar`/`gui::UpDown` where applicable, `gui::Button::new_dlg`). The dialog manager creates
+  the HWNDs; winsafe only wraps them by control ID.
+- Use a native `TabControl` with per-tab control visibility for the C# Layout/Theme/Misc pages. A
+  dialog template cannot host separate tab-page dialogs cheaply, and the pages are static.
+- Use `IDOK`/`IDCANCEL` for Save/Cancel, with `wm_command_acc_menu(co::DLGID::CANCEL)` for Escape.
+  Keep the dialog topmost like the C# dialog so the topmost pager cannot cover it.
+- Color rows use `ChooseColorW` directly; winsafe has no color-picker wrapper.
+- On Save, persist the settings and apply them to the running pager (layout, timers, opacity,
+  pinning). On Cancel, keep the previous settings.
+
+The C# reference has three pages: Layout (view mode, pager height, icon padding), Theme (opacity,
+desktop border style/colors, preview window colors), and Misc (update delays, taskbar pinning and
+the pinning note). The template is authored in dialog units at 96 DPI; the dialog manager scales it.
+
+#### Reuse from `rust-winui`
+
+Only the view/component layer is reactor-specific. The tested model logic comes over almost verbatim:
+
+| `rust-winui` item | Reuse | Notes |
+|---|---|---|
+| `dialogs/settings/draft.rs` | Whole module | `SettingsDraft`, `Field`, `Section`, clamping, revert, reset, modified checks, and 6 tests |
+| `dialogs/placement.rs` | Whole module | C# `FindPlacement` algorithm (right/left/below/above/center) and 6 tests |
+| `settings.rs` additions | `Settings::save()` and `DesktopBorderStyle::as_u32()` | The winsafe `settings.rs` is otherwise identical; the diff is only these 46 lines |
+| `settings.rs` limits/fields | Already in sync | Same registry format and field set |
+
+Not reusable: `dialogs/settings/view.rs` (reactor view and `Color` picker), the `Component` lifecycle
+and message plumbing in `dialogs/settings/mod.rs`, `SettingsInput`/`DialogLink`, and
+`ContentDialogResult`. The winsafe version replaces those with `new_dlg` controls, `ChooseColorW`,
+and a modal `WindowModal`; the draft, placement, and persistence logic stay the same.
+
 ## Open questions
 
 - Is the native GDI pager crisp enough at 125%/150%/200% scaling, or does it need Direct2D later?
 - Does the winsafe About dialog need the exact fonts and spacing of the C# dialog, or is approximate
   parity acceptable?
-- Should the settings dialog be built programmatically with winsafe controls, or from a `.res` dialog
-  template produced by a resource editor?
 - Should this variant eventually replace `rust-winui`, or remain an optional no-runtime build?
