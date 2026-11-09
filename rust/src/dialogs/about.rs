@@ -3,6 +3,9 @@
 //! This is the promoted `examples/reactor_about.rs` reference. The pager opens
 //! it as a secondary window; the example runs it standalone with no link.
 
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
 use windows_reactor::*;
 
 use super::{DialogEvent, DialogLink};
@@ -10,7 +13,36 @@ use super::{DialogEvent, DialogLink};
 /// Window title used by the pager to reassert topmost for the open dialog.
 pub const WINDOW_TITLE: &str = "About Micro Task Pager";
 
-const LOGO: &[u8] = include_bytes!("../../../src/Resources/logo.png");
+const LOGO_PNG: &[u8] = include_bytes!("../../../src/Resources/logo.png");
+const LOGO_SVG: &[u8] = include_bytes!("../../assets/logo.svg");
+
+/// Extracts the embedded SVG logo to a stable file and returns its path.
+///
+/// `SvgImageSource` can only load vectors from a URI, so the embedded asset is
+/// materialized under `%LOCALAPPDATA%` instead of being passed as bytes.
+fn svg_logo_path() -> Option<&'static Path> {
+    static PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let directory = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("MicroTaskPager");
+        std::fs::create_dir_all(&directory).ok()?;
+        let path = directory.join("logo.svg");
+        if std::fs::read(&path).ok().as_deref() != Some(LOGO_SVG) {
+            std::fs::write(&path, LOGO_SVG).ok()?;
+        }
+        Some(path)
+    })
+    .as_deref()
+}
+
+/// Vector logo when the extraction succeeds, encoded PNG otherwise.
+fn logo() -> Image {
+    svg_logo_path()
+        .and_then(|path| Image::new().source_file(path).ok())
+        .unwrap_or_else(|| Image::new().source_data(EncodedImage::from_static(LOGO_PNG)))
+}
 
 /// Parent-supplied About window input.
 #[derive(Clone, PartialEq)]
@@ -66,8 +98,7 @@ impl Component for About {
 
         Border::new().background(Color::rgb(255, 255, 255)).content(
             StackPanel::new().children((
-                Image::new()
-                    .source_data(EncodedImage::from_static(LOGO))
+                logo()
                     .width(512.0)
                     .height(278.0)
                     .margin(Thickness::new(44.0, 20.0, 44.0, 2.0)),
