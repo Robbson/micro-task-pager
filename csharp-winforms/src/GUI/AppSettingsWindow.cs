@@ -22,7 +22,6 @@ namespace MicroTaskPager.GUI
         private readonly Timer _previewTimer = new Timer { Interval = 80 };
 
         private TabControl _tabs;
-        private Font _selectedTabFont;
         private TextBox _primaryDelayBox;
         private TextBox _secondaryDelayBox;
         private Rectangle _placementOwnerBounds;
@@ -37,8 +36,6 @@ namespace MicroTaskPager.GUI
             _working = AppSettings.Clone(settings);
 
             InitializeComponent();
-
-            _selectedTabFont = new Font(_tabs.Font, FontStyle.Bold);
 
             _placementOwnerBounds = ownerBounds;
             _hasPlacementOwner = true;
@@ -79,7 +76,6 @@ namespace MicroTaskPager.GUI
         {
             if (disposing)
             {
-                _selectedTabFont?.Dispose();
                 _previewTimer.Dispose();
                 _toolTip.Dispose();
             }
@@ -574,36 +570,6 @@ namespace MicroTaskPager.GUI
         // UI construction
         // ------------------------------------------------------------------------------------
 
-        private void TabControl_DrawItem(object sender, DrawItemEventArgs e)
-        {
-            TabPage page = _tabs.TabPages[e.Index];
-            bool selected = e.Index == _tabs.SelectedIndex;
-
-            Color background = selected ? SystemColors.Control : SystemColors.ControlDark;
-            using (var backgroundBrush = new SolidBrush(background))
-            {
-                e.Graphics.FillRectangle(backgroundBrush, e.Bounds);
-            }
-
-            if (selected)
-            {
-                using (var accentBrush = new SolidBrush(SystemColors.Highlight))
-                {
-                    e.Graphics.FillRectangle(
-                        accentBrush,
-                        new Rectangle(e.Bounds.Left, e.Bounds.Top, e.Bounds.Width, 3));
-                }
-            }
-
-            TextRenderer.DrawText(
-                e.Graphics,
-                page.Text,
-                selected ? _selectedTabFont : _tabs.Font,
-                e.Bounds,
-                SystemColors.ControlText,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
-        }
-
         private void InitializeComponent()
         {
             SuspendLayout();
@@ -613,7 +579,7 @@ namespace MicroTaskPager.GUI
             AutoScaleMode = AutoScaleMode.Dpi;
 
             Text = "Micro Task Pager Settings";
-            ClientSize = new Size(520, 640);
+            ClientSize = new Size(520, 570);
             StartPosition = FormStartPosition.Manual;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -629,9 +595,7 @@ namespace MicroTaskPager.GUI
             _tabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                DrawMode = TabDrawMode.OwnerDrawFixed,
             };
-            _tabs.DrawItem += TabControl_DrawItem;
 
             TabPage layoutPage = CreatePage("Layout");
             TabPage themePage = CreatePage("Theme");
@@ -652,7 +616,7 @@ namespace MicroTaskPager.GUI
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 WrapContents = false,
-                Padding = new Padding(0, 8, 0, 0),
+                Padding = new Padding(0, 4, 0, 4),
             };
 
             var cancel = new Button { Text = "Cancel", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
@@ -706,7 +670,7 @@ namespace MicroTaskPager.GUI
         private TableLayoutPanel BeginGroup(TabPage page, string title)
         {
             var stack = (TableLayoutPanel)page.Tag;
-            var group = new ThemedGroupBox
+            var group = new GroupBox
             {
                 Text = title,
                 AutoSize = true,
