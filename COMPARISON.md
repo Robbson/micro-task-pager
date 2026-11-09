@@ -5,6 +5,9 @@ Deployment, footprint, and code comparison for the two Micro Task Pager implemen
 Measured on 2026-11-09. The C#/.NET implementation is the current release; the Rust/WinUI 3 port
 is feature-complete but unreleased.
 
+For alternatives to the current WinUI 3 dependency and their trade-offs, see
+[`UI-FRAMEWORK-COMPARISON.md`](UI-FRAMEWORK-COMPARISON.md).
+
 ## Executive summary
 
 | Aspect                     | C# WinForms                                  | Rust WinUI 3                                     | Winner     |

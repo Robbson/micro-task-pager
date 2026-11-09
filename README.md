@@ -24,8 +24,9 @@
 > release remains the C#/.NET implementation; the Rust build is not published yet. The Rust build
 > requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4 or later
 > framework package, which is installed separately. See [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md),
-> [`rust/MIGRATION.md`](rust/MIGRATION.md), and the
-> [implementation comparison](COMPARISON.md) for dependencies, size, resource use, and code metrics.
+> [`rust/MIGRATION.md`](rust/MIGRATION.md), the [implementation comparison](COMPARISON.md) for
+> dependencies, size, resource use, and code metrics, and the
+> [UI framework comparison](UI-FRAMEWORK-COMPARISON.md) for alternative stacks and their trade-offs.
 
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
