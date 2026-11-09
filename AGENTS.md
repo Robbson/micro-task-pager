@@ -246,7 +246,9 @@ Guidance:
 - `rust-winui/examples/reactor_settings.rs` - standalone Settings window runner.
 - `rust-winui/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
 - `rust-winsafe/MIGRATION.md` - winsafe variant status, source commit, verification log, and gaps.
-- `rust-winsafe/src/` - native implementation (app state, GDI renderer, COM, winsafe window host).
+- `rust-winsafe/src/` - native implementation (app coordinator, GDI renderer, COM, winsafe window host).
+- `rust-winsafe/src/render/` - `layout.rs` geometry and hit testing, `paint.rs` drawing instructions,
+  and `gdi.rs` backend.
 - `rust-winsafe/src/dialogs/` - winsafe About and `.rc`-backed Settings dialog and placement.
 - `rust-winsafe/app.rc`, `rust-winsafe/settings.rc`, `rust-winsafe/settings_ids.h` - icon/version,
   fixed Settings dialog templates, and the shared control IDs.

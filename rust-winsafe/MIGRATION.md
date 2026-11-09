@@ -19,6 +19,21 @@ The copy is deliberate: platform modules (`desktop/`, `windows/`, `monitors`, `f
 `settings`, `com`, `single_instance`, `logging`) are kept identical to the baseline for now. They are
 not refactored into UI-independent modules, so `rust-winui` is untouched.
 
+## Source layout
+
+The winsafe crate now mirrors the onboarding-oriented module split of `rust-winui` where the two UI
+stacks allow it:
+
+- `src/app.rs` is the coordinator; its methods are grouped by concern (construction, timers,
+  snapshot/layout, painting/input, drag/actions, menu, settings/dialogs, window maintenance) with
+  `// ---- ... ----` banners.
+- `src/render/` is split into `layout.rs` (geometry and hit testing), `paint.rs` (drawing
+  instructions through the `Painter` trait), and `gdi.rs` (the GDI backend), matching the
+  `rust-winui` `pager/layout`, `pager/view`, and platform split.
+- `src/dialogs/` contains both `about.rs` and the `.rc`-backed `settings` dialog.
+- `src/window.rs` is the winsafe window host; event handlers only decode input and forward it to
+  `App`.
+
 ## Status
 
 | Area | Status | Notes |
@@ -44,7 +59,7 @@ not refactored into UI-independent modules, so `rust-winui` is untouched.
     `wm_r_button_up`, `wm_timer`, `wm_display_change`, and `wm_capture_changed` events;
   - winsafe stores its own state in `GWLP_USERDATA`, so the `App` pointer lives in a thread-local
     slot instead of the window user data.
-- `src/about.rs` was rewritten:
+- `src/dialogs/about.rs` was rewritten:
   - the hand-built `DLGTEMPLATE`, `about_proc`, `WM_CTLCOLORSTATIC`, and manual `CreateWindowExW`
     control creation are gone;
   - the dialog is a `gui::WindowModal` with winsafe `Label` and `Button` controls;
@@ -82,7 +97,7 @@ The first manual run confirmed the pager and About dialog work, and exposed thre
 - **About labels had a gray background on the white dialog.** The modal now uses the `WINDOW` class
   brush, and `WM_CTLCOLORSTATIC` forces black text, a transparent background mode, and the white
   window brush for static labels.
-- **The logo loader dominated `about.rs`.** The PNG is now embedded with `include_bytes!` and decoded
+- **The logo loader dominated the About module.** The PNG is now embedded with `include_bytes!` and decoded
   with the pure-Rust `png` crate instead of WIC/COM. The decoded RGBA is converted to premultiplied
   BGRA and downscaled once with an area-average filter to the current DPI size, then blended 1:1 into
   the dialog. The box filter replaced `AlphaBlend`'s jagged nearest-neighbour stretching, which had

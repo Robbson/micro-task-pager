@@ -6,7 +6,8 @@
 //! PNG logo is painted with GDI because winsafe exposes no image control.
 //!
 //! The dialog is modal, so the pager is disabled while it is open and Escape or
-//! the Close button dismiss it.
+//! the Close button dismiss it. `app.rs` pauses its timers and topmost
+//! reassertion for the duration of the call.
 
 use std::io::Cursor;
 use std::mem::size_of;
@@ -26,14 +27,18 @@ use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 use crate::logging;
 use crate::render::scale;
 
-const LOGO_PNG: &[u8] = include_bytes!("../../csharp-winforms/Resources/logo.png");
+const LOGO_PNG: &[u8] = include_bytes!("../../../csharp-winforms/Resources/logo.png");
 const ICON_RESOURCE: u16 = 1;
 const CLIENT_WIDTH: i32 = 600;
 const CLIENT_HEIGHT: i32 = 480;
 const LOGO_WIDTH: i32 = 512;
 const LOGO_HEIGHT: i32 = 278;
+const WM_KEY_ESCAPE: u16 = 0x1B;
 
 /// Shows the modal About dialog owned by `parent`.
+///
+/// Returns after the dialog closes. The caller keeps the pager's timers and
+/// topmost handling suspended while this runs.
 pub fn show(parent: &gui::WindowMain, dpi: u32) -> w::AnyResult<()> {
     let width = scale(CLIENT_WIDTH, dpi);
     let height = scale(CLIENT_HEIGHT, dpi);
@@ -91,6 +96,13 @@ pub fn show(parent: &gui::WindowMain, dpi: u32) -> w::AnyResult<()> {
         },
     );
 
+    attach_events(&wnd, &close, dpi);
+    wnd.show_modal(parent)?;
+    Ok(())
+}
+
+/// Wires the Close button, Escape, static-label colors, and logo painting.
+fn attach_events(wnd: &gui::WindowModal, close: &gui::Button, dpi: u32) {
     let wnd_close = wnd.clone();
     close.on().bn_clicked(move || {
         wnd_close.close();
@@ -99,7 +111,7 @@ pub fn show(parent: &gui::WindowMain, dpi: u32) -> w::AnyResult<()> {
 
     let wnd_escape = wnd.clone();
     wnd.on().wm_key_down(move |p: w::msg::WmKeyDown| {
-        if p.vkey_code.raw() == 0x1B {
+        if p.vkey_code.raw() == WM_KEY_ESCAPE {
             wnd_escape.close();
         }
         Ok(())
@@ -125,15 +137,13 @@ pub fn show(parent: &gui::WindowMain, dpi: u32) -> w::AnyResult<()> {
         Ok(())
     });
     wnd.on().wm_erase_bkgnd(|_| Ok(1));
-
-    wnd.show_modal(parent)?;
-    Ok(())
 }
 
 fn win_hwnd(hwnd: &w::HWND) -> WinHWND {
     WinHWND(hwnd.ptr())
 }
 
+/// Fills the dialog white and alpha-blends the logo at the top center.
 fn paint(hwnd: WinHWND, logo: Option<&Logo>, dpi: u32) {
     unsafe {
         let mut paint = PAINTSTRUCT::default();
@@ -179,6 +189,7 @@ fn paint(hwnd: WinHWND, logo: Option<&Logo>, dpi: u32) {
     }
 }
 
+/// A decoded logo bitmap owned by the dialog and freed on drop.
 struct Logo {
     bitmap: HBITMAP,
     width: i32,
@@ -195,6 +206,8 @@ impl Drop for Logo {
     }
 }
 
+/// Decodes the embedded PNG, downscales it to the current DPI, and uploads it
+/// as a 32-bit top-down DIB section.
 fn load_logo(dpi: u32) -> Option<Logo> {
     let mut decoder = png::Decoder::new(Cursor::new(LOGO_PNG));
     decoder.set_transformations(png::Transformations::normalize_to_color8());

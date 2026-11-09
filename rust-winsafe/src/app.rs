@@ -1,18 +1,39 @@
 //! Application state and event handling.
 //!
-//! `App` is the single-threaded coordinator between the Win32 window, the
-//! virtual desktop API, the window snapshotter, and the renderer. It owns no
-//! Win32 window procedure code; `window.rs` forwards messages here.
+//! [`App`] is the single-threaded coordinator between the winsafe window, the
+//! virtual desktop API, the window snapshotter, the layout, and the renderer.
+//! It owns no Win32 window procedure code; [`crate::window`] forwards messages
+//! here.
 //!
-//! The flow on each timer tick is:
+//! # One refresh
 //!
-//! 1. Capture a [`WindowSnapshot`] through the supervised desktop API.
-//! 2. Rebuild the [`PagerLayout`] for the current monitors and view modes.
-//! 3. Resize the window if the desktop count or monitor arrangement changed.
-//! 4. Invalidate the window only when the snapshot hash or layout changed.
+//! The flow on each primary timer tick is:
+//!
+//! 1. Consume any pending foreground change from the hook.
+//! 2. Capture a [`WindowSnapshot`] through the supervised desktop API.
+//! 3. Rebuild the [`PagerLayout`] for the current monitors and view modes.
+//! 4. Resize the window if the desktop count or monitor arrangement changed.
+//! 5. Invalidate the window only when the snapshot hash or layout changed.
 //!
 //! Mouse handling uses the same layout that was painted, so hit testing cannot
 //! disagree with the visible cells.
+//!
+//! # How this file is organized
+//!
+//! The inherent methods are grouped by concern, in the order a newcomer is
+//! likely to need them:
+//!
+//! - construction and lifecycle,
+//! - timers and desktop switching,
+//! - snapshot and layout,
+//! - painting and pointer input,
+//! - drag image and pager actions,
+//! - context menu commands,
+//! - settings and dialogs,
+//! - native window maintenance and positioning.
+//!
+//! Each group starts with a `// ---- ... ----` banner. Functions are otherwise
+//! free to call across groups; the banners are for reading, not layering.
 
 use std::rc::Rc;
 
@@ -35,8 +56,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
-use crate::about;
 use crate::desktop::{self, SupervisedDesktop, VirtualDesktopApi};
+use crate::dialogs::about;
 use crate::foreground::ForegroundTracker;
 use crate::logging;
 use crate::monitors::{self, MonitorInfo};
@@ -44,6 +65,8 @@ use crate::render::{self, PagerLayout};
 use crate::settings::{self, Settings, ViewMode};
 use crate::windows::{WindowSnapshot, WindowSnapshotter};
 
+/// Context-menu command ids. The values must match the `AppendMenuW` calls in
+/// `window.rs`.
 pub const CMD_TOGGLE_VIEW: u32 = 1;
 pub const CMD_POSITION_RESTORE: u32 = 2;
 pub const CMD_POSITION_SAVE: u32 = 3;
@@ -52,16 +75,24 @@ pub const CMD_ABOUT: u32 = 5;
 pub const CMD_EXIT: u32 = 6;
 pub const CMD_SETTINGS: u32 = 7;
 
+/// Timer ids installed on the pager window.
+///
+/// `TIMER_PRIMARY` refreshes the snapshot and layout, `TIMER_SECONDARY` runs
+/// cheaper window maintenance, and `TIMER_RESTORE` is a one-shot delay after a
+/// desktop switch.
 pub const TIMER_PRIMARY: usize = 1;
 pub const TIMER_SECONDARY: usize = 2;
 pub const TIMER_RESTORE: usize = 3;
 
+/// An in-progress pointer gesture.
 enum DragState {
+    /// Moving the pager window itself, started with middle-drag or Shift-drag.
     Pager {
         start_cursor_x: i32,
         start_cursor_y: i32,
         start_rect: RECT,
     },
+    /// Dragging one window between desktop columns with the left button.
     Window {
         hwnd: HWND,
         origin_desktop: u32,
@@ -74,20 +105,27 @@ enum DragState {
 
 /// Application state owned by the Win32 message loop.
 pub struct App {
+    // What to display.
     pub settings: Settings,
     pub view_modes: Vec<ViewMode>,
     pub desktop: SupervisedDesktop,
     pub snapshotter: WindowSnapshotter,
     pub snapshot: WindowSnapshot,
+
+    // How it is laid out.
     pub monitors: Vec<MonitorInfo>,
     pub layout: PagerLayout,
     pub dpi: u32,
+
+    // The native pager window and interaction state.
     pub hwnd: HWND,
     window_size: (i32, i32),
     last_hash: u64,
     drag: Option<DragState>,
     menu_point: POINT,
     menu_open: bool,
+
+    // Shell integration and desktop-switch bookkeeping.
     startup_foreground: HWND,
     foreground: Option<ForegroundTracker>,
     is_app_pinned: bool,
@@ -95,6 +133,8 @@ pub struct App {
 }
 
 impl App {
+    // ---- Construction and lifecycle -------------------------------------
+
     /// Opens the desktop API and captures the first snapshot.
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         // Set a stable application ID before the first window exists. Pinning
@@ -169,88 +209,7 @@ impl App {
         }
     }
 
-    /// Pins the pager application to all desktops, if it appears in the taskbar.
-    pub fn try_pin(&mut self) {
-        if self.is_app_pinned || !self.settings.show_app_in_taskbar {
-            return;
-        }
-
-        match self.desktop.pin_application(self.hwnd) {
-            Ok(_) => {
-                self.is_app_pinned = true;
-                logging::info("pager application pinned to all desktops");
-            }
-            Err(error) => logging::warn(format!("pinning the pager failed: {error}")),
-        }
-    }
-
-    fn consume_foreground(&mut self) {
-        if let Some(hwnd) = ForegroundTracker::take_pending() {
-            self.remember_foreground(hwnd);
-        }
-    }
-
-    fn remember_foreground(&mut self, hwnd: HWND) {
-        let desktop = &self.desktop;
-        if let Some(tracker) = self.foreground.as_mut() {
-            tracker.remember(hwnd, desktop);
-        }
-    }
-
-    fn restore_last_active(&mut self, desktop_index: u32) {
-        self.restore_desktop = Some(desktop_index);
-        let desktop = &self.desktop;
-        if let Some(tracker) = self.foreground.as_mut() {
-            tracker.restore(desktop_index, desktop);
-        }
-
-        if !self.hwnd.0.is_null() {
-            unsafe {
-                SetTimer(Some(self.hwnd), TIMER_RESTORE, 150, None);
-            }
-        }
-    }
-
-    fn is_covered(&self) -> bool {
-        let mut rect = RECT::default();
-        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_err() {
-            return false;
-        }
-
-        let point = POINT {
-            x: (rect.left + rect.right) / 2,
-            y: (rect.top + rect.bottom) / 2,
-        };
-        let window = unsafe { WindowFromPoint(point) };
-
-        !window.0.is_null() && window != self.hwnd
-    }
-
-    fn restore_window(&self) {
-        unsafe {
-            let _ = ShowWindowAsync(self.hwnd, SW_SHOWNOACTIVATE);
-            let _ = SetWindowPos(
-                self.hwnd,
-                Some(HWND_TOPMOST),
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        }
-    }
-
-    /// Initial window position: saved location or bottom-center of the primary
-    /// monitor's work area.
-    pub fn initial_position(&self) -> (i32, i32) {
-        settings::load_pager_location().unwrap_or_else(|| self.default_position())
-    }
-
-    /// Paints the current layout.
-    pub fn on_paint(&self, hwnd: HWND) {
-        render::gdi::paint_window(hwnd, &self.layout, &self.snapshot, &self.settings, self.dpi);
-    }
+    // ---- Timers and desktop switching -----------------------------------
 
     /// Handles the primary and secondary timers.
     pub fn on_timer(&mut self, timer: usize) {
@@ -300,7 +259,33 @@ impl App {
         }
     }
 
+    /// Restores the last active window on `desktop_index` after the shell has
+    /// finished a desktop switch.
+    ///
+    /// The restore is attempted immediately and retried once after
+    /// `TIMER_RESTORE`, because the shell may report the old desktop for a
+    /// short time after `switch_to` returns.
+    fn restore_last_active(&mut self, desktop_index: u32) {
+        self.restore_desktop = Some(desktop_index);
+        let desktop = &self.desktop;
+        if let Some(tracker) = self.foreground.as_mut() {
+            tracker.restore(desktop_index, desktop);
+        }
+
+        if !self.hwnd.0.is_null() {
+            unsafe {
+                SetTimer(Some(self.hwnd), TIMER_RESTORE, 150, None);
+            }
+        }
+    }
+
+    // ---- Snapshot and layout --------------------------------------------
+
     /// Rebuilds the snapshot and layout, and invalidates only when needed.
+    ///
+    /// `force` repaints even when the snapshot hash and window size did not
+    /// change. Use it after an action whose visual result may not be visible in
+    /// the hash yet, such as a desktop switch.
     pub fn refresh(&mut self, force: bool) {
         let snapshot = match self.snapshotter.capture(&self.desktop) {
             Ok(snapshot) => snapshot,
@@ -329,7 +314,68 @@ impl App {
         }
     }
 
+    /// Recomputes the layout from the current snapshot, monitors, and settings.
+    fn rebuild_layout(&mut self) {
+        self.layout = render::build(
+            &self.snapshot,
+            &self.monitors,
+            &self.view_modes,
+            &self.settings,
+            self.dpi,
+        );
+    }
+
+    /// Resizes the pager client area when the layout size changed.
+    ///
+    /// Returns whether `SetWindowPos` was called.
+    fn resize_window_if_needed(&mut self) -> bool {
+        let size = (self.layout.width, self.layout.height);
+        if size == self.window_size || self.hwnd.0.is_null() {
+            return false;
+        }
+
+        unsafe {
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                0,
+                0,
+                size.0.max(1),
+                size.1.max(1),
+                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+        self.window_size = size;
+        true
+    }
+
+    /// Grows, shrinks, or fills the per-desktop view-mode list.
+    ///
+    /// Existing entries are preserved by position; new entries use the default
+    /// view mode.
+    fn normalize_view_modes(&mut self) {
+        self.view_modes = normalize_view_modes(
+            &self.view_modes,
+            self.snapshot.desktop_count,
+            self.monitors.len(),
+            self.settings.view_mode_default,
+        );
+    }
+
+    // ---- Painting -------------------------------------------------------
+
+    /// Paints the current layout.
+    pub fn on_paint(&self, hwnd: HWND) {
+        render::gdi::paint_window(hwnd, &self.layout, &self.snapshot, &self.settings, self.dpi);
+    }
+
+    // ---- Pointer input --------------------------------------------------
+
     /// Handles the start of a drag or a click.
+    ///
+    /// Middle-click and Shift+click move the pager. A left click on a window
+    /// cell arms a potential window drag; the drag only starts after the cursor
+    /// passes the system drag threshold in [`App::on_mouse_move`].
     pub fn on_mouse_down(&mut self, x: i32, y: i32, middle: bool, shift: bool) {
         if middle || shift {
             let mut rect = RECT::default();
@@ -432,6 +478,59 @@ impl App {
         }
     }
 
+    /// Completes a drag or performs the click action.
+    pub fn on_mouse_up(&mut self, x: i32, y: i32) {
+        let drag = self.drag.take();
+        set_cursor(IDC_ARROW);
+
+        match drag {
+            Some(DragState::Pager { .. }) => {}
+            Some(DragState::Window {
+                hwnd,
+                origin_desktop,
+                active,
+                image_list,
+                ..
+            }) => {
+                if let Some(image_list) = image_list {
+                    self.destroy_drag_image(image_list);
+                }
+
+                if active {
+                    if let Some(target) = self.layout.desktop_at(x)
+                        && target != origin_desktop
+                        && let Err(error) = self.desktop.move_window_to(hwnd, target)
+                    {
+                        logging::error(format!("moving window failed: {error}"));
+                    }
+                    self.refresh(true);
+                } else {
+                    self.click_at(x, y);
+                }
+            }
+            None => self.click_at(x, y),
+        }
+    }
+
+    /// Toggles the view mode under the cursor when Shift is held.
+    pub fn on_wheel(&mut self, x: i32, y: i32, shift: bool) {
+        if shift {
+            self.toggle_mode(x, y);
+        }
+    }
+
+    /// Remembers the client point where the context menu was opened.
+    pub fn set_menu_point(&mut self, x: i32, y: i32) {
+        self.menu_point = POINT { x, y };
+    }
+
+    /// Suspends topmost reassertion while a popup menu or modal dialog is open.
+    pub fn set_menu_open(&mut self, open: bool) {
+        self.menu_open = open;
+    }
+
+    // ---- Drag image -----------------------------------------------------
+
     /// Creates the semi-transparent ghost icon shown next to the cursor while a
     /// window is dragged.
     ///
@@ -488,6 +587,7 @@ impl App {
         }
     }
 
+    /// Ends the drag image and frees its image list.
     fn destroy_drag_image(&self, image_list: HIMAGELIST) {
         unsafe {
             let _ = ImageList_DragLeave(self.hwnd);
@@ -508,56 +608,52 @@ impl App {
         }
     }
 
-    /// Completes a drag or performs the click action.
-    pub fn on_mouse_up(&mut self, x: i32, y: i32) {
-        let drag = self.drag.take();
-        set_cursor(IDC_ARROW);
+    // ---- Pager actions --------------------------------------------------
 
-        match drag {
-            Some(DragState::Pager { .. }) => {}
-            Some(DragState::Window {
-                hwnd,
-                origin_desktop,
-                active,
-                image_list,
-                ..
-            }) => {
-                if let Some(image_list) = image_list {
-                    self.destroy_drag_image(image_list);
-                }
+    /// Switches to the clicked desktop, or focuses the clicked window.
+    fn click_at(&mut self, x: i32, y: i32) {
+        let Some(hit) = self.layout.hit_test(x, y) else {
+            return;
+        };
 
-                if active {
-                    if let Some(target) = self.layout.desktop_at(x)
-                        && target != origin_desktop
-                        && let Err(error) = self.desktop.move_window_to(hwnd, target)
-                    {
-                        logging::error(format!("moving window failed: {error}"));
-                    }
-                    self.refresh(true);
-                } else {
-                    self.click_at(x, y);
-                }
+        if hit.desktop_index != self.snapshot.current_desktop {
+            if let Err(error) = self.desktop.switch_to(hit.desktop_index) {
+                logging::error(format!("switching desktop failed: {error}"));
+            } else {
+                self.refresh(true);
+                self.restore_last_active(hit.desktop_index);
             }
-            None => self.click_at(x, y),
+            return;
+        }
+
+        if let Some(hwnd) = hit.hwnd {
+            unsafe {
+                let _ = SetForegroundWindow(hwnd);
+            }
         }
     }
 
-    /// Toggles the view mode under the cursor when Shift is held.
-    pub fn on_wheel(&mut self, x: i32, y: i32, shift: bool) {
-        if shift {
-            self.toggle_mode(x, y);
+    /// Flips the view mode of the cell under a point and persists the change.
+    fn toggle_mode(&mut self, x: i32, y: i32) {
+        let Some(hit) = self.layout.hit_test(x, y) else {
+            return;
+        };
+        let index = hit.desktop_index as usize * self.layout.screen_count + hit.screen_index;
+
+        let Some(mode) = self.view_modes.get_mut(index) else {
+            return;
+        };
+
+        *mode = next_mode(*mode);
+        settings::save_view_modes(&self.view_modes);
+        self.rebuild_layout();
+
+        unsafe {
+            let _ = InvalidateRect(Some(self.hwnd), None, false);
         }
     }
 
-    /// Remembers the client point where the context menu was opened.
-    pub fn set_menu_point(&mut self, x: i32, y: i32) {
-        self.menu_point = POINT { x, y };
-    }
-
-    /// Suspends topmost reassertion while a popup menu is open.
-    pub fn set_menu_open(&mut self, open: bool) {
-        self.menu_open = open;
-    }
+    // ---- Context menu commands ------------------------------------------
 
     /// Handles a context-menu command.
     pub fn on_command(&mut self, command: u32, parent: &winsafe::gui::WindowMain) {
@@ -582,119 +678,9 @@ impl App {
         }
     }
 
-    fn click_at(&mut self, x: i32, y: i32) {
-        let Some(hit) = self.layout.hit_test(x, y) else {
-            return;
-        };
+    // ---- Settings and dialogs -------------------------------------------
 
-        if hit.desktop_index != self.snapshot.current_desktop {
-            if let Err(error) = self.desktop.switch_to(hit.desktop_index) {
-                logging::error(format!("switching desktop failed: {error}"));
-            } else {
-                self.refresh(true);
-                self.restore_last_active(hit.desktop_index);
-            }
-            return;
-        }
-
-        if let Some(hwnd) = hit.hwnd {
-            unsafe {
-                let _ = SetForegroundWindow(hwnd);
-            }
-        }
-    }
-
-    fn toggle_mode(&mut self, x: i32, y: i32) {
-        let Some(hit) = self.layout.hit_test(x, y) else {
-            return;
-        };
-        let index = hit.desktop_index as usize * self.layout.screen_count + hit.screen_index;
-
-        let Some(mode) = self.view_modes.get_mut(index) else {
-            return;
-        };
-
-        *mode = next_mode(*mode);
-        settings::save_view_modes(&self.view_modes);
-        self.rebuild_layout();
-
-        unsafe {
-            let _ = InvalidateRect(Some(self.hwnd), None, false);
-        }
-    }
-
-    fn rebuild_layout(&mut self) {
-        self.layout = render::build(
-            &self.snapshot,
-            &self.monitors,
-            &self.view_modes,
-            &self.settings,
-            self.dpi,
-        );
-    }
-
-    fn resize_window_if_needed(&mut self) -> bool {
-        let size = (self.layout.width, self.layout.height);
-        if size == self.window_size || self.hwnd.0.is_null() {
-            return false;
-        }
-
-        unsafe {
-            let _ = SetWindowPos(
-                self.hwnd,
-                None,
-                0,
-                0,
-                size.0.max(1),
-                size.1.max(1),
-                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-            );
-        }
-        self.window_size = size;
-        true
-    }
-
-    fn normalize_view_modes(&mut self) {
-        self.view_modes = normalize_view_modes(
-            &self.view_modes,
-            self.snapshot.desktop_count,
-            self.monitors.len(),
-            self.settings.view_mode_default,
-        );
-    }
-
-    fn default_position(&self) -> (i32, i32) {
-        let Some(primary) = monitors::primary(&self.monitors) else {
-            return (0, 0);
-        };
-
-        let x = primary.work_rect.left
-            + (primary.work_rect.right - primary.work_rect.left - self.layout.width) / 2;
-        let y = primary.work_rect.bottom - self.layout.height;
-        (x, y)
-    }
-
-    fn move_to(&self, x: i32, y: i32) {
-        unsafe {
-            let _ = SetWindowPos(
-                self.hwnd,
-                None,
-                x,
-                y,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
-            );
-        }
-    }
-
-    fn save_position(&self) {
-        let mut rect = RECT::default();
-        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_ok() {
-            settings::save_pager_location(rect.left, rect.top);
-        }
-    }
-
+    /// Shows the modal About dialog.
     fn show_about(&mut self, parent: &winsafe::gui::WindowMain) {
         // The pager is topmost. Suspend the watchdog and topmost reassertion
         // while the modal dialog owns the UI thread, just as for the menu.
@@ -705,6 +691,7 @@ impl App {
         self.set_menu_open(false);
     }
 
+    /// Shows the modal Settings dialog and applies its result.
     fn show_settings(&mut self, parent: &winsafe::gui::WindowMain) {
         self.set_menu_open(true);
         // Stop polling while the modal dialog is open; the preview is applied
@@ -746,6 +733,9 @@ impl App {
     }
 
     /// Persists accepted settings and applies the parts that can change live.
+    ///
+    /// Timer, opacity, and taskbar changes take effect here; layout was already
+    /// rebuilt by the preview, but `refresh(true)` repaints the final state.
     pub fn apply_settings(&mut self, settings: Settings) {
         let taskbar_changed = settings.show_app_in_taskbar != self.settings.show_app_in_taskbar;
         self.settings = settings;
@@ -770,6 +760,39 @@ impl App {
         self.refresh(true);
     }
 
+    /// Applies the configured window opacity to the layered pager window.
+    fn apply_opacity(&self) {
+        let opacity = self.settings.background_opacity.clamp(0.25, 1.0);
+        let alpha = (opacity * 255.0).round() as u8;
+        unsafe {
+            let _ = SetLayeredWindowAttributes(self.hwnd, COLORREF(0), alpha, LWA_ALPHA);
+        }
+    }
+
+    /// Adds or removes `WS_EX_APPWINDOW` so the pager does or does not appear
+    /// in the taskbar. All-desktop pinning depends on that style.
+    fn apply_taskbar_style(&self) {
+        unsafe {
+            let mut style = GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE);
+            if self.settings.show_app_in_taskbar {
+                style |= WS_EX_APPWINDOW.0 as isize;
+            } else {
+                style &= !(WS_EX_APPWINDOW.0 as isize);
+            }
+            SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, style);
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+        }
+    }
+
+    /// Restarts both polling timers with the current settings.
     fn restart_timers(&self) {
         if self.hwnd.0.is_null() {
             return;
@@ -793,35 +816,25 @@ impl App {
         }
     }
 
-    fn apply_opacity(&self) {
-        let opacity = self.settings.background_opacity.clamp(0.25, 1.0);
-        let alpha = (opacity * 255.0).round() as u8;
-        unsafe {
-            let _ = SetLayeredWindowAttributes(self.hwnd, COLORREF(0), alpha, LWA_ALPHA);
-        }
-    }
+    // ---- Native window maintenance --------------------------------------
 
-    fn apply_taskbar_style(&self) {
-        unsafe {
-            let mut style = GetWindowLongPtrW(self.hwnd, GWL_EXSTYLE);
-            if self.settings.show_app_in_taskbar {
-                style |= WS_EX_APPWINDOW.0 as isize;
-            } else {
-                style &= !(WS_EX_APPWINDOW.0 as isize);
+    /// Pins the pager application to all desktops, if it appears in the taskbar.
+    pub fn try_pin(&mut self) {
+        if self.is_app_pinned || !self.settings.show_app_in_taskbar {
+            return;
+        }
+
+        match self.desktop.pin_application(self.hwnd) {
+            Ok(_) => {
+                self.is_app_pinned = true;
+                logging::info("pager application pinned to all desktops");
             }
-            SetWindowLongPtrW(self.hwnd, GWL_EXSTYLE, style);
-            let _ = SetWindowPos(
-                self.hwnd,
-                None,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-            );
+            Err(error) => logging::warn(format!("pinning the pager failed: {error}")),
         }
     }
 
+    /// Raises the pager back to the topmost band unless a menu or dialog is
+    /// open.
     fn reassert_topmost(&self) {
         if self.hwnd.0.is_null() || self.menu_open {
             return;
@@ -837,6 +850,96 @@ impl App {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
+        }
+    }
+
+    /// Re-shows the pager without activating it when another window covers it.
+    fn restore_window(&self) {
+        unsafe {
+            let _ = ShowWindowAsync(self.hwnd, SW_SHOWNOACTIVATE);
+            let _ = SetWindowPos(
+                self.hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+
+    /// Returns whether another window is on top of the pager's center point.
+    fn is_covered(&self) -> bool {
+        let mut rect = RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_err() {
+            return false;
+        }
+
+        let point = POINT {
+            x: (rect.left + rect.right) / 2,
+            y: (rect.top + rect.bottom) / 2,
+        };
+        let window = unsafe { WindowFromPoint(point) };
+
+        !window.0.is_null() && window != self.hwnd
+    }
+
+    /// Takes the most recent foreground change from the hook, if any.
+    fn consume_foreground(&mut self) {
+        if let Some(hwnd) = ForegroundTracker::take_pending() {
+            self.remember_foreground(hwnd);
+        }
+    }
+
+    /// Records a foreground window for the desktop it belongs to.
+    fn remember_foreground(&mut self, hwnd: HWND) {
+        let desktop = &self.desktop;
+        if let Some(tracker) = self.foreground.as_mut() {
+            tracker.remember(hwnd, desktop);
+        }
+    }
+
+    // ---- Positioning ----------------------------------------------------
+
+    /// Initial window position: saved location or bottom-center of the primary
+    /// monitor's work area.
+    pub fn initial_position(&self) -> (i32, i32) {
+        settings::load_pager_location().unwrap_or_else(|| self.default_position())
+    }
+
+    /// Bottom-center of the primary monitor's work area.
+    fn default_position(&self) -> (i32, i32) {
+        let Some(primary) = monitors::primary(&self.monitors) else {
+            return (0, 0);
+        };
+
+        let x = primary.work_rect.left
+            + (primary.work_rect.right - primary.work_rect.left - self.layout.width) / 2;
+        let y = primary.work_rect.bottom - self.layout.height;
+        (x, y)
+    }
+
+    /// Moves the pager window without resizing, reordering, or activating it.
+    fn move_to(&self, x: i32, y: i32) {
+        unsafe {
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                x,
+                y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+        }
+    }
+
+    /// Saves the current top-left corner as the remembered pager position.
+    fn save_position(&self) {
+        let mut rect = RECT::default();
+        if unsafe { GetWindowRect(self.hwnd, &mut rect) }.is_ok() {
+            settings::save_pager_location(rect.left, rect.top);
         }
     }
 }
@@ -863,6 +966,8 @@ unsafe fn apply_preview(app: *mut App, settings: &Settings) {
     }
 }
 
+/// Resizes a flat view-mode list to `desktop_count * screen_count`, preserving
+/// existing entries and filling new ones with `default_mode`.
 fn normalize_view_modes(
     existing: &[ViewMode],
     desktop_count: u32,
@@ -884,6 +989,7 @@ fn next_mode(mode: ViewMode) -> ViewMode {
     }
 }
 
+/// Loads and sets a stock cursor.
 fn set_cursor(cursor: PCWSTR) {
     unsafe {
         if let Ok(handle) = LoadCursorW(None, cursor) {

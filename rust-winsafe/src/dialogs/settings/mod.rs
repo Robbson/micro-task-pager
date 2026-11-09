@@ -4,6 +4,20 @@
 //! resizes the selected page to the tab's display rectangle. All edits target a
 //! working copy (`SettingsDraft`); the caller applies the result only when the
 //! user presses Save.
+//!
+//! # Reading guide
+//!
+//! - [`show`] creates the controls and registers all events, then blocks in the
+//!   modal loop and returns the accepted settings.
+//! - `build_reverts` and the `attach_*` functions translate winsafe events into
+//!   draft updates, revert-button refreshes, and live previews.
+//! - `load_all` writes the draft into the controls; `read_edits` and `commit`
+//!   read the controls back on Save.
+//! - Colors use owner-drawn buttons and `ChooseColorW`; placement reuses the
+//!   C# right/left/below/above sequence.
+//!
+//! The draft, its limits, and the placement algorithm are shared with
+//! `rust-winui`; keep both sides behavior-compatible.
 
 mod draft;
 mod ids;
@@ -57,6 +71,8 @@ struct Controls {
 }
 
 type Reverts = Rc<RefCell<Vec<(Field, gui::Button)>>>;
+
+// ---- Entry point --------------------------------------------------------
 
 /// Shows the modal Settings dialog and returns the accepted settings.
 ///
@@ -228,6 +244,12 @@ pub fn show(
     result.borrow_mut().take()
 }
 
+// ---- Event wiring -------------------------------------------------------
+
+/// Creates the per-row revert buttons and wires them to the draft.
+///
+/// Revert buttons start hidden and are shown by `refresh_reverts` whenever the
+/// field differs from the value the dialog opened with.
 fn build_reverts(
     layout_page: &gui::TabPage,
     theme_page: &gui::TabPage,
@@ -332,6 +354,7 @@ fn build_reverts(
     }
 }
 
+/// Wires the numeric edits to the draft.
 fn attach_edits(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -375,6 +398,7 @@ fn attach_edits(
     );
 }
 
+/// Parses one numeric edit on every change and previews the result.
 fn attach_edit(
     edit: &gui::Edit,
     field: Field,
@@ -399,6 +423,7 @@ fn attach_edit(
     });
 }
 
+/// Wires the view-mode and border-style combos to the draft.
 fn attach_combos(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -440,6 +465,7 @@ fn attach_combos(
     });
 }
 
+/// Wires the color buttons to the picker and previews the chosen color.
 fn attach_color_buttons(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -487,6 +513,7 @@ fn attach_color_buttons(
     }
 }
 
+/// Wires the opacity trackbar and its percentage label.
 fn attach_opacity(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -509,6 +536,7 @@ fn attach_opacity(
     });
 }
 
+/// Wires the taskbar checkbox.
 fn attach_checkbox(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -530,6 +558,7 @@ fn attach_checkbox(
     });
 }
 
+/// Wires Defaults, Save, Cancel, and the Escape accelerator.
 fn attach_buttons(
     wnd: &gui::WindowModal,
     tabs: &gui::Tab,
@@ -591,6 +620,7 @@ fn attach_buttons(
     });
 }
 
+/// Reads the edits, stores the working copy, and closes the dialog.
 fn commit(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
@@ -603,6 +633,10 @@ fn commit(
     Ok(())
 }
 
+// ---- Loading and reading controls ---------------------------------------
+
+/// Reads every edit back into the draft; called on Save so a value that was
+/// typed but never blurred is not lost.
 fn read_edits(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>) {
     let edits = [
         (&controls.pager_height, Field::PagerHeight),
@@ -621,6 +655,7 @@ fn read_edits(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>) {
     }
 }
 
+/// Writes a complete settings value into every control.
 fn load_all(controls: &Controls, settings: &Settings) {
     controls
         .view_mode
@@ -678,6 +713,8 @@ fn load_all(controls: &Controls, settings: &Settings) {
         .set_check(settings.show_app_in_taskbar);
 }
 
+/// Shows or hides each revert button based on whether its field differs from
+/// the opening settings.
 fn refresh_reverts(reverts: &Reverts, draft: &Rc<RefCell<SettingsDraft>>) {
     let states: Vec<(gui::Button, bool)> = {
         let draft = draft.borrow();
@@ -695,6 +732,10 @@ fn refresh_reverts(reverts: &Reverts, draft: &Rc<RefCell<SettingsDraft>>) {
     }
 }
 
+// ---- Colors and placement -----------------------------------------------
+
+/// Places the dialog next to the pager using the shared placement algorithm
+/// and keeps it topmost so the pager cannot cover it.
 fn position_dialog(wnd: &gui::WindowModal, parent: &gui::WindowMain) {
     let mut owner = RECT::default();
     let mut dialog = RECT::default();
@@ -723,10 +764,12 @@ fn position_dialog(wnd: &gui::WindowModal, parent: &gui::WindowMain) {
     }
 }
 
+/// Repaints a color button so its owner-drawn swatch reflects the draft.
 fn invalidate_color_button(button: &gui::Button) {
     let _ = button.hwnd().InvalidateRect(None, true);
 }
 
+/// Handles `WM_DRAWITEM` for the color buttons on the Theme page.
 fn attach_color_draw(page: &gui::TabPage, draft: &Rc<RefCell<SettingsDraft>>) {
     let draft2 = Rc::clone(draft);
     page.on().wm(co::WM::DRAWITEM, move |p| {
@@ -743,6 +786,7 @@ fn attach_color_draw(page: &gui::TabPage, draft: &Rc<RefCell<SettingsDraft>>) {
     });
 }
 
+/// Maps a color button control id to its draft field.
 fn color_field(id: u16) -> Option<Field> {
     match id {
         ids::IDC_DESKTOP_BG => Some(Field::DesktopBackgroundColor),
@@ -756,6 +800,8 @@ fn color_field(id: u16) -> Option<Field> {
     }
 }
 
+/// Fills a color button with its color, a black frame, and a readable hex
+/// label.
 fn draw_color_swatch(item: &DRAWITEMSTRUCT, argb: u32) {
     unsafe {
         let rgb = argb & 0x00FF_FFFF;
@@ -790,6 +836,7 @@ fn draw_color_swatch(item: &DRAWITEMSTRUCT, argb: u32) {
     }
 }
 
+/// Reads a color field from settings, or zero for non-color fields.
 fn color_value(settings: &Settings, field: Field) -> u32 {
     match field {
         Field::DesktopBackgroundColor => settings.desktop_background_color,
@@ -803,6 +850,8 @@ fn color_value(settings: &Settings, field: Field) -> u32 {
     }
 }
 
+/// Opens the native color picker seeded with `argb`; returns the new ARGB value
+/// when the user accepts.
 fn choose_color(owner: &w::HWND, argb: u32) -> Option<u32> {
     let mut custom = [COLORREF(0); 16];
     let mut choose = CHOOSECOLORW {

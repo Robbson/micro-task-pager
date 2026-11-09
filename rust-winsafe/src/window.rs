@@ -7,6 +7,20 @@
 //!
 //! winsafe stores its own pointer in `GWLP_USERDATA`, so the `App` pointer is
 //! kept in a thread-local slot instead of the window user data.
+//!
+//! # Event wiring
+//!
+//! Every winsafe event handler is a thin adapter: it decodes the message into
+//! plain arguments and calls one [`App`] method. State changes, COM calls, and
+//! drawing all happen in [`crate::app`], never here. The only exception is the
+//! native context menu, which must run its own modal `TrackPopupMenu` loop in
+//! [`show_context_menu`].
+//!
+//! # Window lifetime
+//!
+//! [`run`] boxes the [`App`], installs its raw pointer in `wm_create`, and
+//! unboxes it after `run_main` returns. All pointer access is on the owning UI
+//! thread.
 
 use std::cell::Cell;
 use std::error::Error;
@@ -41,7 +55,13 @@ thread_local! {
     static APP: Cell<*mut App> = const { Cell::new(std::ptr::null_mut()) };
 }
 
+// ---- Process entry and message loop -------------------------------------
+
 /// Creates the pager window and runs the winsafe message loop.
+///
+/// Restores the saved position, applies the initial opacity and timers, then
+/// blocks until the window closes. The caller must have initialized COM on this
+/// thread.
 pub fn run(app: App) -> Result<(), Box<dyn Error>> {
     let (x, y) = app.initial_position();
     let width = app.layout.width.max(1);
@@ -81,6 +101,13 @@ pub fn run(app: App) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// ---- Event wiring -------------------------------------------------------
+
+/// Registers every winsafe event handler on the pager window.
+///
+/// Handlers capture clones of the winsafe window wrapper only, so the closure
+/// storage stays `'static`; the `App` is reached through the thread-local
+/// pointer instead of being captured.
 fn install_events(
     wnd: &gui::WindowMain,
     app_ptr: *mut App,
@@ -225,6 +252,10 @@ fn install_events(
     });
 }
 
+// ---- Helpers ------------------------------------------------------------
+
+/// Runs `f` with the live `App`, or returns `None` before `wm_create` or after
+/// the message loop ends.
 fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
     APP.with(|slot| {
         let pointer = slot.get();
@@ -238,10 +269,19 @@ fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
     })
 }
 
+/// Converts a winsafe window handle to the raw `windows` crate handle used by
+/// the [`App`] and the renderer.
 fn win_hwnd(hwnd: &w::HWND) -> WinHWND {
     WinHWND(hwnd.ptr())
 }
 
+// ---- Context menu -------------------------------------------------------
+
+/// Shows the native context menu and runs the chosen command.
+///
+/// `TrackPopupMenu` is modal and blocks this handler. The pager is temporarily
+/// dropped from the topmost band so the menu is not covered, and the `App`
+/// suppresses timer-driven topmost reassertion while `menu_open` is true.
 fn show_context_menu(hwnd: WinHWND, app: &mut App, parent: &gui::WindowMain) {
     unsafe {
         let mut screen = WinPoint::default();
@@ -363,6 +403,7 @@ fn show_context_menu(hwnd: WinHWND, app: &mut App, parent: &gui::WindowMain) {
     }
 }
 
+/// Applies layered-window opacity at startup, before the first timer tick.
 fn apply_opacity(hwnd: WinHWND, opacity: f64) {
     let opacity = opacity.clamp(0.25, 1.0);
     let alpha = (opacity * 255.0).round() as u8;
