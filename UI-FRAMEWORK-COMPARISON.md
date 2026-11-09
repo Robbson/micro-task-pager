@@ -309,7 +309,163 @@ Because the current repository rules mandate `windows-reactor`, adopting a diffe
 an explicit architecture decision and updates to `ARCHITECTURE.md` and `AGENTS.md`. The spike should
 therefore stay behind a feature flag until that decision is made.
 
-## 9. Open questions
+## 9. How much of the Rust code is Reactor/WinUI-coupled?
+
+Only 6 of the 28 source files in `rust/src/` import `windows_reactor`:
+
+| File                       | Approx. code lines | Reactor role                                                              | Coupling                                                  |
+| -------------------------- | -----------------: | ------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `pager/mod.rs`             |               ~836 | `Component` lifecycle, scheduling, opening dialogs, `LocalSender`         | Partial; most of the file is state and Win32 window logic |
+| `pager/view.rs`            |               ~250 | Builds the entire pager `View`                                            | Full                                                      |
+| `pager/icons.rs`           |                ~60 | Wraps PNG bytes in `EncodedImage`                                         | Trivial; one type                                         |
+| `dialogs/settings/mod.rs`  |               ~200 | `Component` lifecycle, `Color`, `ContentDialogResult`, preview scheduling | Mostly adapter logic                                      |
+| `dialogs/settings/view.rs` |               ~482 | Builds the Settings `View`                                                | Full                                                      |
+| `dialogs/about.rs`         |               ~100 | `Component` plus the About `View`                                         | Full                                                      |
+
+Everything else has no Reactor dependency:
+
+- `pager/layout.rs`, `pager/input.rs`, `pager/dialog_state.rs` - geometry, hit testing, and state machines.
+- `dialogs/settings/draft.rs`, `dialogs/placement.rs`, `dialogs/mod.rs` - settings draft, placement, and the `DialogLink` callback.
+- `settings.rs`, `windows/`, `monitors.rs`, `foreground.rs`, `desktop/`, `com.rs`, `single_instance.rs`, `logging.rs`, `native_window.rs` - platform and application services.
+
+Rough split:
+
+- **~1,200 code lines (~23 % of ~5,300)** are adapter-specific: views, `Component` glue, Reactor color/result types, and `EncodedImage`.
+- **~4,100 code lines** are independent of the UI framework.
+- `pager/mod.rs` is the swing file: ~200 lines of it are Reactor lifecycle, the rest is the application state that currently happens to live inside a `Component`.
+
+Leaky types that need a neutral replacement before a second backend:
+
+| Current type           | Where                                    | Neutral replacement                         |
+| ---------------------- | ---------------------------------------- | ------------------------------------------- |
+| `EncodedImage`         | `pager/icons.rs`, `pager/view.rs`, About | `IconImage { bytes: Arc<[u8]>, size_px }`   |
+| `Color`                | Settings color editor                    | `u32` ARGB, which `Settings` already stores |
+| `ContentDialogResult`  | Settings color picker                    | A small `ColorPickerResult` enum            |
+| `ComponentContext`     | Pager ticks, dialogs, close              | An effect list plus a `UiHost`/timer port   |
+| `LocalSender<Message>` | Pager message queue                      | `DialogLink`-style callback or event sink   |
+| `View` / `ViewContext` | Views                                    | Adapter-only; never leaves the backend      |
+
+The Win32 window shim (`native_window.rs`, `PagerWindow`, `WheelHook`, `ForegroundTracker`) is
+**not** Reactor coupling. It is Win32 platform code and can be shared by a Win32 backend; only a
+non-Win32 toolkit would need a different window host.
+
+## 10. A feature-selectable UI boundary
+
+The clean target is:
+
+```text
+app core (events, state, effects)  ->  UI adapter  ->  Reactor/WinUI, Win32, ...
+        |                                  |
+        +-- snapshot, layout, input,       +-- windows, views, timers,
+            settings, dialog state,            dialogs, icon presentation
+            desktop COM, window shim
+```
+
+The core should be loop-agnostic:
+
+```rust
+enum AppEvent {
+    Tick(TickKind),
+    Pointer(PointerEvent),
+    Wheel { x: f64, y: f64, shift: bool },
+    Dialog(DialogEvent),
+    RestoreLastActive(u32),
+}
+
+enum Effect {
+    Schedule { delay: Duration, event: AppEvent },
+    OpenDialog(DialogKind),
+    CloseWindow,
+    MovePager { x: i32, y: i32 },
+    // ...
+}
+
+impl PagerCore {
+    fn update(&mut self, event: AppEvent, host: &mut dyn UiHost) -> Vec<Effect> {
+        /* ... */
+    }
+}
+```
+
+The adapter owns the message loop, timers, window creation, painting, and dialog widgets. The core
+owns the pager state machine and returns effects; it never mentions `View`, `ComponentContext`, or
+`EncodedImage`.
+
+### Packaging options
+
+**Option A - one crate with Cargo features (quickest):**
+
+```toml
+[features]
+default = ["ui-reactor"]
+ui-reactor = ["dep:windows-reactor"]
+ui-win32 = []
+```
+
+```rust
+#[cfg(all(feature = "ui-reactor", feature = "ui-win32"))]
+compile_error!("select exactly one UI backend");
+
+#[cfg(feature = "ui-reactor")]
+mod reactor_backend;
+#[cfg(feature = "ui-win32")]
+mod win32_backend;
+```
+
+Pros: small change, no workspace churn. Cons: Cargo features are additive, so the boundary is
+enforced only by the `compile_error!` and review discipline; a dependency can accidentally pull in
+both backends.
+
+**Option B - workspace crates (recommended if two backends are real):**
+
+- `micro-task-pager-core` - state, events, effects, layout, input, settings, snapshot, COM.
+- `micro-task-pager-platform` - Win32 window shim, monitors, foreground, logging.
+- `micro-task-pager-ui-reactor` - current views and components.
+- `micro-task-pager-ui-win32` - future native backend.
+- `micro-task-pager` - thin binary selecting the adapter.
+
+The core crate simply does not depend on `windows-reactor`, so the boundary is enforced at compile
+time. The cost is a workspace split and updating the examples.
+
+The goal is UI-framework independence, not OS independence. The core may keep using the `windows`
+crate and `HWND`; a Win32 adapter already needs them. A non-Windows toolkit would need a port for the
+window host, but that is a much larger project and is not required for the Reactor/Win32 split.
+
+**Option C - separate binaries, no exclusive features:**
+
+Build `pager-reactor` and `pager-win32` binaries from the same core. This avoids mutually exclusive
+feature combinations entirely and can produce both backends in one build. It is the least surprising
+option for users and CI.
+
+## 11. Difficulty, risk, and effort
+
+| Step                                         | What it involves                                                                                    | Relative effort | Risk                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------- |
+| 1. Extract `PagerCore` from `Pager`          | Move ~300-500 lines of state and tick logic out of the `Component`; keep Reactor behavior unchanged | Medium          | Borrow/ownership around `ComponentContext`; tick timing |
+| 2. Define neutral events, effects, and ports | `AppEvent`, `Effect`, `UiHost`, `HostWindow`, `DialogHost`, `IconImage`                             | Small-medium    | Finding all the leaks listed above                      |
+| 3. Reactor adapter                           | Thin `Component` that delegates to the core and renders `view.rs`                                   | Small           | Regression in window/dialog lifecycle                   |
+| 4. Win32 pager backend                       | HWND and message loop, GDI/Direct2D paint, DPI, timers, context menu                                | Large           | Native behavior parity                                  |
+| 5. Dialog backends                           | About via `TaskDialogIndirect`; Settings from native controls or a dialog template                  | Large           | This is the biggest UI chunk; accessibility/IME         |
+| 6. Build matrix and CI                       | Feature or binary matrix, tests per backend, behavior checklist                                     | Small           | Every backend needs the full manual checklist           |
+
+Assessment:
+
+- **Decoupling the core from Reactor without adding a second backend: moderate, roughly one focused
+  week.** It is an invasive but mostly mechanical refactor. The pure modules and 52 tests stay; the
+  risk is concentrated in the `Component` lifecycle and timer semantics.
+- **A production Win32 backend including Settings: high, roughly two to four additional weeks
+  depending on how much native dialog polish is required.** The pager itself is the easier half
+  because the layout and input models already exist.
+- **Difficulty rating: 5/10 for the boundary, 8/10 for shipping two polished backends.**
+
+Recommendation: do steps 1-3 only if multiple backends are genuinely likely. That split improves
+testability and keeps the Reactor build working, with no user-visible change. The pure state machines
+already have unit tests; after the split, add a headless test harness that drives `PagerCore` with
+events and asserts the returned effects, so the core stays covered without a UI. Do not build the
+Win32 backend until the Windows App Runtime dependency is a confirmed product blocker; the backend,
+not the decoupling, is the expensive part.
+
+## 12. Open questions
 
 - Does the target audience already have the Windows App Runtime installed, or is it a fresh-machine
   install every time?
