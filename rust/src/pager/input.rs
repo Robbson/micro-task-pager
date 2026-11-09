@@ -4,11 +4,24 @@
 //! This module turns those events into pager actions without touching Windows
 //! APIs, so the state machine can be unit-tested.
 //!
-//! - Middle drag or Shift+left drag moves the pager window.
-//! - Left drag on a window cell starts a window drag after a small threshold.
-//! - A left release without a drag is a click: switch desktop or focus a
-//!   window. Releases that do not follow a left press, such as the release
-//!   after the native context menu closes, are ignored.
+//! # Gestures
+//!
+//! | Input | Drag state | On release |
+//! | --- | --- | --- |
+//! | Middle press, or Shift + left press | `Pager` | nothing; the pager already moved |
+//! | Left press on a window cell | `Window` until the 4 DIP threshold | click: focus window or switch desktop |
+//! | Left press past the threshold | `Window` with a ghost | move window if released over another desktop |
+//! | Left press outside a cell | none | switch desktop under the pointer |
+//! | Right press | none; opens the context menu | nothing |
+//!
+//! A release that does not follow a left press, such as the release after the
+//! native context menu closes, is ignored.
+//!
+//! # Why the flags survive a capture loss
+//!
+//! Reactor drops pointer capture before `PointerReleased`. [`InputState::cancel`]
+//! therefore clears only the drag and ghost, keeping the press flags so the
+//! following release is still classified by the press that started it.
 
 use windows::Win32::Foundation::HWND;
 

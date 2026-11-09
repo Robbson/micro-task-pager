@@ -1,11 +1,55 @@
 //! Reactor pager component.
 //!
-//! The component owns the snapshot, layout, input state, icon sources, and the
-//! native window shim. Reactor has no timer API, so both polling loops are
-//! self-rescheduling background tasks; the background closure only sleeps and
-//! returns a message. COM and window enumeration run in `update`, which reactor
-//! always calls on the UI thread.
+//! # If you know the C# pager
+//!
+//! This component plays the role of `MainForm` plus `VirtualDesktop.Desktop` and
+//! `ScreenRenderer`. The main differences are:
+//!
+//! | C# | Rust here |
+//! | --- | --- |
+//! | `Form` fields mutated from event handlers | `Pager` fields mutated from `update` |
+//! | `OnPaint` draws with GDI+ | `view::build` returns a declarative `View` |
+//! | `Invalidate()` asks for a repaint | Reactor rebuilds the view after every `update` |
+//! | `Timer` ticks | `PrimaryTick`/`SecondaryTick` messages that reschedule themselves |
+//! | `AppSettingsWindow` form | A reactor secondary window driven by `DialogState` |
+//!
+//! Reactor calls [`Component::create`] once, then [`Component::update`] for each
+//! message and [`Component::view`] to render. `view` must not mutate state: the
+//! displayed pager is always a pure function of the fields, so a missed update
+//! cannot leave stale pixels behind.
+//!
+//! # State model
+//!
+//! The fields are grouped by concern; each group has one owner function that
+//! writes it:
+//!
+//! | State | What it describes | Written by |
+//! | --- | --- | --- |
+//! | `settings`, `snapshot`, `icons` | What the pager should display | `refresh_snapshot`, `apply_settings` |
+//! | `desktop`, `monitors` | Virtual desktops and physical screens | `refresh_environment` |
+//! | `view_modes`, `layout`, `client_size`, `metrics_dpi` | How it is laid out | `rebuild_layout`, `sync_metrics` |
+//! | `window`, `wheel_hook`, `pinned`, `foreground` | Native window and shell integration | `attach_window`, `maintain_window` |
+//! | `dialog` | The single open About/Settings window | `dialog_state` |
+//! | `input`, `menu_point` | Pointer, drag, and click state | `input` |
+//!
+//! # How one refresh works
+//!
+//! 1. A tick message reaches `update` on the UI thread.
+//! 2. `refresh_snapshot` asks the snapshotter for windows on the current
+//!    desktop and detects a changed window set with a cheap hash.
+//! 3. When the set changed, `refresh_icons` encodes only new or changed icons
+//!    and `rebuild_layout` recomputes geometry for every `(desktop, screen)`.
+//! 4. Reactor calls `view`, which walks the cached layout and emits WinUI
+//!    elements. No COM call or window enumeration happens here.
+//! 5. The tick handler schedules the next tick.
+//!
+//! Two ticks exist because they have different costs and settings, mirroring
+//! the C# update loop: the primary tick refreshes the window snapshot and the
+//! layout; the secondary tick handles monitors, topmost, pinning, and the open
+//! dialog. Reactor has no timer API, so each tick is a background task that
+//! sleeps and returns its message; the work always happens in `update`.
 
+mod dialog_state;
 mod icons;
 mod input;
 mod layout;
@@ -27,6 +71,7 @@ use crate::native_window::{self, ContextCommand, PagerWindow, WheelHook};
 use crate::settings::{self, Settings, ViewMode};
 use crate::windows::{WindowSnapshot, WindowSnapshotter};
 
+use dialog_state::DialogState;
 use icons::IconSources;
 use input::{InputState, ReleaseAction};
 use layout::PagerLayout;
@@ -39,6 +84,12 @@ const RESTORE_DELAY_MS: u64 = 150;
 const ERROR_WINDOW_SIZE: (f64, f64) = (420.0, 160.0);
 
 /// Messages handled on the reactor UI thread.
+///
+/// - `PrimaryTick` and `SecondaryTick` are self-rescheduling timers.
+/// - `Pointer*` and `Wheel` come from reactor input.
+/// - `Dialog` comes from an open About/Settings window.
+/// - `RestoreLastActive`, `PositionDialog`, and `Close` are posted by short
+///   background delays.
 #[derive(Clone, Debug)]
 pub enum Message {
     /// Snapshot and layout refresh.
@@ -76,41 +127,57 @@ pub enum Message {
     Close,
 }
 
+/// A pointer press with the buttons and modifier that produced it.
+struct PointerPress {
+    x: f64,
+    y: f64,
+    left: bool,
+    middle: bool,
+    right: bool,
+    shift: bool,
+}
+
 /// Reactor pager component.
+///
+/// The fields are grouped the same way as the state model above. Only
+/// `update` and its `on_*` handlers mutate them.
 pub struct Pager {
+    // What to display: settings, the window snapshot, and its icon sources.
     settings: Settings,
-    view_modes: Vec<Vec<ViewMode>>,
-    desktop: Option<SupervisedDesktop>,
     snapshotter: WindowSnapshotter,
     snapshot: WindowSnapshot,
     icons: IconSources,
+
+    // Virtual desktops and physical screens.
+    desktop: Option<SupervisedDesktop>,
     monitors: Vec<MonitorInfo>,
+
+    // How the pager is laid out in the current DPI space.
+    view_modes: Vec<Vec<ViewMode>>,
     layout: PagerLayout,
-    window: Option<PagerWindow>,
-    wheel_hook: Option<WheelHook>,
-    pinned: bool,
     client_size: (f64, f64),
     /// DPI the current layout and icon cache were built for. Under per-monitor
     /// awareness a move to another monitor changes it, so the grid and icons
     /// must be rebuilt.
     metrics_dpi: u32,
-    startup_error: Option<String>,
-    sender: LocalSender<Message>,
-    input: InputState,
-    menu_point: (f64, f64),
+
+    // The native pager window and its shell integration.
+    window: Option<PagerWindow>,
+    wheel_hook: Option<WheelHook>,
+    pinned: bool,
     foreground: Option<ForegroundTracker>,
     startup_foreground: Option<HWND>,
-    /// True while a secondary About or Settings window is open.
-    dialog_open: bool,
-    /// Whether the open dialog's HWND has been observed yet.
-    dialog_seen: bool,
-    /// Ticks since the dialog window disappeared; a fallback for a missing
-    /// close notification.
-    dialog_missing_ticks: u32,
-    /// Pager bounds captured when the Settings window opened.
-    dialog_owner: Option<placement::Rect>,
-    /// Fast placement retries since the Settings window was requested.
-    dialog_position_attempts: u32,
+
+    // Reactor plumbing and the startup-error view.
+    sender: LocalSender<Message>,
+    startup_error: Option<String>,
+
+    // Interaction state.
+    input: InputState,
+    menu_point: (f64, f64),
+
+    /// The single open About/Settings window, if any.
+    dialog: DialogState,
 }
 
 /// Starts the reactor pager window.
@@ -134,6 +201,11 @@ impl Component for Pager {
     type Input = ();
     type Message = Message;
 
+    /// Called once on the UI thread before the window exists.
+    ///
+    /// Opens the virtual-desktop backend and builds the first snapshot and
+    /// layout. A startup failure still returns a `Pager`, but in an error state
+    /// so the user sees a message instead of a missing window.
     fn create(_input: &(), context: &ComponentContext<Self>) -> Self {
         let settings = Settings::load();
         let startup_foreground = native_window::foreground_window();
@@ -152,34 +224,16 @@ impl Component for Pager {
         }
     }
 
+    /// The only function that mutates pager state.
+    ///
+    /// It stays a flat dispatcher so the message type is the complete list of
+    /// things that can happen. Each arm delegates to an `on_*` handler; see the
+    /// state model at the top of this module for which handler owns which
+    /// fields.
     fn update(&mut self, message: Message, context: &ComponentContext<Self>) {
         match message {
-            Message::PrimaryTick => {
-                self.refresh_snapshot();
-                self.attach_window();
-                self.sync_window_size();
-                self.poll_foreground();
-                self.maintain_dialog();
-                let delay = if self.window.is_some() {
-                    self.settings.primary_update_delay
-                } else {
-                    ATTACH_RETRY_DELAY_MS
-                };
-                Self::schedule_primary(context, delay);
-            }
-            Message::SecondaryTick => {
-                self.refresh_environment();
-                self.attach_window();
-                self.maintain_window();
-                self.maintain_dialog();
-                self.try_pin();
-                let delay = if self.window.is_some() {
-                    self.settings.secondary_update_delay
-                } else {
-                    ATTACH_RETRY_DELAY_MS
-                };
-                Self::schedule_secondary(context, delay);
-            }
+            Message::PrimaryTick => self.on_primary_tick(context),
+            Message::SecondaryTick => self.on_secondary_tick(context),
             Message::PointerPressed {
                 x,
                 y,
@@ -187,77 +241,20 @@ impl Component for Pager {
                 middle,
                 right,
                 shift,
-            } => {
-                if right {
-                    self.input.right_press();
-                    native_window::set_drag_cursor(false);
-                    self.menu_point = (x, y);
-                    if let Some(hwnd) = self.window.as_ref().map(PagerWindow::hwnd)
-                        && let Some(command) =
-                            native_window::show_context_menu(hwnd, self.dialog_open)
-                    {
-                        self.run_menu_command(command, context);
-                    }
-                } else if left || middle {
-                    let hit = self.layout.hit_test(x, y);
-                    let cursor = native_window::cursor_position();
-                    let origin = self.window.as_ref().and_then(PagerWindow::origin);
-                    self.input.press(input::PressInput {
-                        hit,
-                        x,
-                        y,
-                        middle,
-                        shift,
-                        cursor,
-                        origin,
-                    });
-                    if matches!(self.input.drag(), Some(input::Drag::Pager { .. })) {
-                        native_window::set_drag_cursor(true);
-                    }
-                }
-            }
-            Message::PointerMoved { x, y } => {
-                if let Some(input::Drag::Pager {
-                    start_cursor,
-                    start_origin,
-                }) = self.input.drag()
-                {
-                    if let Some(cursor) = native_window::cursor_position()
-                        && let Some(window) = self.window.as_ref()
-                    {
-                        let _ = window.move_to(
-                            start_origin.0 + cursor.0 - start_cursor.0,
-                            start_origin.1 + cursor.1 - start_cursor.1,
-                        );
-                    }
-                    // WinUI may reset its cursor during the pointer move, so
-                    // reapply the move cursor after each drag update.
-                    native_window::set_drag_cursor(true);
-                } else if self.input.pointer_moved(x, y) {
-                    native_window::set_drag_cursor(true);
-                }
-            }
-            Message::PointerReleased { x, y } => {
-                native_window::set_drag_cursor(false);
-                match self.input.release(&self.layout, x, y) {
-                    ReleaseAction::None => {}
-                    ReleaseAction::Click { desktop, hwnd } => self.click(desktop, hwnd, context),
-                    ReleaseAction::MoveWindow {
-                        hwnd,
-                        target_desktop,
-                    } => self.move_window(hwnd, target_desktop),
-                }
-            }
-            Message::PointerCaptureLost => {
-                // Reactor can lose capture while a view rebuild follows a
-                // pointer move. Keep an active gesture alive; the release still
-                // arrives with the final coordinates. Only clear when no drag
-                // is in progress.
-                if self.input.drag().is_none() {
-                    self.input.cancel();
-                    native_window::set_drag_cursor(false);
-                }
-            }
+            } => self.on_pointer_pressed(
+                PointerPress {
+                    x,
+                    y,
+                    left,
+                    middle,
+                    right,
+                    shift,
+                },
+                context,
+            ),
+            Message::PointerMoved { x, y } => self.on_pointer_moved(x, y),
+            Message::PointerReleased { x, y } => self.on_pointer_released(x, y, context),
+            Message::PointerCaptureLost => self.on_pointer_capture_lost(),
             Message::Wheel { x, y, shift } => {
                 if shift {
                     self.toggle_mode(x, y);
@@ -265,29 +262,23 @@ impl Component for Pager {
             }
             Message::RestoreLastActive(desktop) => self.restore_last_active(desktop),
             Message::Dialog(event) => self.handle_dialog_event(event),
-            Message::PositionDialog => {
-                let found = self.maintain_dialog();
-                if !found
-                    && self.dialog_open
-                    && self.dialog_owner.is_some()
-                    && self.dialog_position_attempts < 100
-                {
-                    self.dialog_position_attempts += 1;
-                    Self::schedule_dialog_position(context);
-                }
-            }
+            Message::PositionDialog => self.on_position_dialog(context),
             Message::Close => {
                 let _ = context.window().request_close();
             }
         }
     }
 
+    /// Renders the current state. Must stay pure: no COM, no enumeration, no
+    /// mutation, so it is always safe for reactor to call after `update`.
     fn view(&self, _input: &(), context: &mut ViewContext<Self>) -> View {
         view::build(self, context)
     }
 }
 
 impl Pager {
+    // ---- Construction and scheduling -------------------------------------
+
     fn start(
         settings: Settings,
         sender: LocalSender<Message>,
@@ -335,11 +326,7 @@ impl Pager {
             menu_point: (0.0, 0.0),
             foreground: None,
             startup_foreground,
-            dialog_open: false,
-            dialog_seen: false,
-            dialog_missing_ticks: 0,
-            dialog_owner: None,
-            dialog_position_attempts: 0,
+            dialog: DialogState::Closed,
         })
     }
 
@@ -364,13 +351,15 @@ impl Pager {
             menu_point: (0.0, 0.0),
             foreground: None,
             startup_foreground: None,
-            dialog_open: false,
-            dialog_seen: false,
-            dialog_missing_ticks: 0,
-            dialog_owner: None,
-            dialog_position_attempts: 0,
+            dialog: DialogState::Closed,
         }
     }
+
+    // ---- Timing helpers --------------------------------------------------
+    //
+    // Reactor has no timer or delay API. Each helper spawns a background task
+    // that sleeps and then returns one message; the message is delivered on
+    // the UI thread, where `update` does the real work.
 
     fn schedule_primary(context: &ComponentContext<Self>, delay: u32) {
         let delay = Duration::from_millis(u64::from(delay.max(MIN_TICK_DELAY_MS)));
@@ -397,6 +386,8 @@ impl Pager {
         });
     }
 
+    /// Restores the last active window after the shell has finished a desktop
+    /// switch. The delay matches the C# `MainForm` wait.
     fn schedule_restore(context: &ComponentContext<Self>, desktop: u32) {
         let delay = Duration::from_millis(RESTORE_DELAY_MS);
         let _ = context.spawn_background(move |_| {
@@ -405,6 +396,140 @@ impl Pager {
         });
     }
 
+    // ---- Tick handlers ---------------------------------------------------
+    //
+    // The split mirrors the two timers in the C# pager. `primary_update_delay`
+    // and `secondary_update_delay` come from the settings, so the user can keep
+    // the expensive snapshot refresh slow while window maintenance stays fast.
+
+    fn on_primary_tick(&mut self, context: &ComponentContext<Self>) {
+        self.refresh_snapshot();
+        self.attach_window();
+        self.sync_window_size();
+        self.poll_foreground();
+        self.maintain_dialog();
+
+        let delay = if self.window.is_some() {
+            self.settings.primary_update_delay
+        } else {
+            ATTACH_RETRY_DELAY_MS
+        };
+        Self::schedule_primary(context, delay);
+    }
+
+    fn on_secondary_tick(&mut self, context: &ComponentContext<Self>) {
+        self.refresh_environment();
+        self.attach_window();
+        self.maintain_window();
+        self.maintain_dialog();
+        self.try_pin();
+
+        let delay = if self.window.is_some() {
+            self.settings.secondary_update_delay
+        } else {
+            ATTACH_RETRY_DELAY_MS
+        };
+        Self::schedule_secondary(context, delay);
+    }
+
+    // ---- Input handlers --------------------------------------------------
+    //
+    // These translate reactor pointer messages into state transitions in
+    // `input` and then into native side effects such as moving the window or
+    // switching desktops. All geometry comes from the cached `layout`, so the
+    // hit target is exactly what `view` drew.
+
+    fn on_pointer_pressed(&mut self, press: PointerPress, context: &ComponentContext<Self>) {
+        if press.right {
+            self.input.right_press();
+            native_window::set_drag_cursor(false);
+            self.menu_point = (press.x, press.y);
+            if let Some(hwnd) = self.window.as_ref().map(PagerWindow::hwnd)
+                && let Some(command) = native_window::show_context_menu(hwnd, self.dialog.is_open())
+            {
+                self.run_menu_command(command, context);
+            }
+        } else if press.left || press.middle {
+            let hit = self.layout.hit_test(press.x, press.y);
+            let cursor = native_window::cursor_position();
+            let origin = self.window.as_ref().and_then(PagerWindow::origin);
+            self.input.press(input::PressInput {
+                hit,
+                x: press.x,
+                y: press.y,
+                middle: press.middle,
+                shift: press.shift,
+                cursor,
+                origin,
+            });
+            if matches!(self.input.drag(), Some(input::Drag::Pager { .. })) {
+                native_window::set_drag_cursor(true);
+            }
+        }
+    }
+
+    fn on_pointer_moved(&mut self, x: f64, y: f64) {
+        if let Some(input::Drag::Pager {
+            start_cursor,
+            start_origin,
+        }) = self.input.drag()
+        {
+            if let Some(cursor) = native_window::cursor_position()
+                && let Some(window) = self.window.as_ref()
+            {
+                let _ = window.move_to(
+                    start_origin.0 + cursor.0 - start_cursor.0,
+                    start_origin.1 + cursor.1 - start_cursor.1,
+                );
+            }
+            // WinUI may reset its cursor during the pointer move, so reapply
+            // the move cursor after each drag update.
+            native_window::set_drag_cursor(true);
+        } else if self.input.pointer_moved(x, y) {
+            native_window::set_drag_cursor(true);
+        }
+    }
+
+    fn on_pointer_released(&mut self, x: f64, y: f64, context: &ComponentContext<Self>) {
+        native_window::set_drag_cursor(false);
+        match self.input.release(&self.layout, x, y) {
+            ReleaseAction::None => {}
+            ReleaseAction::Click { desktop, hwnd } => self.click(desktop, hwnd, context),
+            ReleaseAction::MoveWindow {
+                hwnd,
+                target_desktop,
+            } => self.move_window(hwnd, target_desktop),
+        }
+    }
+
+    fn on_pointer_capture_lost(&mut self) {
+        // Reactor can lose capture while a view rebuild follows a pointer
+        // move. Keep an active gesture alive; the release still arrives with
+        // the final coordinates. Only clear when no drag is in progress.
+        if self.input.drag().is_none() {
+            self.input.cancel();
+            native_window::set_drag_cursor(false);
+        }
+    }
+
+    fn on_position_dialog(&mut self, context: &ComponentContext<Self>) {
+        let found = self.maintain_dialog();
+        if !found && self.dialog.request_position_retry() {
+            Self::schedule_dialog_position(context);
+        }
+    }
+
+    // ---- Snapshot, environment, and layout --------------------------------
+    //
+    // Everything the view needs is prepared here, on the UI thread. The view
+    // itself only reads these fields.
+
+    /// Re-enumerates windows on the current desktop.
+    ///
+    /// `snapshot.hash` covers everything that affects rendering (window set,
+    /// titles, icons, active window, current desktop). It is a cheap way to
+    /// decide whether icons and geometry must be rebuilt, so an idle desktop
+    /// does no work beyond the enumeration itself.
     fn refresh_snapshot(&mut self) {
         let Some(desktop) = self.desktop.as_ref() else {
             return;
@@ -491,6 +616,16 @@ impl Pager {
         }
     }
 
+    // ---- Native window ---------------------------------------------------
+    //
+    // Reactor creates the HWND after the first publication, and WinUI has no
+    // API for borderless/tool-window/layered/topmost styles. These functions
+    // bridge that gap through `native_window`; no view code touches an HWND.
+
+    /// Finds the reactor HWND, applies pager styles, and installs hooks.
+    ///
+    /// Runs on every tick until it succeeds, because the reactor window does
+    /// not exist yet when the component is created.
     fn attach_window(&mut self) {
         if self.window.is_some() {
             return;
@@ -621,7 +756,7 @@ impl Pager {
             crate::logging::warn(format!("maintaining pager size failed: {error}"));
         }
         // While a dialog is open, its window must stay above the pager.
-        if self.dialog_open {
+        if self.dialog.is_open() {
             return;
         }
         if let Err(error) = window.reassert_topmost() {
@@ -654,6 +789,12 @@ impl Pager {
             }
         }
     }
+
+    // ---- Pager actions ---------------------------------------------------
+    //
+    // Side effects that follow a completed pointer gesture: switching
+    // desktops, focusing a window, moving a window, and toggling a view mode.
+    // These come from `ReleaseAction`, never from `view`.
 
     fn click(&mut self, desktop_index: u32, hwnd: Option<HWND>, context: &ComponentContext<Self>) {
         if desktop_index != self.snapshot.current_desktop {
@@ -731,6 +872,12 @@ impl Pager {
         ));
     }
 
+    // ---- Dialogs ---------------------------------------------------------
+    //
+    // About and Settings are separate reactor windows (secondary components).
+    // The pager never owns their widgets; it only opens them, places the
+    // Settings window, and receives `DialogEvent`s through a `DialogLink`.
+
     fn dialog_link(&self) -> DialogLink {
         let sender = self.sender.clone();
         DialogLink::new(move |event| {
@@ -739,7 +886,7 @@ impl Pager {
     }
 
     fn open_settings(&mut self, context: &ComponentContext<Self>) {
-        if self.dialog_open {
+        if self.dialog.is_open() {
             return;
         }
 
@@ -751,11 +898,7 @@ impl Pager {
             .and_then(PagerWindow::window_rect)
             .map(placement::Rect::from);
         if context.open_window(View::component::<settings_dialog::SettingsDialog>(input)) {
-            self.dialog_open = true;
-            self.dialog_seen = false;
-            self.dialog_missing_ticks = 0;
-            self.dialog_position_attempts = 0;
-            self.dialog_owner = owner;
+            self.dialog = DialogState::opened(owner);
             Self::schedule_dialog_position(context);
             crate::logging::info("opened the Settings window");
         } else {
@@ -764,17 +907,13 @@ impl Pager {
     }
 
     fn open_about(&mut self, context: &ComponentContext<Self>) {
-        if self.dialog_open {
+        if self.dialog.is_open() {
             return;
         }
 
         let input = about::AboutInput::linked(self.dialog_link());
         if context.open_window(View::component::<about::About>(input)) {
-            self.dialog_open = true;
-            self.dialog_seen = false;
-            self.dialog_missing_ticks = 0;
-            self.dialog_position_attempts = 0;
-            self.dialog_owner = None;
+            self.dialog = DialogState::opened(None);
             crate::logging::info("opened the About window");
         } else {
             crate::logging::warn("the About window request was rejected");
@@ -787,11 +926,7 @@ impl Pager {
             DialogEvent::Applied(settings) => self.apply_settings(settings, true),
             DialogEvent::Cancelled(settings) => self.apply_settings(settings, false),
             DialogEvent::Closed => {
-                self.dialog_open = false;
-                self.dialog_seen = false;
-                self.dialog_missing_ticks = 0;
-                self.dialog_position_attempts = 0;
-                self.dialog_owner = None;
+                self.dialog.closed();
                 if let Some(window) = &self.window {
                     let _ = window.reassert_topmost();
                 }
@@ -837,14 +972,14 @@ impl Pager {
         }
     }
 
-    /// Keeps the open dialog above the topmost pager and clears a stale
-    /// `dialog_open` flag if its window disappeared without a close message.
+    /// Keeps the open dialog above the topmost pager and clears a stale dialog
+    /// state if its window disappeared without a close message.
     ///
     /// Returns whether the dialog HWND was found. The first sighting cloaks
     /// the window, places it, and reveals it, so its default position is never
     /// presented.
     fn maintain_dialog(&mut self) -> bool {
-        if !self.dialog_open {
+        if !self.dialog.is_open() {
             return false;
         }
 
@@ -852,32 +987,26 @@ impl Pager {
             .or_else(|| native_window::find_pager_window(about::WINDOW_TITLE));
 
         if let Some(hwnd) = hwnd {
-            if !self.dialog_seen {
-                let cloak = self.dialog_owner.is_some();
+            // The placement owner is only available before the first sighting,
+            // so capture it before advancing the state.
+            let owner = self.dialog.owner();
+            if self.dialog.window_seen() {
+                let cloak = owner.is_some();
                 if cloak && !native_window::set_cloaked(hwnd, true) {
                     crate::logging::warn("cloaking the Settings window failed");
                 }
-                self.position_dialog(hwnd);
+                self.position_dialog(hwnd, owner);
                 if cloak && !native_window::set_cloaked(hwnd, false) {
                     crate::logging::warn("revealing the Settings window failed");
                 }
             }
-            self.dialog_seen = true;
-            self.dialog_missing_ticks = 0;
             if let Err(error) = native_window::reassert_topmost(hwnd) {
                 crate::logging::warn(format!("reasserting dialog topmost failed: {error}"));
             }
             return true;
         }
 
-        self.dialog_missing_ticks = self.dialog_missing_ticks.saturating_add(1);
-        let limit = if self.dialog_seen { 2 } else { 25 };
-        if self.dialog_missing_ticks > limit {
-            self.dialog_open = false;
-            self.dialog_seen = false;
-            self.dialog_missing_ticks = 0;
-            self.dialog_position_attempts = 0;
-            self.dialog_owner = None;
+        if self.dialog.window_missing() {
             if let Some(window) = &self.window {
                 let _ = window.reassert_topmost();
             }
@@ -887,8 +1016,8 @@ impl Pager {
     }
 
     /// Places the Settings window using the C# right/left/below/above sequence.
-    fn position_dialog(&self, hwnd: HWND) {
-        let Some(owner) = self.dialog_owner else {
+    fn position_dialog(&self, hwnd: HWND, owner: Option<placement::Rect>) {
+        let Some(owner) = owner else {
             return;
         };
         let Some(rect) = native_window::window_rect(hwnd) else {
@@ -908,6 +1037,12 @@ impl Pager {
             crate::logging::info(format!("positioned the Settings window at {x},{y}"));
         }
     }
+
+    // ---- Context menu ----------------------------------------------------
+    //
+    // `show_context_menu` blocks in `TrackPopupMenu` and returns the chosen
+    // command; reactor 0.100 has no transient-menu API, so this is the one
+    // interactive path that runs native code directly from an input handler.
 
     fn run_menu_command(&mut self, command: ContextCommand, context: &ComponentContext<Self>) {
         match command {

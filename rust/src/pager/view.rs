@@ -1,8 +1,23 @@
 //! Declarative reactor view for the pager.
 //!
+//! This replaces the C# `ScreenRenderer.Render`/`Graphics` drawing. Instead of
+//! painting pixels, it returns a tree of WinUI elements that describe the same
+//! geometry:
+//!
+//! | C# drawing | Reactor view |
+//! | --- | --- |
+//! | `Desktop`/`ScreenRenderer` bounds | `Canvas` + `Rect` from `layout` |
+//! | `DrawImage(wnd.Icon, ...)` | `Image` with an `EncodedImage` from `icons` |
+//! | `FillRectangle` for the active cell | `Border` with the active background |
+//! | `DrawString("+N")` | `TextBlock` from `layout.overflow` |
+//!
 //! The view is built from the cached snapshot layout; it never calls COM or
 //! enumerates windows. Each desktop/screen/cell is a keyed child so window
 //! identity survives snapshot refreshes.
+//!
+//! Reactor may rebuild the view on every `update`. Only cheap element
+//! construction belongs here; snapshotting, icon encoding, and layout are
+//! prepared beforehand in `Pager`, which is why this module only reads fields.
 //!
 //! The context menu is a native `TrackPopupMenu` in `native_window`; reactor
 //! 0.100 `Menu` is a Button/SplitButton flyout and cannot serve as a right-click

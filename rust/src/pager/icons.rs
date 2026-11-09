@@ -1,9 +1,20 @@
 //! Converts the snapshot's borrowed `HICON` handles to reactor image sources.
 //!
+//! WinUI cannot draw an `HICON`, so each icon is encoded once into a PNG of the
+//! exact display size:
+//!
+//! ```text
+//! WindowSnapshot HICON -> PNG bytes at size_px -> reactor EncodedImage -> Image
+//! ```
+//!
+//! Encoding at the display size (instead of scaling a bitmap in XAML) is what
+//! keeps the icons crisp at 125%, 150%, and other scale factors.
+//!
 //! The snapshotter already caches the shell icon handle per window. This cache
 //! adds the encoded PNG keyed by window and icon handle so a 200 ms refresh
 //! does not re-encode every icon. Entries are dropped when a window disappears
-//! or changes its icon.
+//! or changes its icon, and the whole cache is cleared when the target pixel
+//! size changes.
 
 use std::collections::{HashMap, HashSet};
 

@@ -1,10 +1,22 @@
 //! Pure pager geometry in device-independent pixels (DIPs).
 //!
 //! The layout is shared by painting and hit testing, so a click can never land
-//! somewhere different from what the user sees. Monitor rectangles and window
-//! rectangles are physical pixels; only their aspect ratio and relative
-//! position are used, so the result is identical in DIPs without a DPI
-//! parameter.
+//! somewhere different from what the user sees.
+//!
+//! # Coordinate spaces
+//!
+//! Three spaces meet here and it helps to know which is which:
+//!
+//! - **Physical pixels**: monitor and window rectangles from Win32. They are
+//!   absolute virtual-screen coordinates and change with the monitor DPI.
+//! - **Device pixels inside the pager**: what the C# renderer draws in. Borders
+//!   and icons look sharp only when they land on whole device pixels.
+//! - **DIPs**: what reactor and WinUI use for element positions and sizes.
+//!
+//! [`build`] converts physical monitor rectangles to DIPs, rounds every tile and
+//! icon edge to a whole device pixel using the window `scale`, and divides the
+//! result back by `scale`, so the view positions DIPs that land exactly on the
+//! device-pixel grid. Hit testing then runs in the same DIP space.
 //!
 //! The geometry follows the C# `ScreenRenderer`, with the deviations recorded
 //! in `ARCHITECTURE.md` §12: per-`(desktop, screen)` view modes, DIP units, and

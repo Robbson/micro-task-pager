@@ -337,11 +337,25 @@ narrative.
 | 2026-11-09 | 12 | Release build on 26200: `rust/target/release/micro-task-pager.exe` is 3,527,168 bytes, x64 Windows GUI, embeds the icon/version resource and an `asInvoker` manifest with `dpiAware=true/pm` and `PerMonitorV2`; no `VCRUNTIME`/`MSVCP140`/`api-ms-win-crt` import strings, so the static MSVC runtime holds. Ran from a clean temp folder: `GetProcessDpiAwareness` returned per-monitor and the window context matched `PER_MONITOR_AWARE_V2`, `probe pinned` returned true, handles stayed at 1734 -> 1742 and working set at 102.3 MB over 15 s (GDI 9, USER 36), `WM_CLOSE` exited the process, and the log showed no startup or shutdown errors. A second controlled close recorded `micro-task-pager stopped` in the log. The supervisor also recovered twice from `RPC_E_DISCONNECTED (0x80010108)` by recreating the backend. Manual C# parity walk and older Windows builds remain |
 | 2026-11-09 | 12 | Multi-monitor with different per-screen DPI user-verified on 26200: all screens render correctly and icons are centered. The comparison also exposed a C# bug: `RenderMicroTaskbar` counts every window on the desktop and only skips other-screen windows while drawing, so icons on secondary screens are mis-centered. The Rust layout filters windows per monitor before computing columns and centering, so it does not have the bug |
 | 2026-11-09 | 12 | End-to-end release smoke on 26200: the release binary starts the pager, opens About and Settings, applies the Settings window placement, and survives a COM backend recreation without user-visible errors; the clean `WM_CLOSE` path logs `micro-task-pager stopped` |
+| 2026-11-09 | 12 | Pager readability refactor: extracted the dialog lifecycle into `pager/dialog_state.rs` (`Closed`/`Opening`/`Open`), grouped the component fields by concern, and replaced the large `update` match bodies with named `on_*` handlers. Eight new state-machine tests cover the timeouts, sightings, placement retries, and close transition; `cargo fmt --check`, Clippy, and 52 tests pass |
 
 ## Code map and glossary
 
 The code is deliberately split into a few small layers. Read `src/lib.rs` first; its module
 documentation mirrors this table.
+
+Suggested reading order for onboarding:
+
+1. `src/main.rs` - process order: logging, COM apartment, single instance, pager.
+2. `src/pager/mod.rs` - the component state model, the tick-to-view flow, and the C# comparison.
+3. `src/pager/layout.rs`, `src/pager/view.rs` - geometry, then how it becomes WinUI elements.
+4. `src/pager/input.rs`, `src/pager/dialog_state.rs` - the two pure state machines.
+5. `src/native_window.rs` - the Win32 shim and when each part runs.
+6. `src/desktop/mod.rs` - the safe virtual-desktop API and its restart supervisor.
+
+The pager is the only place that mutates application state. Everything below it returns data:
+`WindowSnapshotter` produces snapshots, `layout::build` produces geometry, `DialogState` and
+`InputState` produce transitions, and `view::build` renders the result without side effects.
 
 ### Current structure
 
@@ -349,6 +363,7 @@ documentation mirrors this table.
 | ------------------------------------ | --------------------------------------------------------------------------------------------------- |
 | `src/main.rs`                        | Process entry point: logging, COM apartment, single instance, then the reactor pager.               |
 | `src/pager/mod.rs`                   | Pager component: state, messages, update, and tick scheduling.                                      |
+| `src/pager/dialog_state.rs`          | Pure dialog lifecycle state machine (`Closed`/`Opening`/`Open`) with tests.                         |
 | `src/pager/view.rs`                  | Declarative `Canvas`/`Grid` view for Preview and Micro Taskbar.                                     |
 | `src/pager/layout.rs`                | Pure DIP layout and hit-testing model.                                                              |
 | `src/pager/input.rs`                 | Pointer/drag state machines and drag ghost.                                                         |

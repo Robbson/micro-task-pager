@@ -10,6 +10,17 @@
 //! - place the window at the saved or default position,
 //! - reassert topmost and recover when another window covers the pager.
 //!
+//! # When each part runs
+//!
+//! | Operation | Called from |
+//! | --- | --- |
+//! | `find_pager_window`, `PagerWindow::attach`, `WheelHook` | `attach_window` on every tick until the HWND exists |
+//! | `ensure_size` | primary tick and settings changes |
+//! | `ensure_styles`, topmost, covered recovery, pinning | secondary tick |
+//! | `set_opacity`, `set_show_in_taskbar` | settings preview and apply |
+//! | `set_cloaked`, `set_position` | dialog placement |
+//! | `show_context_menu`, `activate_window`, `set_drag_cursor` | pointer input |
+//!
 //! It is deliberately not a UI abstraction. Anything that starts looking like
 //! one belongs upstream in `windows-reactor` instead.
 
