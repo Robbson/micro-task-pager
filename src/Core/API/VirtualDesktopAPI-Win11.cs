@@ -1,6 +1,7 @@
 // Adapted from https://github.com/MScholtes/VirtualDesktop with a few modifications
 #pragma warning disable
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using MicroTaskPager.Core.API;
 
@@ -257,6 +258,68 @@ namespace MicroTaskPager.Core.API.Win11
         public WindowsVirtualDesktopAPI.IApplicationViewCollection ApplicationViewCollection;
         public WindowsVirtualDesktopAPI.IVirtualDesktopManagerInternal VirtualDesktopManagerInternal;
         public int FromDesktop(IWindowsVirtualDesktop desktop) => desktop != null ? GetDesktopIndex((WindowsVirtualDesktopAPI.IVirtualDesktop)desktop.ivd) : -1;
+
+        public IReadOnlyList<Guid> GetDesktopIds()
+        {
+            VirtualDesktopManagerInternal.GetDesktops(out WindowsVirtualDesktopAPI.IObjectArray desktops);
+            try
+            {
+                int count = VirtualDesktopManagerInternal.GetCount();
+                var ids = new List<Guid>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    desktops.GetAt(i, typeof(WindowsVirtualDesktopAPI.IVirtualDesktop).GUID, out object objdesktop);
+                    try
+                    {
+                        ids.Add(((WindowsVirtualDesktopAPI.IVirtualDesktop)objdesktop).GetId());
+                    }
+                    finally
+                    {
+                        Marshal.ReleaseComObject(objdesktop);
+                    }
+                }
+
+                return ids;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(desktops);
+            }
+        }
+
+        public Guid CurrentDesktopId
+        {
+            get
+            {
+                var desktop = (WindowsVirtualDesktopAPI.IVirtualDesktop)VirtualDesktopManagerInternal.GetCurrentDesktop();
+                try
+                {
+                    return desktop.GetId();
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(desktop);
+                }
+            }
+        }
+
+        public int GetWindowDesktopIndex(IntPtr hWnd, IReadOnlyList<Guid> desktopIds, int currentDesktopIndex)
+        {
+            Guid id = VirtualDesktopManagerPrivate.GetWindowDesktopId(hWnd);
+            if (id == Guid.Empty) return -1;
+            if (id == WindowsVirtualDesktopAPI.APP_ON_ALL_DESKTOPS || id == WindowsVirtualDesktopAPI.WINDOW_ON_ALL_DESKTOPS)
+            {
+                return currentDesktopIndex;
+            }
+
+            for (int i = 0; i < desktopIds.Count; i++)
+            {
+                if (desktopIds[i] == id) return i;
+            }
+
+            return -1;
+        }
+
         public bool IsWindowPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsViewPinned(GetApplicationView(hWnd));
         public bool IsApplicationPinned(IntPtr hWnd) => VirtualDesktopPinnedApps.IsAppIdPinned(GetAppId(hWnd));
 

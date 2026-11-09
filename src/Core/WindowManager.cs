@@ -36,6 +36,21 @@ namespace MicroTaskPager.Core
             var windowList = new List<Window>();
             var activeHandles = new HashSet<IntPtr>();
             var shellWindow = WinAPI.GetShellWindow();
+            var desktopManager = WindowsVirtualDesktopManager.GetInstance();
+
+            // Fetch the desktop list once per snapshot. Asking the shell for the
+            // list for every window re-enumerates it hundreds of times per second.
+            IReadOnlyList<Guid> desktopIds = null;
+            int currentDesktopIndex = -1;
+            try
+            {
+                desktopIds = desktopManager.GetDesktopIds();
+                currentDesktopIndex = IndexOfDesktop(desktopIds, desktopManager.CurrentDesktopId);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Could not read the virtual desktop list; using per-window lookup");
+            }
 
             WinAPI.EnumWindows(
                 (hWnd, lParam) =>
@@ -68,7 +83,9 @@ namespace MicroTaskPager.Core
                 int index = 0;
                 try
                 {
-                    index = WindowsVirtualDesktopManager.GetInstance().FromDesktop(WindowsVirtualDesktopManager.GetInstance().FromWindow((IntPtr)hWnd));
+                    index = desktopIds != null
+                        ? desktopManager.GetWindowDesktopIndex(hWnd, desktopIds, currentDesktopIndex)
+                        : desktopManager.FromDesktop(desktopManager.FromWindow(hWnd));
                 }
                 catch (Exception ex)
                 {
@@ -156,6 +173,16 @@ namespace MicroTaskPager.Core
             WinAPI.SetWindowPos(windowHandle, WinAPI.HWND_TOPMOST,
                 0, 0, 0, 0,
                 WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_NOACTIVATE);
+        }
+
+        private static int IndexOfDesktop(IReadOnlyList<Guid> desktopIds, Guid id)
+        {
+            for (int i = 0; i < desktopIds.Count; i++)
+            {
+                if (desktopIds[i] == id) return i;
+            }
+
+            return -1;
         }
 
         private static int GetWindowZOrder(IntPtr hWnd)

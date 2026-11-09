@@ -89,6 +89,20 @@ impl From<windows::core::Error> for ApiError {
     }
 }
 
+/// Desktop association of one window, before it is resolved to an index.
+///
+/// Pinned windows do not belong to a single desktop, so they cannot be
+/// represented by a plain [`GUID`]. Keeping that case explicit lets callers
+/// resolve a whole snapshot against one desktop list instead of asking the
+/// shell to enumerate the list again for every window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowDesktopId {
+    /// The window belongs to this desktop.
+    Desktop(GUID),
+    /// The window's application is pinned to all desktops.
+    AllDesktops,
+}
+
 /// Result of asking to pin an application to all desktops.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinOutcome {
@@ -110,6 +124,19 @@ pub trait VirtualDesktopApi {
     fn current_index(&self) -> Result<u32, ApiError>;
     /// Stable GUIDs of all desktops, in index order.
     fn desktop_ids(&self) -> Result<Vec<GUID>, ApiError>;
+    /// GUID of the currently shown desktop.
+    ///
+    /// Separate from [`Self::current_index`] so a caller that already has
+    /// [`Self::desktop_ids`] can resolve the index without enumerating the
+    /// desktop list a second time.
+    fn current_desktop_id(&self) -> Result<Option<GUID>, ApiError>;
+    /// Desktop association for a window, without enumerating the desktop list.
+    ///
+    /// Callers that resolve many windows in one pass should fetch
+    /// [`Self::desktop_ids`] once and use this method per window. Calling
+    /// [`Self::index_of_window`] for every window re-enumerates the list each
+    /// time, which is the expensive part of the polling loop.
+    fn window_desktop_id(&self, hwnd: HWND) -> Result<Option<WindowDesktopId>, ApiError>;
     /// Desktop index for a window, or `None` if the shell cannot map it.
     fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError>;
     /// Switches to a desktop by index.
@@ -228,6 +255,14 @@ impl VirtualDesktopApi for SupervisedDesktop {
         self.execute(|api| api.desktop_ids())
     }
 
+    fn current_desktop_id(&self) -> Result<Option<GUID>, ApiError> {
+        self.execute(|api| api.current_desktop_id())
+    }
+
+    fn window_desktop_id(&self, hwnd: HWND) -> Result<Option<WindowDesktopId>, ApiError> {
+        self.execute(|api| api.window_desktop_id(hwnd))
+    }
+
     fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError> {
         self.execute(|api| api.index_of_window(hwnd))
     }
@@ -286,6 +321,14 @@ mod tests {
         }
 
         fn desktop_ids(&self) -> Result<Vec<GUID>, ApiError> {
+            unimplemented!()
+        }
+
+        fn current_desktop_id(&self) -> Result<Option<GUID>, ApiError> {
+            unimplemented!()
+        }
+
+        fn window_desktop_id(&self, _hwnd: HWND) -> Result<Option<WindowDesktopId>, ApiError> {
             unimplemented!()
         }
 

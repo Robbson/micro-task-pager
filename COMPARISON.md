@@ -12,20 +12,22 @@ For alternatives to the current WinUI 3 dependency and their trade-offs, see
 
 | Aspect                     | C# WinForms                                  | Rust WinUI 3                                     | Winner     |
 | -------------------------- | -------------------------------------------- | ------------------------------------------------ | ---------- |
-| Distribution size          | 1.49 MiB in 13 files                         | 3.36 MiB in 1 file                               | C#         |
+| Distribution size          | 1.49 MiB in 13 files                         | 3.37 MiB in 1 file                               | C#         |
 | Clean-machine prerequisite | .NET Framework 4.8 (inbox on modern Windows) | Windows App Runtime 2.4+ (119 MiB x64 framework) | C#         |
-| Idle working set           | 55-57 MiB                                    | 99 MiB                                           | C#         |
-| Idle private bytes         | 33 MiB                                       | 64 MiB                                           | C#         |
-| Idle CPU, default polling  | 1.13 % of total system (27 % of one core)    | 0.63 % of total system (15 % of one core)        | Rust       |
+| Idle working set           | 59-62 MiB                                    | 99 MiB                                           | C#         |
+| Idle private bytes         | 33-37 MiB                                    | 63-64 MiB                                        | C#         |
+| Idle CPU, default polling  | 0.30 % of total system (7.2 % of one core)   | 0.25 % of total system (5.9 % of one core)       | Rust       |
 | GDI objects while idle     | 24                                           | 9                                                | Rust       |
-| Handles / threads          | ~430 / 15-18                                 | ~1 734 / 60-66                                   | C#         |
-| Application source         | 4 036 code lines                             | 5 342 code lines                                 | C#         |
-| Automated tests            | none                                         | 52 unit tests                                    | Rust       |
-| Branch density             | 68.6 per 1 000 code lines                    | 61.0 per 1 000 code lines                        | Comparable |
+| Handles / threads          | ~397 / 18                                    | ~1 736 / 65-66                                   | C#         |
+| Application source         | 4 286 code lines                             | 5 391 code lines                                 | C#         |
+| Automated tests            | none                                         | 54 unit tests                                    | Rust       |
+| Branch density             | 73.7 per 1 000 code lines                    | 58.4 per 1 000 code lines                        | Comparable |
 
-The Rust build trades a larger binary, a large shared runtime prerequisite, and roughly double the
-memory for fewer GDI objects, lower idle CPU, a much smaller COM layer, and a test suite. Startup
-time is effectively identical.
+The Rust build trades a larger binary, a large shared runtime prerequisite, and roughly 1.6-1.8x the
+memory for fewer GDI objects, a marginal idle-CPU edge, a much smaller COM layer, and a test suite.
+Both implementations now batch the virtual-desktop lookup per snapshot, which cut their idle CPU by
+2.5x (Rust) to 3.8x (C#); the CPU difference between them is now 0.05 percentage points of the
+machine's total. Startup time is effectively identical.
 
 ## Measurement setup
 
@@ -42,27 +44,30 @@ time is effectively identical.
 Method:
 
 - Both applications ran with the same stored settings: primary update delay 200 ms, secondary update
-  delay 500 ms, the session's normal monitor layout and window set, no dialog open.
-- Each application was launched twice per measurement and closed with `WM_CLOSE`.
+  delay 500 ms, the session's normal monitor layout and window set (17 windows on 2 virtual
+  desktops), no dialog open.
+- Each application was launched four times per measurement and closed with `WM_CLOSE`.
 - Startup time is process creation to the first main window, polled every 25 ms, so it has a 25 ms
   resolution and includes PowerShell process-creation overhead.
-- Memory numbers are the steady-state sample at 20 s. Border values are ranges over the two runs.
-- CPU is kernel-accounted process CPU time from a second run pair, sampled in six 10 s intervals
-  after a 10 s settle. The table reports the average over the 60 s window. "% of one core" is CPU
-  seconds divided by wall seconds; "% of total system" divides that by the 24 logical CPUs. Process
-  Explorer's process CPU column is relative to total system CPU, which is why its numbers look about
-  24x smaller than a per-core figure.
+- Memory numbers are the steady-state sample at 20 s. Values are ranges over the runs.
+- CPU is kernel-accounted process CPU time from two independent run pairs, each sampled in six 10 s
+  intervals after a 10 s settle. The table reports the mean of the two 60 s averages. "% of one core"
+  is CPU seconds divided by wall seconds; "% of total system" divides that by the 24 logical CPUs.
+  Process Explorer's process CPU column is relative to total system CPU, which is why its numbers
+  look about 24x smaller than a per-core figure.
 - The measurements ran on a normal, non-isolated desktop. Process CPU time is not inflated by other
-  processes competing for the CPU, but short sampling windows are noisy; the 60 s average was stable
-  within about ±1 percentage point of one core across intervals and runs.
+  processes competing for the CPU, but short sampling windows are noisy; the 60 s averages were
+  within about ±1.5 percentage points of one core across intervals and runs.
 - Both applications saw the same window set. Their CPU scales with the number of windows and the
   pager size because both enumerate and redraw on the same timers, so treat these as warm desktop
   idle figures for this session rather than a general benchmark.
 - Code metrics come from a small script that strips comments and string literals, then counts code,
-  comment, and blank lines, `fn`/method declarations, and branch points (`if`, `for`, `foreach`,
-  `while`, `loop`, `case`, `catch`, `when`, `guard`, `&&`, `||`, and ternaries). This is a
-  readability-oriented approximation, not McCabe complexity, and it does not count `switch`
-  expression arms or LINQ predicate branches.
+  comment-only, and blank lines, `fn`/method declarations that own a body, and branch points (`if`,
+  `for`, `foreach`, `while`, `loop`, `case`, `catch`, `when`, `guard`, `&&`, `||`, and C#
+  ternaries). This is a readability-oriented approximation, not McCabe complexity, and it does not
+  count `switch`/`match` arms, Rust `?` error propagation, or LINQ predicate branches. The metrics
+  were regenerated with the same script after the polling change, so they are internally consistent
+  but not directly comparable with earlier revisions of this document.
 - Not measured: installer download size, resource use while dragging windows, resource use with
   hundreds of windows, battery impact, and CPU under an isolated benchmark workload.
 
@@ -105,12 +110,12 @@ Windows 11 they run through x64 emulation.
 
 | Artifact            | C# WinForms                    | Rust WinUI 3                           |
 | ------------------- | ------------------------------ | -------------------------------------- |
-| Main executable     | 744 KiB (`MicroTaskPager.exe`) | 3.36 MiB (`micro-task-pager.exe`)      |
+| Main executable     | 729 KiB (`MicroTaskPager.exe`) | 3.37 MiB (`micro-task-pager.exe`)      |
 | Additional DLLs     | 11 (0.78 MiB)                  | none                                   |
 | Config file         | 1 (870 bytes)                  | none                                   |
 | Total shipped files | 13                             | 1                                      |
-| Total deployed size | 1.49 MiB                       | 3.36 MiB                               |
-| Debug symbols       | `.pdb` separate, 31 KiB        | stripped; no PDB in the measured build |
+| Total deployed size | 1.49 MiB                       | 3.37 MiB                               |
+| Debug symbols       | `.pdb` separate, 33 KiB        | stripped; no PDB in the measured build |
 | Runtime bundled     | no                             | no                                     |
 
 The C# distribution carries Serilog and its transitive .NET libraries; the Rust executable statically
@@ -121,45 +126,46 @@ that current Windows versions already include.
 
 ## 3. Runtime resource use
 
-Steady state with closed dialogs and default polling. Memory is sampled at 20 s; CPU is the 60 s
-average:
+Steady state with closed dialogs and default polling. Memory is sampled at 20 s; CPU is the mean of
+two 60 s averages:
 
 | Metric              |               C# WinForms |              Rust WinUI 3 | Rust / C# |
 | ------------------- | ------------------------: | ------------------------: | --------: |
-| First (cold) start  |                    555 ms |                    601 ms |     1.08x |
-| Second (warm) start |                    248 ms |                    286 ms |     1.15x |
-| Working set         |             54.9-56.8 MiB |             99.0-99.1 MiB |     1.76x |
-| Private bytes       |                  32.8 MiB |             62.9-63.9 MiB |     1.94x |
-| Commit              |                  32.8 MiB |             62.9-63.9 MiB |     1.94x |
-| Handles             |                   389-482 |               1 731-1 736 |     4.03x |
-| Threads             |                     15-18 |                     60-66 |     3.73x |
+| First (cold) start  |                    592 ms |                    599 ms |     1.01x |
+| Second (warm) start |                    220 ms |                    236 ms |     1.07x |
+| Working set         |             58.8-62.1 MiB |             98.8-99.3 MiB |     1.64x |
+| Private bytes       |             33.3-36.8 MiB |             63.4-63.8 MiB |     1.82x |
+| Commit              |             33.3-36.8 MiB |             63.4-63.8 MiB |     1.82x |
+| Handles             |                   396-399 |               1 733-1 738 |     4.37x |
+| Threads             |                        18 |                     65-66 |     3.65x |
 | GDI objects         |                        24 |                         9 |     0.38x |
-| USER objects        |                        26 |                        36 |     1.38x |
-| Idle CPU, one core  |                    27.0 % |                    15.1 % |     0.56x |
-| Idle CPU, total     | 1.13 % of 24 logical CPUs | 0.63 % of 24 logical CPUs |     0.56x |
+| USER objects        |                        26 |                     35-36 |     1.37x |
+| Idle CPU, one core  |                     7.2 % |                     5.9 % |     0.82x |
+| Idle CPU, total     | 0.30 % of 24 logical CPUs | 0.25 % of 24 logical CPUs |     0.83x |
 
 Observations:
 
-- Startup is the same within one polling interval. WinUI and the CLR both need roughly a quarter of a
-  second on a warm cache.
-- Rust uses about twice the private memory and working set. Most of the difference is the WinUI
-  composition stack, DirectX, and the Windows App Runtime host loaded into the process. The CLR plus
-  GDI+ is lighter for a small custom-drawn window.
-- Rust creates about 4x the handles and 3.7x the threads, again from the WinUI runtime. Handles
+- Startup remains within one 25 ms polling interval in both pairs. A repeat pass on a warm file cache
+  measured 295/304 ms for the first launch and 234/246 ms for the second, so the difference is
+  measurement noise rather than a real distinction.
+- Rust still uses about 1.6x the working set and 1.8x the private memory. Most of the difference is
+  the WinUI composition stack, DirectX, and the Windows App Runtime host loaded into the process. The
+  CLR plus GDI+ is lighter for a small custom-drawn window.
+- Rust creates about 4.4x the handles and 3.7x the threads, again from the WinUI runtime. Handles
   fluctuate as WinUI creates and retires short-lived objects, but none of the measured values grew
   monotonically over 70 s, so this is steady-state overhead rather than a leak.
 - Rust uses fewer GDI objects because WinUI composition does not draw through GDI. The C# pager draws
   every preview and icon with GDI+.
 - Both implementations poll: the snapshot tick enumerates windows every 200 ms and the maintenance
-  tick runs every 500 ms. That explains the constant CPU load in both. Rust uses about 44 % less
-  process CPU (15.1 vs 27.0 % of one core), but the absolute gap is only about half a percentage
-  point of the machine's total CPU (0.63 vs 1.13 %). Neither is event-driven; users can raise the
-  delays in Settings at the cost of slower updates.
-- A Process Explorer spot check on the same machine showed the same ordering: about 0.8 % for C# and
-  0.6 % for Rust of total system CPU. Rust matches the 60 s average above; the C# spot reading is
-  somewhat lower, which is expected from a different sampling window. The absolute numbers are close
-  enough that the difference matters less than the fact that both settle around 1 % of the machine's
-  total CPU.
+  tick runs every 500 ms. That explains the constant CPU load in both. Both now fetch the virtual
+  desktop GUID list once per snapshot and resolve each window against it; previously every window
+  lookup re-enumerated the list through COM. That change cut idle CPU by 3.8x in C# and 2.5x in Rust
+  (C# 1.13 -> 0.30 %, Rust 0.63 -> 0.25 % of total system).
+- After that fix the CPU difference is small: Rust uses about 18 % less process CPU (5.9 vs 7.2 % of
+  one core), but the absolute gap is only 0.05 percentage points of the machine's total CPU. Neither
+  is event-driven; users can raise the delays in Settings at the cost of slower updates. The
+  remaining cost is dominated by window enumeration, icon queries, and the desktop-list fetch rather
+  than the change-detection hash.
 
 ## 4. Code complexity
 
@@ -171,25 +177,25 @@ separately because they ship in the same files but are not part of the applicati
 | Metric                             | C# WinForms | Rust, application |                  Rust, including tests |
 | ---------------------------------- | ----------: | ----------------: | -------------------------------------: |
 | Source files                       |          24 |                29 |                                     29 |
-| Total lines                        |       4 828 |             7 292 |                                  8 240 |
-| Code lines                         |       4 036 |             5 342 |                                  6 156 |
-| Comment lines                      |         184 |             1 197 |                                  1 202 |
-| Comment share of non-blank lines   |       4.4 % |            18.3 % |                                 16.3 % |
-| Functions (heuristic)              |         209 |               312 |                                    387 |
-| Branch points                      |         277 |               326 |                                    332 |
-| Branch points per 1 000 code lines |        68.6 |              61.0 |                                   53.9 |
-| Code lines per function            |        19.3 |              17.1 |                                   15.9 |
-| Automated tests                    |           0 |                 - | 52 `#[test]` functions, 830 code lines |
+| Total lines                        |       5 111 |             7 369 |                                  8 352 |
+| Code lines                         |       4 286 |             5 391 |                                  6 236 |
+| Comment lines                      |         172 |             1 220 |                                  1 225 |
+| Comment share of non-blank lines   |       3.9 % |            18.5 % |                                 16.4 % |
+| Functions (heuristic)              |         196 |               320 |                                    399 |
+| Branch points                      |         316 |               315 |                                    320 |
+| Branch points per 1 000 code lines |        73.7 |              58.4 |                                   51.3 |
+| Code lines per function            |        21.9 |              16.8 |                                   15.6 |
+| Automated tests                    |           0 |                 - | 54 `#[test]` functions, 845 code lines |
 | `unsafe` blocks                    |         n/a |               121 |                                    121 |
 
-The Rust application has about 32 % more code lines and 49 % more functions. Part of that is
+The Rust application has about 26 % more code lines and 63 % more functions. Part of that is
 explicit: error handling, the COM vtable definitions, reactor declarations, and documentation. The
-Rust test code adds another 830 lines.
+Rust test code adds another 845 lines.
 
-Branch density is slightly lower in Rust when tests are excluded, so the shipping code is not
-branchier per line. The metric says nothing about how hard each branch is to reason about; the C#
-version concentrates complexity in a few very large Form files, while the Rust version splits state
-machines into testable modules.
+Branch density is lower in Rust when tests are excluded (58.4 vs 73.7 per 1,000 code lines), so the
+shipping code is not branchier per line. The metric says nothing about how hard each branch is to
+reason about; the C# version concentrates complexity in a few very large Form files, while the Rust
+version splits state machines into testable modules.
 
 ### Where the code lives
 
@@ -197,44 +203,45 @@ C# by area (includes all source):
 
 | Area                      | Files | Code lines | Branch points | Functions |
 | ------------------------- | ----: | ---------: | ------------: | --------: |
-| WinForms UI (`GUI/`)      |     6 |      1 847 |           142 |        79 |
-| COM interop (`Core/API/`) |     8 |      1 435 |            58 |        88 |
-| Core model (`Core/`)      |     6 |        452 |            54 |        27 |
-| Config (`Config/`)        |     3 |        217 |            20 |        12 |
+| WinForms UI (`GUI/`)      |     6 |      1 847 |           152 |        82 |
+| COM interop (`Core/API/`) |     8 |      1 663 |            82 |        70 |
+| Core model (`Core/`)      |     6 |        474 |            58 |        29 |
+| Config (`Config/`)        |     3 |        217 |            21 |        12 |
 | Program and mutex         |     1 |         85 |             3 |         3 |
 
 Rust by area (includes inline tests):
 
 | Area                                                            | Files | Code lines | Branch points | Functions |
 | --------------------------------------------------------------- | ----: | ---------: | ------------: | --------: |
-| Pager UI (`pager/`)                                             |     6 |      2 284 |           139 |       129 |
+| Pager UI (`pager/`)                                             |     6 |      2 283 |           139 |       129 |
 | Dialog UI (`dialogs/`)                                          |     6 |      1 347 |            47 |        74 |
-| Platform (`windows`, `monitors`, `foreground`, `native_window`) |     5 |      1 365 |            83 |        77 |
-| COM interop (`desktop/`)                                        |     5 |        710 |            48 |        73 |
-| App (`settings`, `single_instance`, `logging`, root files)      |     7 |        450 |            15 |        34 |
+| Platform (`windows`, `monitors`, `foreground`, `native_window`) |     5 |      1 416 |            83 |        81 |
+| COM interop (`desktop/`)                                        |     5 |        740 |            37 |        81 |
+| App (`settings`, `single_instance`, `logging`, root files)      |     7 |        450 |            14 |        34 |
 
 The largest structural difference is the COM layer. The C# project has four near-identical
-`VirtualDesktopAPI-*.cs` variants totalling 1 216 code lines for the Windows 10, Windows 10 LTSC, and
+`VirtualDesktopAPI-*.cs` variants totalling 1 440 code lines for the Windows 10, Windows 10 LTSC, and
 Windows 11 layouts. The Rust `desktop/` module defines the interfaces once and selects a layout
-backend, in 710 code lines including its tests.
+backend, in 740 code lines including its tests.
 
 ### Largest files
 
-| C#                                         | Code lines | Branch points |
-| ------------------------------------------ | ---------: | ------------: |
-| `src/GUI/AppSettingsWindow.cs`             |        828 |            45 |
-| `src/GUI/MainForm.cs`                      |        435 |            34 |
-| `src/Core/API/VirtualDesktopAPI-Win11_.cs` |        325 |            14 |
-| `src/Core/API/VirtualDesktopAPI-Win11.cs`  |        308 |            11 |
-| `src/GUI/VirtualDesktop/Desktop.cs`        |        228 |            40 |
+| C#                                            | Code lines | Branch points |
+| --------------------------------------------- | ---------: | ------------: |
+| `src/GUI/AppSettingsWindow.cs`                |        828 |            53 |
+| `src/GUI/MainForm.cs`                         |        435 |            35 |
+| `src/Core/API/VirtualDesktopAPI-Win11_.cs`    |        381 |            20 |
+| `src/Core/API/VirtualDesktopAPI-Win11.cs`     |        364 |            17 |
+| `src/Core/API/VirtualDesktopAPI-Win10LTSC.cs` |        348 |            17 |
+| `src/Core/API/VirtualDesktopAPI-Win10.cs`     |        347 |            17 |
 
 | Rust                                | Code lines | Branch points |
 | ----------------------------------- | ---------: | ------------: |
-| `rust/src/pager/mod.rs`             |        836 |            83 |
+| `rust/src/pager/mod.rs`             |        835 |            83 |
 | `rust/src/pager/layout.rs`          |        633 |            26 |
 | `rust/src/native_window.rs`         |        590 |            31 |
 | `rust/src/dialogs/settings/view.rs` |        482 |             2 |
-| `rust/src/desktop/com/core.rs`      |        374 |            29 |
+| `rust/src/desktop/com/core.rs`      |        387 |            20 |
 
 `pager/mod.rs` is the Rust hot spot: one component owns snapshot, layout, input, window, and dialog
 coordination. It is the file to watch for further splitting. The C# hot spot is the 828-line Settings
@@ -260,14 +267,16 @@ into the executable. The C# package graph is smaller, but its runtime pieces are
   marginal difference is one file.
 - **Memory favors C#.** The Rust process needs roughly 30 MiB more private memory while idle. That is
   the price of WinUI composition and the runtime host.
-- **CPU favors Rust, but the absolute gap is small.** Both poll the same way, but the Rust process
-  spends about 44 % less CPU per poll: 0.63 % versus 1.13 % of total system CPU on this 24-thread
-  machine. That matters for battery life and heavily loaded systems more than for a desktop at idle.
-- **Maintainability is mixed.** Rust has more code, split into more, smaller functions, with 52 tests
-  and a much smaller COM layer. C# has 32 % less code but no automated tests, a 828-line Settings
-  file, and four duplicated COM layout implementations.
-- **Onboarding favors documented Rust.** The Rust sources carry 16-18 % comments and module-level
-  state documentation; the C# sources carry 4.4 %. Whether that outweighs the unfamiliar WinUI/reactor
+- **CPU is now close to a tie.** Both implementations spend about a quarter of a percent of the
+  machine's total CPU at idle. Rust uses about 18 % less process CPU (5.9 vs 7.2 % of one core), but
+  that is 0.05 percentage points of total system CPU. The earlier 1.8x gap came from re-enumerating
+  the desktop list per window; after batching it per snapshot, both improved by 2.5-3.8x.
+- **Maintainability is mixed.** Rust has more code (26 % more code lines, 63 % more functions),
+  split into more, smaller functions, with 54 tests and a much smaller COM layer. C# has less code but
+  no automated tests, an 828-line Settings file, and four duplicated COM layout implementations
+  totalling 1 440 code lines.
+- **Onboarding favors documented Rust.** The Rust sources carry about 18 % comments and module-level
+  state documentation; the C# sources carry 3.9 %. Whether that outweighs the unfamiliar WinUI/reactor
   model depends on the reader's background.
 
 ## 6. Reproduction

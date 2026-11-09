@@ -159,6 +159,11 @@ build a window snapshot, compute a change-detection hash, and invalidate the win
 changes. Desktop count and monitor configuration are checked on the slower loop and cause a full
 rebuild of all desktop and COM objects.
 
+The snapshot fetches the desktop GUID list once per tick and resolves every window against that list
+with `window_desktop_id`; calling `index_of_window` per window would re-enumerate the desktop list
+through COM for every window, which dominates idle CPU. The change-detection hash itself is cheap and
+is not the limiting factor.
+
 The WinUI implementation keeps the same polling intervals but expresses them as reactor messages. A
 `spawn_background` task sleeps and returns a tick message; the component then refreshes on the UI
 thread and schedules the next tick. No COM work runs on the thread-pool thread.
@@ -457,6 +462,8 @@ Use instead:
       fn count(&self) -> Result<u32, ApiError>;
       fn current_index(&self) -> Result<u32, ApiError>;
       fn desktop_ids(&self) -> Result<Vec<GUID>, ApiError>;
+      fn current_desktop_id(&self) -> Result<Option<GUID>, ApiError>;
+      fn window_desktop_id(&self, hwnd: HWND) -> Result<Option<WindowDesktopId>, ApiError>;
       fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError>;
       fn switch_to(&self, index: u32) -> Result<(), ApiError>;
       fn move_window_to(&self, hwnd: HWND, index: u32) -> Result<(), ApiError>;

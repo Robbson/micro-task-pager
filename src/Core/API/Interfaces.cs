@@ -1,5 +1,6 @@
 #pragma warning disable
 using System;
+using System.Collections.Generic;
 
 namespace MicroTaskPager.Core.API
 {
@@ -10,6 +11,9 @@ namespace MicroTaskPager.Core.API
         void PinApplication(IntPtr hWnd);
         int FromDesktop(IWindowsVirtualDesktop desktop);
         IWindowsVirtualDesktop FromWindow(IntPtr hWnd);
+        IReadOnlyList<Guid> GetDesktopIds();
+        Guid CurrentDesktopId { get; }
+        int GetWindowDesktopIndex(IntPtr hWnd, IReadOnlyList<Guid> desktopIds, int currentDesktopIndex);
     }
 
     public interface IWindowsVirtualDesktop

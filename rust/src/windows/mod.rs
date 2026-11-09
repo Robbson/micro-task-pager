@@ -26,7 +26,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{BOOL, GUID};
 
-use crate::desktop::{ApiError, VirtualDesktopApi};
+use crate::desktop::{ApiError, VirtualDesktopApi, WindowDesktopId};
 use crate::logging;
 
 use icons::IconCache;
@@ -128,8 +128,14 @@ impl WindowSnapshotter {
     /// desktop lookup failures are counted and do not fail the whole snapshot.
     pub fn capture(&mut self, api: &dyn VirtualDesktopApi) -> Result<WindowSnapshot, ApiError> {
         let desktop_count = api.count()?;
-        let current_desktop = api.current_index()?;
+        // Fetch the desktop list once and resolve every window against it.
+        // Asking the shell for the list per window dominates the polling cost.
         let desktop_ids = api.desktop_ids()?;
+        let current_desktop = api
+            .current_desktop_id()?
+            .and_then(|id| desktop_ids.iter().position(|candidate| *candidate == id))
+            .map(|index| index as u32)
+            .ok_or(ApiError::DesktopNotFound)?;
         let foreground = unsafe { GetForegroundWindow() };
         let shell_window = unsafe { GetShellWindow() };
 
@@ -137,6 +143,8 @@ impl WindowSnapshotter {
             let mut builder = Builder {
                 api,
                 desktop_count,
+                desktop_ids: &desktop_ids,
+                current_desktop,
                 foreground,
                 shell_window,
                 own_process_id: std::process::id(),
@@ -194,6 +202,8 @@ impl WindowSnapshotter {
 struct Builder<'a> {
     api: &'a dyn VirtualDesktopApi,
     desktop_count: u32,
+    desktop_ids: &'a [GUID],
+    current_desktop: u32,
     foreground: HWND,
     shell_window: HWND,
     own_process_id: u32,
@@ -246,7 +256,7 @@ impl Builder<'_> {
         // failure counter if the desktop lookup succeeds or reports "unknown".
         self.seen.insert(hwnd_key);
 
-        let desktop_index = match self.api.index_of_window(hwnd) {
+        let desktop_index = match self.resolve_desktop(hwnd) {
             Ok(Some(index)) if index < self.desktop_count => {
                 self.failures.remove(&hwnd_key);
                 index
@@ -283,6 +293,17 @@ impl Builder<'_> {
         });
     }
 
+    /// Maps a window to a desktop index using the list fetched for this
+    /// snapshot. This avoids one `GetDesktops` enumeration per window.
+    fn resolve_desktop(&self, hwnd: HWND) -> Result<Option<u32>, ApiError> {
+        let desktop = self.api.window_desktop_id(hwnd)?;
+        Ok(resolve_desktop_index(
+            desktop,
+            self.desktop_ids,
+            self.current_desktop,
+        ))
+    }
+
     fn record_failure(&mut self, hwnd: HWND, error: ApiError) {
         let hwnd_key = hwnd.0 as usize;
         let count = self.failures.entry(hwnd_key).or_insert(0);
@@ -317,6 +338,21 @@ fn class_name(hwnd: HWND) -> String {
     let mut buffer = [0u16; 256];
     let copied = unsafe { GetClassNameW(hwnd, &mut buffer) };
     String::from_utf16_lossy(&buffer[..copied.max(0) as usize])
+}
+
+fn resolve_desktop_index(
+    desktop: Option<WindowDesktopId>,
+    desktop_ids: &[GUID],
+    current_desktop: u32,
+) -> Option<u32> {
+    match desktop {
+        None => None,
+        Some(WindowDesktopId::AllDesktops) => Some(current_desktop),
+        Some(WindowDesktopId::Desktop(id)) => desktop_ids
+            .iter()
+            .position(|candidate| *candidate == id)
+            .map(|index| index as u32),
+    }
 }
 
 fn hash_snapshot(snapshot: &WindowSnapshot) -> u64 {
@@ -399,6 +435,33 @@ mod tests {
         assert_ne!(
             hash_snapshot(&sample_snapshot("Editor")),
             hash_snapshot(&sample_snapshot("Terminal"))
+        );
+    }
+
+    #[test]
+    fn desktop_index_resolves_against_the_fetched_list() {
+        let first = GUID::from_u128(1);
+        let second = GUID::from_u128(2);
+        let ids = [first, second];
+
+        assert_eq!(
+            resolve_desktop_index(Some(WindowDesktopId::Desktop(second)), &ids, 0),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_desktop_index(Some(WindowDesktopId::Desktop(GUID::from_u128(3))), &ids, 0),
+            None
+        );
+        assert_eq!(resolve_desktop_index(None, &ids, 1), None);
+    }
+
+    #[test]
+    fn pinned_windows_follow_the_current_desktop() {
+        let ids = [GUID::from_u128(1), GUID::from_u128(2)];
+
+        assert_eq!(
+            resolve_desktop_index(Some(WindowDesktopId::AllDesktops), &ids, 1),
+            Some(1)
         );
     }
 
