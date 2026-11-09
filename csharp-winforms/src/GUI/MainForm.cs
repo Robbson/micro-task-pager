@@ -35,6 +35,8 @@ namespace MicroTaskPager.GUI
         private int _desktopSwitchVersion = 0;
         private string _screenConfigurationSignature = string.Empty;
         private string _windowsHash = string.Empty;
+        private bool _isDialogOpen = false;
+        private bool _isContextMenuOpen = false;
 
         private Point dragOffset;
 
@@ -214,7 +216,9 @@ namespace MicroTaskPager.GUI
                 (Screen.PrimaryScreen.Bounds.Width / 2) - (Size.Width / 2),
                 Screen.PrimaryScreen.WorkingArea.Bottom - Size.Height);
 
-        // App Window covering detection: Currently only by its center point
+        // App window covering detection: checks the center point, matching the Rust watchdog.
+        // Partial overlaps that leave the center visible are recovered by the topmost reassert
+        // that runs on every secondary tick.
         private bool IsCovered()
         {
             var rect = this.Bounds;
@@ -350,10 +354,19 @@ namespace MicroTaskPager.GUI
                 {
                     if (!TryInvoke(() =>
                     {
-                        // Check if window is covered should be fine with every 500ms
-                        if (IsCovered())
+                        // Reassert topmost on every tick, like the Rust implementations. This also
+                        // recovers partial overlaps that do not cover the center of the pager.
+                        // Skip while one of our own dialogs or the context menu is open so the
+                        // pager cannot cover them.
+                        if (!_isDialogOpen && !_isContextMenuOpen)
                         {
-                            WindowManager.RestoreWindow(Handle);
+                            // Check if window is covered should be fine with every 500ms
+                            if (IsCovered())
+                            {
+                                WindowManager.RestoreWindow(Handle);
+                            }
+
+                            WindowManager.ReassertTopmost(Handle);
                         }
 
                         if (HasDesktopCountChanged() || HasScreenConfigurationChanged())
@@ -492,6 +505,8 @@ namespace MicroTaskPager.GUI
                 () => Application.Exit());
 
             //menu.Opened += (ss, ee) => _forceAppAlwaysOnTop = false;
+            menu.Opened += (s, e) => _isContextMenuOpen = true;
+            menu.Closed += (s, e) => _isContextMenuOpen = false;
             menu.Show(this, PointToClient(Cursor.Position));
         }
 
@@ -502,15 +517,23 @@ namespace MicroTaskPager.GUI
 
             settingsWindow.PreviewChanged += s => PreviewSettings(s);
 
-            DialogResult result = settingsWindow.ShowDialog(this);
-            if (result == DialogResult.OK)
+            _isDialogOpen = true;
+            try
             {
-                ApplySettings(settingsWindow.Settings, true); // save and reset to new settings
+                DialogResult result = settingsWindow.ShowDialog(this);
+                if (result == DialogResult.OK)
+                {
+                    ApplySettings(settingsWindow.Settings, true); // save and reset to new settings
+                }
+                else
+                {
+                    // Don't assign Options beforehand: ApplySettings compares against it to detect layout changes
+                    ApplySettings(originalSettings, false); // restore visuals
+                }
             }
-            else
+            finally
             {
-                // Don't assign Options beforehand: ApplySettings compares against it to detect layout changes
-                ApplySettings(originalSettings, false); // restore visuals
+                _isDialogOpen = false;
             }
         }
 
@@ -545,7 +568,15 @@ namespace MicroTaskPager.GUI
         {
             using (var aboutDialog = new AboutDialog())
             {
-                aboutDialog.ShowDialog(this);
+                _isDialogOpen = true;
+                try
+                {
+                    aboutDialog.ShowDialog(this);
+                }
+                finally
+                {
+                    _isDialogOpen = false;
+                }
             }
         }
     }

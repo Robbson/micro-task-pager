@@ -170,6 +170,14 @@ namespace MicroTaskPager.Core
         {
             //WinAPI.ShowWindowAsync(windowHandle, WinAPI.SW_RESTORE);
             WinAPI.ShowWindowAsync(windowHandle, WinAPI.SW_SHOWNOACTIVATE);
+            ReassertTopmost(windowHandle);
+        }
+
+        // Keeps the window in the topmost band without showing, moving, resizing or activating it.
+        // Reasserting on every watchdog tick is what makes partial overlaps recover even when the
+        // window center is still visible.
+        public static void ReassertTopmost(IntPtr windowHandle)
+        {
             WinAPI.SetWindowPos(windowHandle, WinAPI.HWND_TOPMOST,
                 0, 0, 0, 0,
                 WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_NOACTIVATE);
