@@ -4,6 +4,9 @@
 
 ### Internal
 
+- The two implementations now live in tech-named folders: `csharp-winforms/` for the original C#
+  WinForms app and `rust-winui/` for the Rust WinUI 3 app. Both can be built together from the
+  repository root with `pwsh ./build.ps1`, which accepts `-Target all|winforms|winui`.
 - The Rust port now targets WinUI 3 through `windows-reactor` and is the main Rust binary. The C#
   implementation remains the behavioral reference and current release.
 - The Rust build requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime

@@ -1,6 +1,6 @@
 //! Reactor Settings window runner.
 //!
-//! Run from `rust/` with `cargo run --example reactor_settings`. The dialog uses
+//! Run from `rust-winui/` with `cargo run --example reactor_settings`. The dialog uses
 //! the saved registry settings as its starting point but has no pager link, so
 //! previews and Apply/OK only update the dialog state.
 //!

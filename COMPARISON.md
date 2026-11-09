@@ -2,7 +2,7 @@
 
 Deployment, footprint, and code comparison for the two Micro Task Pager implementations.
 
-Measured on 2026-11-09. The C#/.NET implementation is the current release; the Rust/WinUI 3 port
+Measured on 2026-11-09. The C#/.NET implementation is the current release; the rust-winui/WinUI 3 port
 is feature-complete but unreleased.
 
 For alternatives to the current WinUI 3 dependency and their trade-offs, see
@@ -38,8 +38,8 @@ machine's total. Startup time is effectively identical.
 | .NET runtime        | .NET Framework 4.8.1 (release 533509)                                                 |
 | Windows App Runtime | 2.6.5                                                                                 |
 | Rust                | 1.99.1, MSVC, release profile: LTO, `codegen-units = 1`, stripped symbols, static CRT |
-| C# build            | `dotnet build src/MicroTaskPager.csproj -c Release` (`net48`, x64)                    |
-| Rust build          | `cargo build --release` in `rust/`                                                    |
+| C# build            | `dotnet build csharp-winforms/MicroTaskPager.csproj -c Release` (`net48`, x64)                    |
+| Rust build          | `cargo build --release` in `rust-winui/`                                                    |
 
 Method:
 
@@ -228,20 +228,20 @@ backend, in 740 code lines including its tests.
 
 | C#                                            | Code lines | Branch points |
 | --------------------------------------------- | ---------: | ------------: |
-| `src/GUI/AppSettingsWindow.cs`                |        828 |            53 |
-| `src/GUI/MainForm.cs`                         |        435 |            35 |
-| `src/Core/API/VirtualDesktopAPI-Win11_.cs`    |        381 |            20 |
-| `src/Core/API/VirtualDesktopAPI-Win11.cs`     |        364 |            17 |
-| `src/Core/API/VirtualDesktopAPI-Win10LTSC.cs` |        348 |            17 |
-| `src/Core/API/VirtualDesktopAPI-Win10.cs`     |        347 |            17 |
+| `csharp-winforms/GUI/AppSettingsWindow.cs`                |        828 |            53 |
+| `csharp-winforms/GUI/MainForm.cs`                         |        435 |            35 |
+| `csharp-winforms/Core/API/VirtualDesktopAPI-Win11_.cs`    |        381 |            20 |
+| `csharp-winforms/Core/API/VirtualDesktopAPI-Win11.cs`     |        364 |            17 |
+| `csharp-winforms/Core/API/VirtualDesktopAPI-Win10LTSC.cs` |        348 |            17 |
+| `csharp-winforms/Core/API/VirtualDesktopAPI-Win10.cs`     |        347 |            17 |
 
 | Rust                                | Code lines | Branch points |
 | ----------------------------------- | ---------: | ------------: |
-| `rust/src/pager/mod.rs`             |        835 |            83 |
-| `rust/src/pager/layout.rs`          |        633 |            26 |
-| `rust/src/native_window.rs`         |        590 |            31 |
-| `rust/src/dialogs/settings/view.rs` |        482 |             2 |
-| `rust/src/desktop/com/core.rs`      |        387 |            20 |
+| `rust-winui/src/pager/mod.rs`             |        835 |            83 |
+| `rust-winui/src/pager/layout.rs`          |        633 |            26 |
+| `rust-winui/src/native_window.rs`         |        590 |            31 |
+| `rust-winui/src/dialogs/settings/view.rs` |        482 |             2 |
+| `rust-winui/src/desktop/com/core.rs`      |        387 |            20 |
 
 `pager/mod.rs` is the Rust hot spot: one component owns snapshot, layout, input, window, and dialog
 coordination. It is the file to watch for further splitting. The C# hot spot is the 828-line Settings
@@ -283,14 +283,14 @@ into the executable. The C# package graph is smaller, but its runtime pieces are
 
 ```powershell
 # C# release
-dotnet build src/MicroTaskPager.csproj -c Release
-Get-ChildItem src/bin/Release/net48 -File
+dotnet build csharp-winforms/MicroTaskPager.csproj -c Release
+Get-ChildItem csharp-winforms/bin/Release/net48 -File
 
 # Rust release
 Push-Location rust
 cargo build --release
 Pop-Location
-Get-Item rust/target/release/micro-task-pager.exe
+Get-Item rust-winui/target/release/micro-task-pager.exe
 
 # Runtime versions on this machine
 Get-AppxPackage -Name "Microsoft.WindowsAppRuntime.2" |

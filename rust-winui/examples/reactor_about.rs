@@ -1,6 +1,6 @@
 //! Reactor About window reference.
 //!
-//! Run from `rust/` with `cargo run --example reactor_about`. The component
+//! Run from `rust-winui/` with `cargo run --example reactor_about`. The component
 //! lives in `src/dialogs/about.rs`; this example runs it standalone without a
 //! pager link. It requires the Windows App Runtime 2.x framework package.
 

@@ -7,7 +7,7 @@
       "type": "process",
       "args": [
         "build",
-        "${workspaceFolder}/Switchie.csproj",
+        "${workspaceFolder}/MicroTaskPager.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
@@ -15,13 +15,16 @@
     },
     {
       "label": "publish",
-      "command": "dotnet",
+      "command": "pwsh",
       "type": "process",
       "args": [
-        "publish",
-        "${workspaceFolder}/Switchie.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/../build.ps1",
+        "-Target",
+        "winforms"
       ],
       "problemMatcher": "$msCompile"
     },
@@ -32,7 +35,7 @@
       "args": [
         "watch",
         "run",
-        "${workspaceFolder}/Switchie.csproj",
+        "${workspaceFolder}/MicroTaskPager.csproj",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],

@@ -6,10 +6,10 @@ Instructions for AI agents working in this repository.
 
 Micro Task Pager is a Windows-only virtual desktop pager. The repository contains:
 
-- `src/` - the original C#/.NET Framework 4.8 Windows Forms application. It remains the behavioral
+- `csharp-winforms/` - the original C#/.NET Framework 4.8 Windows Forms application. It remains the behavioral
   reference and ships separately while parity is verified.
-- `rust/` - the Rust implementation and the shipping WinUI 3 pager. It uses
-  `windows-reactor` for all UI. Read `rust/ARCHITECTURE.md` and `rust/MIGRATION.md` before making
+- `rust-winui/` - the Rust implementation and the shipping WinUI 3 pager. It uses
+  `windows-reactor` for all UI. Read `rust-winui/ARCHITECTURE.md` and `rust-winui/MIGRATION.md` before making
   structural changes.
 
 Both use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual desktop
@@ -64,9 +64,24 @@ Installed command-line tools:
 
 ## Build and verification
 
+### Production releases
+
+Build one or both production releases from the repository root with PowerShell 7:
+
+```powershell
+pwsh ./build.ps1                    # both implementations
+pwsh ./build.ps1 -Target winforms   # C# WinForms only
+pwsh ./build.ps1 -Target winui      # Rust WinUI 3 only
+pwsh ./build.ps1 -Target all -NoZip # stage both without ZIP archives
+```
+
+Outputs are written to `prod/winforms/` and `prod/winui/`, each with a versioned
+`MicroTaskPager-<target>-v<version>.zip`. The C# build increments `csharp-winforms/version.txt`; the
+Rust archive uses the version from `rust-winui/Cargo.toml`.
+
 ### Rust (implementation)
 
-Run Cargo commands from the `rust/` directory; the repository root is not a Cargo workspace.
+Run Cargo commands from the `rust-winui/` directory; the repository root is not a Cargo workspace.
 
 ```powershell
 cargo build
@@ -78,18 +93,18 @@ cargo test
 
 - The first build requires the MSVC build tools (`link.exe`) and a Windows SDK, including `rc.exe` for
   the icon/version resources and the manifest.
-- `rust/.cargo/config.toml` enables the static MSVC runtime. Cargo discovers that config from the
-  `rust/` working directory, so run Cargo there; the release executable has no Visual C++
+- `rust-winui/.cargo/config.toml` enables the static MSVC runtime. Cargo discovers that config from the
+  `rust-winui/` working directory, so run Cargo there; the release executable has no Visual C++
   redistributable dependency.
-- The release executable is `rust/target/release/micro-task-pager.exe`. A deployment folder may rename
+- The release executable is `rust-winui/target/release/micro-task-pager.exe`. A deployment folder may rename
   it to `MicroTaskPager.exe`; the embedded icon/version/manifest stay intact.
 - Add unit tests next to the modules they cover. There is no separate test crate.
 - `rust-toolchain.toml` currently selects `stable`, which is 1.99.1. The exact `1.99.1` rustup
-  toolchain is installed without `cargo.exe`; see `rust/MIGRATION.md` open questions.
+  toolchain is installed without `cargo.exe`; see `rust-winui/MIGRATION.md` open questions.
 - `cargo run` builds and starts the WinUI 3 pager GUI. `build.rs` compiles `app.rc` (icon and
   version) and embeds `app.manifest` through the MSVC linker flags.
 - `windows-reactor` 0.100 is a normal dependency. The pager, About, and Settings are reactor
-  components; `src/main.rs` starts the reactor pager.
+  components; `rust-winui/src/main.rs` starts the reactor pager.
 - WinUI 3 requires the Windows App Runtime 2.x framework package (2.4 or later). Release packaging is
   framework-dependent; the executable does not bundle the runtime. It is installed on this machine
   (2.6.5); the reactor examples are the quickest smoke test:
@@ -116,8 +131,8 @@ cargo test
   (covering Win10 and Win10LTSC); build 22000 and later use the Win11 layout. Older builds return
   `ApiError::NotSupported`.
 - Verification on Windows 10, Win10LTSC, and Windows 11 21H2/22H2 is postponed; do not block work on
-  obtaining those images. See the Postponed section in `rust/MIGRATION.md`.
-- `rust/MIGRATION.md` also contains a code map and glossary for the module structure and terms such as
+  obtaining those images. See the Postponed section in `rust-winui/MIGRATION.md`.
+- `rust-winui/MIGRATION.md` also contains a code map and glossary for the module structure and terms such as
   `SupervisedDesktop`, layout, and probe.
 - Logs are written to `%LOCALAPPDATA%\MicroTaskPager\logs` with 14-day retention.
 - COM verification uses the standalone probe:
@@ -145,22 +160,22 @@ cargo test
 ### C# (reference implementation)
 
 ```powershell
-dotnet build src/MicroTaskPager.csproj -c Debug
+dotnet build csharp-winforms/MicroTaskPager.csproj -c Debug
 ```
 
 - The project has no automated test project. Verify changes by building and, where relevant, by
   manually testing the pager UI.
-- The Debug executable is written to `src/bin/Debug/net48/MicroTaskPager.exe`.
+- The Debug executable is written to `csharp-winforms/bin/Debug/net48/MicroTaskPager.exe`.
 - Do not commit unless the user explicitly asks.
 
 ## Generated files: ignore them
 
 The following files are generated automatically by the build:
 
-- `src/version.txt`
-- `src/GeneratedVersion.cs`
+- `csharp-winforms/version.txt`
+- `csharp-winforms/GeneratedVersion.cs`
 
-`src/MicroTaskPager.csproj` runs `src/IncrementVersion.ps1` before every build. The script increments
+`csharp-winforms/MicroTaskPager.csproj` runs `csharp-winforms/IncrementVersion.ps1` before every build. The script increments
 the fourth version component (`Major.Minor.Patch.Build`) and rewrites both files.
 
 Guidance:
@@ -174,28 +189,28 @@ Guidance:
 
 ## Repository layout
 
-- `src/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
+- `csharp-winforms/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
   `Win10`, `Win10LTSC`, `Win11`, and `Win11_`. The current selector uses `Win11_` for build 22621 and
-  later; `rust/ARCHITECTURE.md` §7.3 flags that the real boundary still needs verification.
+  later; `rust-winui/ARCHITECTURE.md` §7.3 flags that the real boundary still needs verification.
   Keep shared changes in sync across all four files.
-- `src/Core/` - window enumeration, types, DPI helpers.
-- `src/GUI/` - pager, desktops, settings dialog, about dialog.
-- `src/Config/` - settings model, registry storage, saved pager position.
-- `rust/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
-- `rust/MIGRATION.md` - phase status, verification log, and open questions.
-- `rust/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
+- `csharp-winforms/Core/` - window enumeration, types, DPI helpers.
+- `csharp-winforms/GUI/` - pager, desktops, settings dialog, about dialog.
+- `csharp-winforms/Config/` - settings model, registry storage, saved pager position.
+- `rust-winui/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
+- `rust-winui/MIGRATION.md` - phase status, verification log, and open questions.
+- `rust-winui/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
   model, and the WinUI 3 pager).
-- `rust/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
+- `rust-winui/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout backends, and the
   restart supervisor.
-- `rust/src/windows/` - window enumeration, filtering, snapshot model, and icon cache.
-- `rust/src/pager/` - reactor pager component, view, layout, input, and icon conversion.
-- `rust/src/dialogs/` - reactor About and Settings windows.
-- `rust/src/native_window.rs` - HWND/pinning/topmost/opacity shim for the reactor pager.
-- `rust/app.rc`, `rust/app.manifest`, `rust/build.rs` - icon, version resource, and manifest.
-- `rust/examples/probe/` - standalone virtual-desktop COM probe.
-- `rust/examples/reactor_about.rs` - reactor About reference and regression sample.
-- `rust/examples/reactor_settings.rs` - standalone Settings window runner.
-- `rust/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
+- `rust-winui/src/windows/` - window enumeration, filtering, snapshot model, and icon cache.
+- `rust-winui/src/pager/` - reactor pager component, view, layout, input, and icon conversion.
+- `rust-winui/src/dialogs/` - reactor About and Settings windows.
+- `rust-winui/src/native_window.rs` - HWND/pinning/topmost/opacity shim for the reactor pager.
+- `rust-winui/app.rc`, `rust-winui/app.manifest`, `rust-winui/build.rs` - icon, version resource, and manifest.
+- `rust-winui/examples/probe/` - standalone virtual-desktop COM probe.
+- `rust-winui/examples/reactor_about.rs` - reactor About reference and regression sample.
+- `rust-winui/examples/reactor_settings.rs` - standalone Settings window runner.
+- `rust-winui/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
 
 ## Notes
 
@@ -205,7 +220,7 @@ Guidance:
   that will use it and keep all `desktop` calls on that thread. In the WinUI target, that thread is the
   reactor UI thread.
 - Windows belonging to the pager process are intentionally excluded from the pager.
-- The Rust implementation must preserve the behavior described in `rust/ARCHITECTURE.md` §11.
+- The Rust implementation must preserve the behavior described in `rust-winui/ARCHITECTURE.md` §11.
   Intentional deviations from the C# implementation are listed in §12 there.
 - **Use WinUI 3 through `windows-reactor` for all UI work.** Do not build a custom UI framework,
   widget toolkit, dialog runtime, or drawing abstraction on Win32. `winsafe`, `egui`, and other GUI

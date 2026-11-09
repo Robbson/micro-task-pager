@@ -1,7 +1,7 @@
 # Micro Task Pager
 
 <p align="center">
-  <img src="src/Resources/logo.svg" width="520" alt="Micro Task Pager logo">
+  <img src="csharp-winforms/Resources/logo.svg" width="520" alt="Micro Task Pager logo">
 </p>
 
 <p align="center">
@@ -20,13 +20,16 @@
 **Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
 
 > [!NOTE]
-> A native Rust port is in development. Its UI targets WinUI 3 through `windows-reactor`. The current
-> release remains the C#/.NET implementation; the Rust build is not published yet. The Rust build
-> requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4 or later
-> framework package, which is installed separately. See [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md),
-> [`rust/MIGRATION.md`](rust/MIGRATION.md), the [implementation comparison](COMPARISON.md) for
-> dependencies, size, resource use, and code metrics, and the
-> [UI framework comparison](UI-FRAMEWORK-COMPARISON.md) for alternative stacks and their trade-offs.
+> Two implementations are available from the same repository: the original C# WinForms app in
+> `csharp-winforms/` and the native Rust WinUI 3 app in `rust-winui/`. The C# build remains the
+> current published release; the Rust build is feature-complete and can be built from source. The
+> Rust build requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4
+> or later framework package, which is installed separately. See
+> [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
+> [`rust-winui/MIGRATION.md`](rust-winui/MIGRATION.md), the
+> [implementation comparison](COMPARISON.md) for dependencies, size, resource use, and code metrics,
+> and the [UI framework comparison](UI-FRAMEWORK-COMPARISON.md) for alternative stacks and their
+> trade-offs.
 
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
@@ -37,7 +40,7 @@ Each desktop screen can use its own view, so you can mix both styles however you
 
 <p align="center">
   <img
-    src="src/Resources/pager-example.png"
+    src="csharp-winforms/Resources/pager-example.png"
     alt="Micro Task Pager showing multiple virtual desktops"
   >
   <br>
@@ -85,11 +88,11 @@ framework-dependent and does not bundle the runtime.
 
 ### Installation
 
-1. Download the latest `MicroTaskPager-v*.zip` from the [releases page](https://github.com/Robbson/micro-task-pager/releases/latest).
+1. Download the release for the implementation you want: `MicroTaskPager-winforms-v*.zip` (C#) or `MicroTaskPager-winui-v*.zip` (Rust) from the [releases page](https://github.com/Robbson/micro-task-pager/releases/latest).
 2. Extract the archive.
 3. Run `MicroTaskPager.exe`.
 
-No installer is required. Keep the extracted files together: the executable needs the bundled DLLs and `MicroTaskPager.exe.config`. The archive also contains this README, the changelog, the license, and the third-party notices.
+No installer is required. Keep the extracted files together: the WinForms executable needs the bundled DLLs and `MicroTaskPager.exe.config`, while the WinUI build ships as a single executable and requires the Windows App Runtime 2.4 or later. Each archive also contains this README, the changelog, the license, and the third-party notices.
 
 > [!IMPORTANT]
 > The application is not code-signed yet. Windows SmartScreen may therefore show a warning the first time you start it.
@@ -150,22 +153,42 @@ Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWA
 
 ### Build
 
+Build the C# implementation:
+
 ```powershell
 git clone https://github.com/Robbson/micro-task-pager.git
 cd micro-task-pager
-dotnet build src/MicroTaskPager.csproj
+dotnet build csharp-winforms/MicroTaskPager.csproj
 ```
 
 Alternatively, open `MicroTaskPager.sln` in Visual Studio and build the solution.
 
-### Create a release package
+Build the Rust implementation (from the `rust-winui` directory):
 
 ```powershell
-cd src
-.\Publish.cmd
+cd rust-winui
+cargo build --release
 ```
 
-The script publishes a release build to `prod\` and creates a versioned ZIP archive there. Note that the build automatically increments the version in `src\version.txt`.
+See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the Rust build prerequisites, which
+include the MSVC build tools, the Windows SDK, and the Windows App Runtime 2.4 or later framework
+package.
+
+### Create release packages
+
+Build one or both production releases from the repository root:
+
+```powershell
+pwsh .\build.ps1                    # both implementations
+pwsh .\build.ps1 -Target winforms   # C# WinForms only
+pwsh .\build.ps1 -Target winui      # Rust WinUI 3 only
+```
+
+The script writes each release to its own folder under `prod\` (`prod\winforms` and `prod\winui`) and
+creates a versioned ZIP archive there. The C# build automatically increments the version in
+`csharp-winforms\version.txt`; the Rust archive uses the version from `rust-winui\Cargo.toml`.
+
+`csharp-winforms\Publish.cmd` remains as a thin wrapper for building only the WinForms release.
 
 ## Feedback
 

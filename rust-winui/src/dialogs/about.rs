@@ -13,7 +13,7 @@ use super::{DialogEvent, DialogLink};
 /// Window title used by the pager to reassert topmost for the open dialog.
 pub const WINDOW_TITLE: &str = "About Micro Task Pager";
 
-const LOGO_PNG: &[u8] = include_bytes!("../../../src/Resources/logo.png");
+const LOGO_PNG: &[u8] = include_bytes!("../../../csharp-winforms/Resources/logo.png");
 const LOGO_SVG: &[u8] = include_bytes!("../../assets/logo.svg");
 
 /// Extracts the embedded SVG logo to a stable file and returns its path.

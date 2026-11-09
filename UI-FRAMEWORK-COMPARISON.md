@@ -8,7 +8,7 @@ Companion documents:
 
 - [`COMPARISON.md`](COMPARISON.md) - measured C# WinForms vs current Rust WinUI 3 deployment and
   resource comparison.
-- [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md) - current behavior contract and UI direction.
+- [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) - current behavior contract and UI direction.
 - [`AGENTS.md`](AGENTS.md) - current repository rule: all UI goes through `windows-reactor`.
 
 Measured on 2026-11-09. Estimates for alternative stacks are order-of-magnitude figures, not
@@ -311,7 +311,7 @@ therefore stay behind a feature flag until that decision is made.
 
 ## 9. How much of the Rust code is Reactor/WinUI-coupled?
 
-Only 6 of the 28 source files in `rust/src/` import `windows_reactor`:
+Only 6 of the 28 source files in `rust-winui/src/` import `windows_reactor`:
 
 | File                       | Approx. code lines | Reactor role                                                              | Coupling                                                  |
 | -------------------------- | -----------------: | ------------------------------------------------------------------------- | --------------------------------------------------------- |

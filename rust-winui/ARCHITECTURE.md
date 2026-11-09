@@ -115,7 +115,7 @@ sufficient. The required capabilities are:
 - Map a desktop object to its index and a window handle to its desktop.
 - Pin the pager process/application to all desktops via `IVirtualDesktopPinnedApps`.
 
-The C# implementation contains four version-specific variants under `src/Core/API/` (`Win10`,
+The C# implementation contains four version-specific variants under `csharp-winforms/Core/API/` (`Win10`,
 `Win10LTSC`, `Win11`, `Win11_`). These variants differ in vtable layout, not in application logic.
 
 ### 2.5 Always-On Behavior
@@ -328,13 +328,13 @@ extend the native Win32 UI.
 
 ## 5. Repository Structure
 
-The Rust application lives in `rust/` inside the existing Git repository. The C# implementation
+The Rust application lives in `rust-winui/` inside the existing Git repository. The C# implementation
 remains available as the behavioral reference.
 
 The module layout is:
 
 ```
-rust/
+rust-winui/
   Cargo.toml
   Cargo.lock                    # committed: this is a binary crate
   rust-toolchain.toml
@@ -900,7 +900,7 @@ verifiable on its own; the current app is the reactor pager.
 
 - x64 MSVC build; no .NET runtime and no installer.
 - `#![windows_subsystem = "windows"]` so no console window appears.
-- Statically link the MSVC runtime (`rust/.cargo/config.toml`) so the executable does not require the
+- Statically link the MSVC runtime (`rust-winui/.cargo/config.toml`) so the executable does not require the
   Visual C++ redistributable.
 - Windows App Runtime 2.4 or later is required. Packaging is framework-dependent: reactor resolves the
   installed framework package and shows an install prompt when it is missing. The executable does not
@@ -912,7 +912,7 @@ verifiable on its own; the current app is the reactor pager.
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
 - Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
-- The release artifact is `rust/target/release/micro-task-pager.exe`. A distribution folder may rename
+- The release artifact is `rust-winui/target/release/micro-task-pager.exe`. A distribution folder may rename
   it to `MicroTaskPager.exe`; the embedded icon/version/manifest stay intact.
 
 ## 16. Rust Development Guidelines
@@ -945,7 +945,7 @@ safe Rust.
 
 | Decision          | Direction                                              |
 | ----------------- | ------------------------------------------------------ |
-| Repository layout | Separate `rust/` directory                             |
+| Repository layout | Separate `rust-winui/` directory                             |
 | Rust project      | Single Cargo crate initially                           |
 | UI framework      | WinUI 3 through `windows-reactor`                      |
 | Main window       | Reactor root component + native window shim            |

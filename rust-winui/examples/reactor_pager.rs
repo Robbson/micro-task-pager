@@ -1,6 +1,6 @@
 //! Runs the reactor pager.
 //!
-//! Run from `rust/` with `cargo run --example reactor_pager`. Since the Phase 11 cutover this is the
+//! Run from `rust-winui/` with `cargo run --example reactor_pager`. Since the Phase 11 cutover this is the
 //! same component as the main binary; the example remains a convenient smoke runner. It uses the
 //! release mutex, so stop any other pager first.
 
