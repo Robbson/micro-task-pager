@@ -14,6 +14,8 @@
 //! Mouse handling uses the same layout that was painted, so hit testing cannot
 //! disagree with the visible cells.
 
+use std::rc::Rc;
+
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::InvalidateRect;
 use windows::Win32::UI::Controls::{
@@ -715,8 +717,27 @@ impl App {
         }
 
         let initial = self.settings.clone();
-        if let Some(settings) = crate::dialogs::settings::show(parent, &initial) {
+        let app_ptr: *mut App = self;
+        let preview: Rc<dyn Fn(&Settings)> = Rc::new(move |settings: &Settings| {
+            // SAFETY: the modal dialog returns before `show_settings` does, so
+            // the pointer is valid for every preview call.
+            unsafe { apply_preview(app_ptr, settings) }
+        });
+
+        if let Some(settings) = crate::dialogs::settings::show(parent, &initial, preview) {
             self.apply_settings(settings);
+        } else {
+            // Restore the pager state that live preview may have changed.
+            self.settings = initial;
+            self.settings.renderer_view_modes = self.view_modes.clone();
+            self.rebuild_layout();
+            self.resize_window_if_needed();
+            self.apply_opacity();
+            if !self.hwnd.0.is_null() {
+                unsafe {
+                    let _ = InvalidateRect(Some(self.hwnd), None, false);
+                }
+            }
         }
         self.restart_timers();
 
@@ -816,6 +837,28 @@ impl App {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
             );
+        }
+    }
+}
+
+/// Applies a preview settings copy without persisting it.
+///
+/// SAFETY: `app` must be the live `App` pointer for the UI thread. The Settings
+/// dialog is modal, so no other `App` mutation runs concurrently.
+unsafe fn apply_preview(app: *mut App, settings: &Settings) {
+    let app = unsafe { &mut *app };
+    let taskbar = app.settings.show_app_in_taskbar;
+    app.settings = settings.clone();
+    // Taskbar changes take effect on Save, not while previewing.
+    app.settings.show_app_in_taskbar = taskbar;
+    app.settings.renderer_view_modes = app.view_modes.clone();
+    app.apply_opacity();
+    app.rebuild_layout();
+    app.resize_window_if_needed();
+    if !app.hwnd.0.is_null() {
+        // SAFETY: invalidating the pager window on its owning thread.
+        unsafe {
+            let _ = InvalidateRect(Some(app.hwnd), None, false);
         }
     }
 }

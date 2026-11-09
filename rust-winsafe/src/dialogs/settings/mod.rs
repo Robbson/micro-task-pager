@@ -15,6 +15,11 @@ use std::rc::Rc;
 use winsafe::{self as w, co, gui, prelude::*};
 
 use windows::Win32::Foundation::{COLORREF, HWND as WinHWND, RECT};
+use windows::Win32::Graphics::Gdi::{
+    CreateSolidBrush, DT_CENTER, DT_SINGLELINE, DT_VCENTER, DeleteObject, DrawTextW, FillRect,
+    FrameRect, HGDIOBJ, SetBkMode, SetTextColor, TRANSPARENT,
+};
+use windows::Win32::UI::Controls::DRAWITEMSTRUCT;
 use windows::Win32::UI::Controls::Dialogs::{CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW, ChooseColorW};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowRect, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE, SetWindowPos,
@@ -29,8 +34,11 @@ use draft::{Field, Section, SettingsDraft};
 struct Controls {
     view_mode: gui::ComboBox,
     pager_height: gui::Edit,
+    pager_height_spin: gui::UpDown,
     icon_pad_x: gui::Edit,
+    icon_pad_x_spin: gui::UpDown,
     icon_pad_y: gui::Edit,
+    icon_pad_y_spin: gui::UpDown,
     opacity: gui::Trackbar,
     opacity_label: gui::Label,
     border_style: gui::ComboBox,
@@ -42,14 +50,23 @@ struct Controls {
     active_window_border: gui::Button,
     active_window_bg: gui::Button,
     primary_delay: gui::Edit,
+    primary_delay_spin: gui::UpDown,
     secondary_delay: gui::Edit,
+    secondary_delay_spin: gui::UpDown,
     show_taskbar: gui::CheckBox,
 }
 
 type Reverts = Rc<RefCell<Vec<(Field, gui::Button)>>>;
 
 /// Shows the modal Settings dialog and returns the accepted settings.
-pub fn show(parent: &gui::WindowMain, initial: &Settings) -> Option<Settings> {
+///
+/// `preview` applies the working copy to the live pager while the dialog is
+/// open; it must not persist anything.
+pub fn show(
+    parent: &gui::WindowMain,
+    initial: &Settings,
+    preview: Rc<dyn Fn(&Settings)>,
+) -> Option<Settings> {
     let dont_move = (gui::Horz::None, gui::Vert::None);
     let wnd = gui::WindowModal::new_dlg(ids::IDD_SETTINGS);
 
@@ -71,8 +88,15 @@ pub fn show(parent: &gui::WindowMain, initial: &Settings) -> Option<Settings> {
     let controls = Controls {
         view_mode: gui::ComboBox::new_dlg(&layout_page, ids::IDC_VIEW_MODE, dont_move),
         pager_height: gui::Edit::new_dlg(&layout_page, ids::IDC_PAGER_HEIGHT, dont_move),
+        pager_height_spin: gui::UpDown::new_dlg(
+            &layout_page,
+            ids::IDC_PAGER_HEIGHT_SPIN,
+            dont_move,
+        ),
         icon_pad_x: gui::Edit::new_dlg(&layout_page, ids::IDC_ICON_PAD_X, dont_move),
+        icon_pad_x_spin: gui::UpDown::new_dlg(&layout_page, ids::IDC_ICON_PAD_X_SPIN, dont_move),
         icon_pad_y: gui::Edit::new_dlg(&layout_page, ids::IDC_ICON_PAD_Y, dont_move),
+        icon_pad_y_spin: gui::UpDown::new_dlg(&layout_page, ids::IDC_ICON_PAD_Y_SPIN, dont_move),
         opacity: gui::Trackbar::new_dlg(&theme_page, ids::IDC_OPACITY, dont_move),
         opacity_label: gui::Label::new_dlg(&theme_page, ids::IDC_OPACITY_LABEL, dont_move),
         border_style: gui::ComboBox::new_dlg(&theme_page, ids::IDC_BORDER_STYLE, dont_move),
@@ -92,7 +116,17 @@ pub fn show(parent: &gui::WindowMain, initial: &Settings) -> Option<Settings> {
         ),
         active_window_bg: gui::Button::new_dlg(&theme_page, ids::IDC_ACTIVE_WINDOW_BG, dont_move),
         primary_delay: gui::Edit::new_dlg(&misc_page, ids::IDC_PRIMARY_DELAY, dont_move),
+        primary_delay_spin: gui::UpDown::new_dlg(
+            &misc_page,
+            ids::IDC_PRIMARY_DELAY_SPIN,
+            dont_move,
+        ),
         secondary_delay: gui::Edit::new_dlg(&misc_page, ids::IDC_SECONDARY_DELAY, dont_move),
+        secondary_delay_spin: gui::UpDown::new_dlg(
+            &misc_page,
+            ids::IDC_SECONDARY_DELAY_SPIN,
+            dont_move,
+        ),
         show_taskbar: gui::CheckBox::new_dlg(&misc_page, ids::IDC_SHOW_TASKBAR, dont_move),
     };
 
@@ -107,13 +141,15 @@ pub fn show(parent: &gui::WindowMain, initial: &Settings) -> Option<Settings> {
         &controls,
         &draft,
         &reverts,
+        &preview,
     );
-    attach_edits(&controls, &draft, &reverts);
-    attach_combos(&controls, &draft, &reverts);
-    attach_color_buttons(&controls, &draft, &reverts);
-    attach_opacity(&controls, &draft, &reverts);
-    attach_checkbox(&controls, &draft, &reverts);
-    attach_buttons(&wnd, &tabs, &controls, &draft, &reverts, &result);
+    attach_edits(&controls, &draft, &reverts, &preview);
+    attach_combos(&controls, &draft, &reverts, &preview);
+    attach_color_buttons(&controls, &draft, &reverts, &preview);
+    attach_color_draw(&theme_page, &draft);
+    attach_opacity(&controls, &draft, &reverts, &preview);
+    attach_checkbox(&controls, &draft, &reverts, &preview);
+    attach_buttons(&wnd, &tabs, &controls, &draft, &reverts, &result, &preview);
 
     let controls_init = controls.clone();
     let draft_init = Rc::clone(&draft);
@@ -130,6 +166,56 @@ pub fn show(parent: &gui::WindowMain, initial: &Settings) -> Option<Settings> {
             .items()
             .add(&["Box", "Underline"]);
         controls_init.opacity.set_range(25, 100);
+        controls_init
+            .pager_height_spin
+            .set_range(draft::MIN_PAGER_HEIGHT, draft::MAX_PAGER_HEIGHT);
+        controls_init
+            .icon_pad_x_spin
+            .set_range(-draft::MAX_ICON_PADDING, draft::MAX_ICON_PADDING);
+        controls_init
+            .icon_pad_y_spin
+            .set_range(-draft::MAX_ICON_PADDING, draft::MAX_ICON_PADDING);
+        controls_init
+            .primary_delay_spin
+            .set_range(draft::MIN_PRIMARY_DELAY as i32, draft::MAX_DELAY as i32);
+        controls_init
+            .secondary_delay_spin
+            .set_range(draft::MIN_SECONDARY_DELAY as i32, draft::MAX_DELAY as i32);
+
+        // SAFETY: these controls were created by the dialog and live on this
+        // thread; UDM_SETBUDDY only associates the spinner with its edit.
+        unsafe {
+            let _ = controls_init
+                .pager_height_spin
+                .hwnd()
+                .SendMessage(w::msg::UdmSetBuddy {
+                    hbuddy: controls_init.pager_height.hwnd(),
+                });
+            let _ = controls_init
+                .icon_pad_x_spin
+                .hwnd()
+                .SendMessage(w::msg::UdmSetBuddy {
+                    hbuddy: controls_init.icon_pad_x.hwnd(),
+                });
+            let _ = controls_init
+                .icon_pad_y_spin
+                .hwnd()
+                .SendMessage(w::msg::UdmSetBuddy {
+                    hbuddy: controls_init.icon_pad_y.hwnd(),
+                });
+            let _ = controls_init
+                .primary_delay_spin
+                .hwnd()
+                .SendMessage(w::msg::UdmSetBuddy {
+                    hbuddy: controls_init.primary_delay.hwnd(),
+                });
+            let _ = controls_init
+                .secondary_delay_spin
+                .hwnd()
+                .SendMessage(w::msg::UdmSetBuddy {
+                    hbuddy: controls_init.secondary_delay.hwnd(),
+                });
+        }
 
         let working = draft_init.borrow().working().clone();
         load_all(&controls_init, &working);
@@ -149,6 +235,7 @@ fn build_reverts(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
     reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
 ) {
     let fields = [
         (
@@ -230,12 +317,14 @@ fn build_reverts(
         let draft2 = Rc::clone(draft);
         let reverts2 = Rc::clone(reverts);
         let controls2 = controls.clone();
+        let preview2 = Rc::clone(preview);
         let button2 = button.clone();
         button.on().bn_clicked(move || {
             draft2.borrow_mut().revert(field);
             let working = draft2.borrow().working().clone();
             load_all(&controls2, &working);
             refresh_reverts(&reverts2, &draft2);
+            preview2(&working);
             let _ = button2.hwnd().ShowWindow(co::SW::HIDE);
             Ok(())
         });
@@ -243,21 +332,46 @@ fn build_reverts(
     }
 }
 
-fn attach_edits(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>, reverts: &Reverts) {
-    attach_edit(&controls.pager_height, Field::PagerHeight, draft, reverts);
-    attach_edit(&controls.icon_pad_x, Field::IconPaddingX, draft, reverts);
-    attach_edit(&controls.icon_pad_y, Field::IconPaddingY, draft, reverts);
+fn attach_edits(
+    controls: &Controls,
+    draft: &Rc<RefCell<SettingsDraft>>,
+    reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
+) {
+    attach_edit(
+        &controls.pager_height,
+        Field::PagerHeight,
+        draft,
+        reverts,
+        preview,
+    );
+    attach_edit(
+        &controls.icon_pad_x,
+        Field::IconPaddingX,
+        draft,
+        reverts,
+        preview,
+    );
+    attach_edit(
+        &controls.icon_pad_y,
+        Field::IconPaddingY,
+        draft,
+        reverts,
+        preview,
+    );
     attach_edit(
         &controls.primary_delay,
         Field::PrimaryUpdateDelay,
         draft,
         reverts,
+        preview,
     );
     attach_edit(
         &controls.secondary_delay,
         Field::SecondaryUpdateDelay,
         draft,
         reverts,
+        preview,
     );
 }
 
@@ -266,32 +380,44 @@ fn attach_edit(
     field: Field,
     draft: &Rc<RefCell<SettingsDraft>>,
     reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
 ) {
     let edit2 = edit.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     edit.on().en_change(move || {
         if let Ok(text) = edit2.text()
             && let Ok(value) = text.trim().parse::<f64>()
         {
             draft2.borrow_mut().set_number(field, value);
             refresh_reverts(&reverts2, &draft2);
+            let working = draft2.borrow().working().clone();
+            preview2(&working);
         }
         Ok(())
     });
 }
 
-fn attach_combos(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>, reverts: &Reverts) {
+fn attach_combos(
+    controls: &Controls,
+    draft: &Rc<RefCell<SettingsDraft>>,
+    reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
+) {
     let combo = &controls.view_mode;
     let combo2 = combo.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     combo.on().cbn_sel_change(move || {
         if let Some(index) = combo2.items().selected_index() {
             draft2
                 .borrow_mut()
                 .set_index(Field::ViewModeDefault, index as usize);
             refresh_reverts(&reverts2, &draft2);
+            let working = draft2.borrow().working().clone();
+            preview2(&working);
         }
         Ok(())
     });
@@ -300,12 +426,15 @@ fn attach_combos(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>, revert
     let combo2 = combo.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     combo.on().cbn_sel_change(move || {
         if let Some(index) = combo2.items().selected_index() {
             draft2
                 .borrow_mut()
                 .set_index(Field::DesktopBorderStyle, index as usize);
             refresh_reverts(&reverts2, &draft2);
+            let working = draft2.borrow().working().clone();
+            preview2(&working);
         }
         Ok(())
     });
@@ -315,6 +444,7 @@ fn attach_color_buttons(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
     reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
 ) {
     let buttons = [
         (&controls.desktop_bg, Field::DesktopBackgroundColor),
@@ -339,6 +469,7 @@ fn attach_color_buttons(
         let button2 = button.clone();
         let draft2 = Rc::clone(draft);
         let reverts2 = Rc::clone(reverts);
+        let preview2 = Rc::clone(preview);
         button.on().bn_clicked(move || {
             let current = {
                 let working = draft2.borrow();
@@ -346,37 +477,55 @@ fn attach_color_buttons(
             };
             if let Some(argb) = choose_color(button2.hwnd(), current) {
                 draft2.borrow_mut().set_color(field, argb);
-                set_color_button(&button2, argb);
+                invalidate_color_button(&button2);
                 refresh_reverts(&reverts2, &draft2);
+                let working = draft2.borrow().working().clone();
+                preview2(&working);
             }
             Ok(())
         });
     }
 }
 
-fn attach_opacity(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>, reverts: &Reverts) {
+fn attach_opacity(
+    controls: &Controls,
+    draft: &Rc<RefCell<SettingsDraft>>,
+    reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
+) {
     let track2 = controls.opacity.clone();
     let label2 = controls.opacity_label.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     controls.opacity.on().wm_h_scroll(move |_| {
         let percent = track2.pos();
         draft2.borrow_mut().set_opacity_percent(percent as f64);
         let _ = label2.set_text_and_resize(&format!("{percent}%"));
         refresh_reverts(&reverts2, &draft2);
+        let working = draft2.borrow().working().clone();
+        preview2(&working);
         Ok(())
     });
 }
 
-fn attach_checkbox(controls: &Controls, draft: &Rc<RefCell<SettingsDraft>>, reverts: &Reverts) {
+fn attach_checkbox(
+    controls: &Controls,
+    draft: &Rc<RefCell<SettingsDraft>>,
+    reverts: &Reverts,
+    preview: &Rc<dyn Fn(&Settings)>,
+) {
     let check2 = controls.show_taskbar.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     controls.show_taskbar.on().bn_clicked(move || {
         draft2
             .borrow_mut()
             .set_check(Field::ShowAppInTaskbar, check2.is_checked());
         refresh_reverts(&reverts2, &draft2);
+        let working = draft2.borrow().working().clone();
+        preview2(&working);
         Ok(())
     });
 }
@@ -388,6 +537,7 @@ fn attach_buttons(
     draft: &Rc<RefCell<SettingsDraft>>,
     reverts: &Reverts,
     result: &Rc<RefCell<Option<Settings>>>,
+    preview: &Rc<dyn Fn(&Settings)>,
 ) {
     let dont_move = (gui::Horz::None, gui::Vert::None);
 
@@ -396,6 +546,7 @@ fn attach_buttons(
     let controls2 = controls.clone();
     let draft2 = Rc::clone(draft);
     let reverts2 = Rc::clone(reverts);
+    let preview2 = Rc::clone(preview);
     defaults.on().bn_clicked(move || {
         let section = tabs2
             .items()
@@ -406,6 +557,7 @@ fn attach_buttons(
         let working = draft2.borrow().working().clone();
         load_all(&controls2, &working);
         refresh_reverts(&reverts2, &draft2);
+        preview2(&working);
         Ok(())
     });
 
@@ -477,12 +629,15 @@ fn load_all(controls: &Controls, settings: &Settings) {
     let _ = controls
         .pager_height
         .set_text(&settings.pager_height.to_string());
+    controls.pager_height_spin.set_pos(settings.pager_height);
     let _ = controls
         .icon_pad_x
         .set_text(&settings.icon_padding_x.to_string());
+    controls.icon_pad_x_spin.set_pos(settings.icon_padding_x);
     let _ = controls
         .icon_pad_y
         .set_text(&settings.icon_padding_y.to_string());
+    controls.icon_pad_y_spin.set_pos(settings.icon_padding_y);
 
     let opacity = (settings.background_opacity * 100.0).round() as u32;
     controls.opacity.set_pos(opacity.clamp(25, 100));
@@ -498,29 +653,26 @@ fn load_all(controls: &Controls, settings: &Settings) {
             DesktopBorderStyle::Underline => 1,
         }));
 
-    set_color_button(&controls.desktop_bg, settings.desktop_background_color);
-    set_color_button(&controls.desktop_border, settings.desktop_border_color);
-    set_color_button(
-        &controls.active_desktop_border,
-        settings.active_desktop_border_color,
-    );
-    set_color_button(&controls.window_bg, settings.window_background_color);
-    set_color_button(&controls.window_border, settings.window_border_color);
-    set_color_button(
-        &controls.active_window_border,
-        settings.active_window_border_color,
-    );
-    set_color_button(
-        &controls.active_window_bg,
-        settings.active_window_background_color,
-    );
+    invalidate_color_button(&controls.desktop_bg);
+    invalidate_color_button(&controls.desktop_border);
+    invalidate_color_button(&controls.active_desktop_border);
+    invalidate_color_button(&controls.window_bg);
+    invalidate_color_button(&controls.window_border);
+    invalidate_color_button(&controls.active_window_border);
+    invalidate_color_button(&controls.active_window_bg);
 
     let _ = controls
         .primary_delay
         .set_text(&settings.primary_update_delay.to_string());
+    controls
+        .primary_delay_spin
+        .set_pos(settings.primary_update_delay as i32);
     let _ = controls
         .secondary_delay
         .set_text(&settings.secondary_update_delay.to_string());
+    controls
+        .secondary_delay_spin
+        .set_pos(settings.secondary_update_delay as i32);
     controls
         .show_taskbar
         .set_check(settings.show_app_in_taskbar);
@@ -571,10 +723,71 @@ fn position_dialog(wnd: &gui::WindowModal, parent: &gui::WindowMain) {
     }
 }
 
-fn set_color_button(button: &gui::Button, argb: u32) {
-    let _ = button
-        .hwnd()
-        .SetWindowText(&format!("#{:06X}", argb & 0x00FF_FFFF));
+fn invalidate_color_button(button: &gui::Button) {
+    let _ = button.hwnd().InvalidateRect(None, true);
+}
+
+fn attach_color_draw(page: &gui::TabPage, draft: &Rc<RefCell<SettingsDraft>>) {
+    let draft2 = Rc::clone(draft);
+    page.on().wm(co::WM::DRAWITEM, move |p| {
+        // SAFETY: WM_DRAWITEM carries a DRAWITEMSTRUCT pointer in lParam.
+        let item = unsafe { &*(p.lparam as *const DRAWITEMSTRUCT) };
+        if let Some(field) = color_field(item.CtlID as u16) {
+            let argb = {
+                let draft = draft2.borrow();
+                color_value(draft.working(), field)
+            };
+            draw_color_swatch(item, argb);
+        }
+        Ok(0)
+    });
+}
+
+fn color_field(id: u16) -> Option<Field> {
+    match id {
+        ids::IDC_DESKTOP_BG => Some(Field::DesktopBackgroundColor),
+        ids::IDC_DESKTOP_BORDER => Some(Field::DesktopBorderColor),
+        ids::IDC_ACTIVE_DESKTOP_BORDER => Some(Field::ActiveDesktopBorderColor),
+        ids::IDC_WINDOW_BG => Some(Field::WindowBackgroundColor),
+        ids::IDC_WINDOW_BORDER => Some(Field::WindowBorderColor),
+        ids::IDC_ACTIVE_WINDOW_BORDER => Some(Field::ActiveWindowBorderColor),
+        ids::IDC_ACTIVE_WINDOW_BG => Some(Field::ActiveWindowBackgroundColor),
+        _ => None,
+    }
+}
+
+fn draw_color_swatch(item: &DRAWITEMSTRUCT, argb: u32) {
+    unsafe {
+        let rgb = argb & 0x00FF_FFFF;
+        let brush = CreateSolidBrush(COLORREF(rgb));
+        FillRect(item.hDC, &item.rcItem, brush);
+        let _ = DeleteObject(HGDIOBJ(brush.0));
+
+        let border = CreateSolidBrush(COLORREF(0));
+        FrameRect(item.hDC, &item.rcItem, border);
+        let _ = DeleteObject(HGDIOBJ(border.0));
+
+        let red = (rgb >> 16) & 0xFF;
+        let green = (rgb >> 8) & 0xFF;
+        let blue = rgb & 0xFF;
+        let brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+        let text_color = if brightness > 128 {
+            COLORREF(0)
+        } else {
+            COLORREF(0x00FF_FFFF)
+        };
+        SetTextColor(item.hDC, text_color);
+        SetBkMode(item.hDC, TRANSPARENT);
+
+        let mut text: Vec<u16> = format!("#{rgb:06X}").encode_utf16().collect();
+        let mut rect = item.rcItem;
+        DrawTextW(
+            item.hDC,
+            &mut text,
+            &mut rect,
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
+        );
+    }
 }
 
 fn color_value(settings: &Settings, field: Field) -> u32 {

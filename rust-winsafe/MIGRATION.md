@@ -67,7 +67,7 @@ cargo build --release
 ```
 
 Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 34 unit tests
-pass, and the release executable is 1,103,872 bytes (1.05 MiB).
+pass, and the release executable is 1,111,552 bytes (1.06 MiB).
 
 ### Follow-up fixes after the first interaction test (2026-11-09)
 
@@ -116,13 +116,17 @@ The first manual run confirmed the pager and About dialog work, and exposed thre
   their 12 tests; `Settings::save()` and `DesktopBorderStyle::as_u32()` were added to `settings.rs`.
 - Save/Cancel/Defaults use `IDOK`/`IDCANCEL`; Escape uses `wm_command_acc_menu(co::DLGID::CANCEL)`.
   Per-row revert buttons start hidden and appear when the option differs from the opening value.
-- Color rows use `ChooseColorW`; the button shows the RGB hex value. The trackbar drives opacity;
-  numeric edits are parsed and clamped by the draft.
+- Color rows use `ChooseColorW` and owner-drawn buttons: `WM_DRAWITEM` fills the swatch with the
+  selected color, draws a border and the RGB hex text in a contrasting color. The trackbar drives
+  opacity; numeric edits have `msctls_updown32` spinners using `UDS_AUTOBUDDY` + `UDS_SETBUDDYINT`
+  and ranges from the draft limits.
+- Live preview: every edit, combo, checkbox, color, revert and Defaults action applies the working
+  copy to the pager without saving. Visual settings (layout, colors, opacity) update immediately;
+  timer and taskbar changes still take effect only on Save. Cancel restores the opening settings.
 - On Save the pager updates timers, layered opacity, taskbar style/pinning, layout, and persists the
   settings. Cancel leaves the running settings untouched.
 - The dialog is topmost and placed next to the pager with the reused C# placement algorithm.
-- Not yet implemented: live preview while editing, color swatches instead of hex text, and
-  `UpDown` spinners on the numeric rows. The dialog is fixed-size and does not resize.
+- The dialog is fixed-size and does not resize.
 
 Interaction verification is otherwise still pending. The checklist that needs a real desktop session:
 
@@ -136,15 +140,15 @@ Interaction verification is otherwise still pending. The checklist that needs a 
 - About opens, shows a sharp logo on a white background, closes with the button and Escape, and does
   not leave the pager disabled;
 - Settings opens next to the pager; Layout/Theme/Misc switch correctly; values match the registry;
-  Save applies timers, opacity, taskbar/pinning and layout; Cancel leaves them untouched; Defaults
-  resets only the active page; the color picker and per-row revert buttons work;
+  live preview updates layout/colors/opacity while editing; Save applies timers, opacity,
+  taskbar/pinning and layout; Cancel restores the opening state; Defaults resets only the active
+  page; color swatches, the color picker, spinners, and per-row revert buttons work;
 - taskbar pinning / all-desktop pinning still works when `ShowAppInTaskbar` is enabled.
 
 ## Known gaps and next steps
 
-1. **Settings dialog polish.** The v1 uses the fixed `.rc` template. Remaining work: live preview
-   while editing, color swatches instead of hex text, `UpDown` spinners, and checking the dialog's
-   sizing at non-100% DPI.
+1. **Settings dialog polish.** Live preview, color swatches, and `UpDown` spinners are implemented.
+   Remaining check: the fixed `.rc` dialog at non-100% DPI and with very long localization strings.
 2. **Remaining raw window calls.** Timers, `TrackPopupMenu`, opacity, topmost, and layered styles are
    still raw `windows` calls. Move them to winsafe wrappers only where that clearly reduces code.
 3. **About polish.** The winsafe labels use the default UI font; the baseline used per-element fonts
