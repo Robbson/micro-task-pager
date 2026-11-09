@@ -23,8 +23,9 @@
 > A native Rust port is in development. Its UI targets WinUI 3 through `windows-reactor`. The current
 > release remains the C#/.NET implementation; the Rust build is not published yet. The Rust build
 > requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4 or later
-> framework package, which is installed separately. See [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md)
-> and [`rust/MIGRATION.md`](rust/MIGRATION.md).
+> framework package, which is installed separately. See [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md),
+> [`rust/MIGRATION.md`](rust/MIGRATION.md), and the
+> [implementation comparison](COMPARISON.md) for dependencies, size, resource use, and code metrics.
 
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
