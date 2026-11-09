@@ -17,11 +17,11 @@ use windows::Win32::Foundation::{COLORREF, HWND as WinHWND, POINT as WinPoint};
 use windows::Win32::Graphics::Gdi::{InvalidateRect, ScreenToClient};
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, SetForegroundWindow,
-    SetLayeredWindowAttributes, SetMenuInfo, SetTimer, SetWindowPos, TrackPopupMenu,
-    HWND_NOTOPMOST, HWND_TOPMOST, LWA_ALPHA, MENUINFO, MF_POPUP, MF_SEPARATOR, MF_STRING,
-    MIM_APPLYTOSUBMENUS, MIM_STYLE, MNS_NOCHECK, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SWP_NOZORDER, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TPM_TOPALIGN,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HWND_NOTOPMOST, HWND_TOPMOST,
+    LWA_ALPHA, MENUINFO, MF_POPUP, MF_SEPARATOR, MF_STRING, MIM_APPLYTOSUBMENUS, MIM_STYLE,
+    MNS_NOCHECK, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow,
+    SetLayeredWindowAttributes, SetMenuInfo, SetTimer, SetWindowPos, TPM_LEFTALIGN, TPM_RETURNCMD,
+    TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenu,
 };
 
 const MK_LBUTTON: u16 = 0x0001;

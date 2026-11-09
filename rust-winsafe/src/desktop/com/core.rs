@@ -40,7 +40,7 @@ use windows::Win32::UI::Shell::Common::IObjectArray;
 use windows::Win32::UI::Shell::IVirtualDesktopManager;
 use windows::core::{BOOL, GUID, HRESULT, IUnknown, IUnknown_Vtbl, Interface, PCWSTR, PWSTR};
 
-use crate::desktop::{ApiError, PinOutcome, VirtualDesktopApi};
+use crate::desktop::{ApiError, PinOutcome, VirtualDesktopApi, WindowDesktopId};
 
 const CLSID_IMMERSIVE_SHELL: GUID = GUID::from_u128(0xC2F03A33_21F5_47FA_B4BB_156362A2F239);
 const CLSID_VIRTUAL_DESKTOP_MANAGER: GUID = GUID::from_u128(0xAA509086_5CA9_4C25_8F95_589D3C07B48A);
@@ -391,7 +391,14 @@ where
         Ok(ids)
     }
 
-    fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError> {
+    fn current_desktop_id(&self) -> Result<Option<GUID>, ApiError> {
+        match self.internal.current_desktop()? {
+            Some(desktop) => Ok(Some(desktop.id()?)),
+            None => Ok(None),
+        }
+    }
+
+    fn window_desktop_id(&self, hwnd: HWND) -> Result<Option<WindowDesktopId>, ApiError> {
         let id = unsafe { self.manager_private.GetWindowDesktopId(hwnd)? };
 
         if id == GUID::zeroed() {
@@ -401,15 +408,25 @@ where
         if id == APP_ON_ALL_DESKTOPS || id == WINDOW_ON_ALL_DESKTOPS {
             // Pinned windows do not live on one desktop. For pager purposes
             // they follow the current desktop.
-            return Ok(Some(self.current_index()?));
+            return Ok(Some(WindowDesktopId::AllDesktops));
         }
 
-        let ids = self.desktop_ids()?;
+        Ok(Some(WindowDesktopId::Desktop(id)))
+    }
 
-        Ok(ids
-            .iter()
-            .position(|candidate| *candidate == id)
-            .map(|index| index as u32))
+    fn index_of_window(&self, hwnd: HWND) -> Result<Option<u32>, ApiError> {
+        match self.window_desktop_id(hwnd)? {
+            None => Ok(None),
+            Some(WindowDesktopId::AllDesktops) => Ok(Some(self.current_index()?)),
+            Some(WindowDesktopId::Desktop(id)) => {
+                let ids = self.desktop_ids()?;
+
+                Ok(ids
+                    .iter()
+                    .position(|candidate| *candidate == id)
+                    .map(|index| index as u32))
+            }
+        }
     }
 
     fn switch_to(&self, index: u32) -> Result<(), ApiError> {

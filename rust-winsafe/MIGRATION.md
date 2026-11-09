@@ -66,8 +66,8 @@ cargo test
 cargo build --release
 ```
 
-Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 20 unit tests
-pass, and the release executable is 972,800 bytes (0.93 MiB).
+Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 21 unit tests
+pass, and the release executable is 976,384 bytes (0.93 MiB).
 
 ### Follow-up fixes after the first interaction test (2026-11-09)
 
@@ -91,6 +91,19 @@ The first manual run confirmed the pager and About dialog work, and exposed thre
   release executable.
 - **The context menu had no icons.** It now uses the same leading glyphs as the C# and `rust-winui`
   menus (`↔`, `⌖`, `ℹ`, `✕`) and `MNS_NOCHECK` to remove the empty check column.
+- **Idle CPU: the desktop list is now fetched once per snapshot.** The baseline called
+  `index_of_window` for every window; that method re-enumerated all desktops through COM each time.
+  The snapshot already fetched `desktop_ids` for its own state, so this repeated the expensive
+  enumeration once per window. The desktop API now exposes:
+  - `current_desktop_id()` so the snapshot can resolve the current index from the list it already
+    has, instead of calling `current_index()`, which enumerated the list again;
+  - `window_desktop_id()` returning either `WindowDesktopId::Desktop(GUID)` or
+    `WindowDesktopId::AllDesktops` from a single `GetWindowDesktopId` call.
+
+  `WindowSnapshotter` fetches `desktop_ids` once, resolves the current index, and maps each window
+  against that cached list. Pinned windows still follow the current desktop. This matches the
+  optimization that cut idle CPU by 2.5x in `rust-winui` and 3.8x in C#. A unit test covers the
+  cached-list resolution (`desktop_index_resolves_against_the_fetched_list`).
 
 Interaction verification is otherwise still pending. The checklist that needs a real desktop session:
 
