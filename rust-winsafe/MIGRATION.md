@@ -161,6 +161,10 @@ private bytes are the 20 s steady-state samples. Source-line counts are intentio
   timer and taskbar changes still take effect only on Save. Cancel restores the opening settings.
 - On Save the pager updates timers, layered opacity, taskbar style/pinning, layout, and persists the
   settings. Cancel leaves the running settings untouched.
+- Help texts mirror the C# dialog: label tooltips for View Mode Default, Pager Height, both icon
+  paddings, and both update delays, plus the Defaults button and every per-row revert button.
+  winsafe 0.0.29 has no tooltip wrapper, so `src/dialogs/settings/tooltips.rs` creates a native
+  `tooltips_class32` control with the raw `windows` crate and registers each control by id.
 - The dialog is topmost and placed next to the pager with the reused C# placement algorithm.
 - The dialog is fixed-size and does not resize.
 

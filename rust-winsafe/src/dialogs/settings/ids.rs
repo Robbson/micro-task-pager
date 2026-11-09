@@ -15,11 +15,15 @@ pub(super) const IDC_SETTINGS_TABS: u16 = 1000;
 pub(super) const IDC_SETTINGS_DEFAULTS: u16 = 1001;
 
 pub(super) const IDC_VIEW_MODE: u16 = 1010;
+pub(super) const IDC_VIEW_MODE_LABEL: u16 = 1060;
 pub(super) const IDC_PAGER_HEIGHT: u16 = 1011;
+pub(super) const IDC_PAGER_HEIGHT_LABEL: u16 = 1061;
 pub(super) const IDC_PAGER_HEIGHT_SPIN: u16 = 1051;
 pub(super) const IDC_ICON_PAD_X: u16 = 1012;
+pub(super) const IDC_ICON_PAD_X_LABEL: u16 = 1062;
 pub(super) const IDC_ICON_PAD_X_SPIN: u16 = 1052;
 pub(super) const IDC_ICON_PAD_Y: u16 = 1013;
+pub(super) const IDC_ICON_PAD_Y_LABEL: u16 = 1063;
 pub(super) const IDC_ICON_PAD_Y_SPIN: u16 = 1053;
 
 pub(super) const IDC_OPACITY: u16 = 1020;
@@ -34,8 +38,10 @@ pub(super) const IDC_ACTIVE_WINDOW_BORDER: u16 = 1028;
 pub(super) const IDC_ACTIVE_WINDOW_BG: u16 = 1029;
 
 pub(super) const IDC_PRIMARY_DELAY: u16 = 1040;
+pub(super) const IDC_PRIMARY_DELAY_LABEL: u16 = 1064;
 pub(super) const IDC_PRIMARY_DELAY_SPIN: u16 = 1054;
 pub(super) const IDC_SECONDARY_DELAY: u16 = 1041;
+pub(super) const IDC_SECONDARY_DELAY_LABEL: u16 = 1065;
 pub(super) const IDC_SECONDARY_DELAY_SPIN: u16 = 1055;
 pub(super) const IDC_SHOW_TASKBAR: u16 = 1042;
 

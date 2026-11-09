@@ -21,6 +21,7 @@
 
 mod draft;
 mod ids;
+mod tooltips;
 
 use std::cell::RefCell;
 use std::mem::size_of;
@@ -71,6 +72,30 @@ struct Controls {
 }
 
 type Reverts = Rc<RefCell<Vec<(Field, gui::Button)>>>;
+
+/// Revert buttons per tab page, used to attach the shared tooltip.
+const LAYOUT_REVERTS: [u16; 4] = [
+    ids::IDC_REVERT_VIEW_MODE,
+    ids::IDC_REVERT_PAGER_HEIGHT,
+    ids::IDC_REVERT_ICON_PAD_X,
+    ids::IDC_REVERT_ICON_PAD_Y,
+];
+const THEME_REVERTS: [u16; 9] = [
+    ids::IDC_REVERT_OPACITY,
+    ids::IDC_REVERT_BORDER_STYLE,
+    ids::IDC_REVERT_DESKTOP_BG,
+    ids::IDC_REVERT_DESKTOP_BORDER,
+    ids::IDC_REVERT_ACTIVE_DESKTOP_BORDER,
+    ids::IDC_REVERT_WINDOW_BG,
+    ids::IDC_REVERT_WINDOW_BORDER,
+    ids::IDC_REVERT_ACTIVE_WINDOW_BORDER,
+    ids::IDC_REVERT_ACTIVE_WINDOW_BG,
+];
+const MISC_REVERTS: [u16; 3] = [
+    ids::IDC_REVERT_PRIMARY_DELAY,
+    ids::IDC_REVERT_SECONDARY_DELAY,
+    ids::IDC_REVERT_SHOW_TASKBAR,
+];
 
 // ---- Entry point --------------------------------------------------------
 
@@ -172,6 +197,7 @@ pub fn show(
     let reverts_init = Rc::clone(&reverts);
     let wnd_init = wnd.clone();
     let parent_init = parent.clone();
+    let tooltips_init: Rc<RefCell<Option<tooltips::Tooltips>>> = Rc::new(RefCell::new(None));
     wnd.on().wm_init_dialog(move |_| {
         let _ = controls_init
             .view_mode
@@ -236,12 +262,55 @@ pub fn show(
         let working = draft_init.borrow().working().clone();
         load_all(&controls_init, &working);
         refresh_reverts(&reverts_init, &draft_init);
+        install_tooltips(
+            &wnd_init,
+            &layout_page,
+            &theme_page,
+            &misc_page,
+            &tooltips_init,
+        );
         position_dialog(&wnd_init, &parent_init);
         Ok(true)
     });
 
     wnd.show_modal(parent).ok()?;
     result.borrow_mut().take()
+}
+
+/// Creates the dialog tooltip control and attaches every help text.
+///
+/// The tab pages are separate child dialogs, so each page's controls are looked
+/// up through that page's handle. `slot` keeps the [`tooltips::Tooltips`] value
+/// alive for the dialog lifetime; the tooltip text buffers it owns must outlive
+/// the native tools.
+fn install_tooltips(
+    wnd: &gui::WindowModal,
+    layout_page: &gui::TabPage,
+    theme_page: &gui::TabPage,
+    misc_page: &gui::TabPage,
+    slot: &Rc<RefCell<Option<tooltips::Tooltips>>>,
+) {
+    let dialog = win_hwnd(wnd.hwnd());
+    let Some(mut tips) = tooltips::Tooltips::new(dialog) else {
+        return;
+    };
+
+    tips.add_defaults(dialog);
+    tips.add_labels(win_hwnd(layout_page.hwnd()));
+    tips.add_labels(win_hwnd(misc_page.hwnd()));
+    tips.add_reverts(win_hwnd(layout_page.hwnd()), &LAYOUT_REVERTS);
+    tips.add_reverts(win_hwnd(theme_page.hwnd()), &THEME_REVERTS);
+    tips.add_reverts(win_hwnd(misc_page.hwnd()), &MISC_REVERTS);
+
+    crate::logging::info(format!(
+        "settings help tooltips installed: {} tools",
+        tips.tool_count()
+    ));
+    *slot.borrow_mut() = Some(tips);
+}
+
+fn win_hwnd(hwnd: &w::HWND) -> WinHWND {
+    WinHWND(hwnd.ptr())
 }
 
 // ---- Event wiring -------------------------------------------------------

@@ -9,8 +9,8 @@ use windows_reactor::{
     ContentControl, ContentDialog, FontWeight, Grid, GridChildExt, GridLength, HorizontalAlignment,
     InfoBar, InfoBarSeverity, KeyedView, LayoutControl, NumberBox, Orientation, Pivot, PivotItem,
     PivotSlot, ScrollBarVisibility, ScrollViewer, Slider, SlotsControl, StackPanel, Stretch,
-    Symbol, SymbolIcon, TextBlock, ThemeBrush, Thickness, TooltipExt, VerticalAlignment, View,
-    ViewContext, Viewbox, ViewboxSlot, WindowTheme, WindowVisuals,
+    Symbol, SymbolIcon, TextBlock, TextWrapping, ThemeBrush, Thickness, Tooltip, TooltipExt,
+    VerticalAlignment, View, ViewContext, Viewbox, ViewboxSlot, WindowTheme, WindowVisuals,
 };
 
 use super::draft::{Field, MAX_DELAY, MAX_ICON_PADDING, MAX_PAGER_HEIGHT};
@@ -19,9 +19,40 @@ use super::{
 };
 use crate::settings::{DesktopBorderStyle, ViewMode};
 
+/// Width cap for help tooltips. Long help texts wrap here so they become a
+/// compact block instead of one clipped line.
+const TOOLTIP_MAX_WIDTH: f64 = 340.0;
+
+/// Builds a wrapping help tooltip with a readable width cap.
+fn help_tooltip(text: &str) -> Tooltip {
+    Tooltip::rich(
+        TextBlock::new()
+            .text(text.to_owned())
+            .text_wrapping(TextWrapping::Wrap)
+            .max_width(TOOLTIP_MAX_WIDTH),
+    )
+}
 const LABEL_WIDTH: f64 = 230.0;
 const REVERT_WIDTH: f64 = 40.0;
 const EDITOR_WIDTH: f64 = 180.0;
+
+// Tooltips mirror the C# `AppSettingsWindow`; labels without help text use the
+// plain `row` helper.
+const TIP_VIEW_MODE: &str = "Only affects newly created desktops and their screens.";
+const TIP_PAGER_HEIGHT: &str = "The pager's width is automatically calculated from this value and \
+    from the size of all available screen space as well as the amount of virtual desktops.";
+const TIP_ICON_PAD_X: &str = "Negative values are supported as well so less space is taken and \
+    the icons look stacked.";
+const TIP_ICON_PAD_Y: &str = "Negative values are supported as well in case of a very small pager \
+    height, like 40px which is usually the size of the Windows Taskbar.";
+const TIP_PRIMARY_DELAY: &str = "Delay for the main refresh cycle. Affects how often the currently \
+    opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the \
+    pager faster, but can increase CPU usage.";
+const TIP_SECONDARY_DELAY: &str = "Delay for background/secondary updates. Affects how often the \
+    app window is checked for being covered by another one, this includes the Windows Taskbar. \
+    Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more \
+    processing, that's why this delay should be higher than the primary one.";
+const TIP_DEFAULTS: &str = "Reset for the current tab only";
 
 /// Builds the complete Settings window view.
 pub(super) fn build(dialog: &SettingsDialog, context: &mut ViewContext<SettingsDialog>) -> View {
@@ -111,10 +142,11 @@ fn layout_page(dialog: &SettingsDialog, context: &mut ViewContext<SettingsDialog
     );
 
     let rendering = vec![
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "View Mode Default",
+            TIP_VIEW_MODE,
             Field::ViewModeDefault,
             placed(
                 ComboBox::new()
@@ -126,27 +158,30 @@ fn layout_page(dialog: &SettingsDialog, context: &mut ViewContext<SettingsDialog
                     })),
             ),
         ),
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "Pager Height",
+            TIP_PAGER_HEIGHT,
             Field::PagerHeight,
             pager_height,
         ),
     ];
 
     let icons = vec![
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "Icon Padding X",
+            TIP_ICON_PAD_X,
             Field::IconPaddingX,
             padding_x,
         ),
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "Icon Padding Y",
+            TIP_ICON_PAD_Y,
             Field::IconPaddingY,
             padding_y,
         ),
@@ -283,17 +318,19 @@ fn misc_page(dialog: &SettingsDialog, context: &mut ViewContext<SettingsDialog>)
     );
 
     let performance = vec![
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "Primary Update Delay (ms)",
+            TIP_PRIMARY_DELAY,
             Field::PrimaryUpdateDelay,
             primary,
         ),
-        row(
+        row_with_tooltip(
             dialog,
             context,
             "Secondary Update Delay (ms)",
+            TIP_SECONDARY_DELAY,
             Field::SecondaryUpdateDelay,
             secondary,
         ),
@@ -379,10 +416,28 @@ fn row(
     field: Field,
     editor: View,
 ) -> KeyedView {
+    row_with_tooltip(dialog, context, label, "", field, editor)
+}
+
+/// Builds a label/editor/revert row and attaches `tooltip` to the label when it
+/// is not empty.
+fn row_with_tooltip(
+    dialog: &SettingsDialog,
+    context: &mut ViewContext<SettingsDialog>,
+    label: &str,
+    tooltip: &str,
+    field: Field,
+    editor: View,
+) -> KeyedView {
     let label = TextBlock::new()
         .text(label.to_owned())
         .vertical_alignment(VerticalAlignment::Center)
         .grid_column(0);
+    let label: View = if tooltip.is_empty() {
+        label.into()
+    } else {
+        label.tooltip_with(help_tooltip(tooltip))
+    };
 
     let mut children = vec![
         KeyedView::new("label", label),
@@ -486,7 +541,8 @@ fn color_row(
 fn footer(context: &mut ViewContext<SettingsDialog>) -> View {
     let defaults = Button::new()
         .on_click(context.message(Message(MessageKind::ResetSection)))
-        .content("Defaults");
+        .content("Defaults")
+        .tooltip(TIP_DEFAULTS);
     let hint = TextBlock::new()
         .text("Reset the current section")
         .font_size(12.0)
