@@ -37,6 +37,14 @@ pub(super) const IDC_WINDOW_BORDER: u16 = 1027;
 pub(super) const IDC_ACTIVE_WINDOW_BORDER: u16 = 1028;
 pub(super) const IDC_ACTIVE_WINDOW_BG: u16 = 1029;
 
+pub(super) const IDC_DESKTOP_BG_PREVIEW: u16 = 1160;
+pub(super) const IDC_DESKTOP_BORDER_PREVIEW: u16 = 1161;
+pub(super) const IDC_ACTIVE_DESKTOP_BORDER_PREVIEW: u16 = 1162;
+pub(super) const IDC_WINDOW_BG_PREVIEW: u16 = 1163;
+pub(super) const IDC_WINDOW_BORDER_PREVIEW: u16 = 1164;
+pub(super) const IDC_ACTIVE_WINDOW_BORDER_PREVIEW: u16 = 1165;
+pub(super) const IDC_ACTIVE_WINDOW_BG_PREVIEW: u16 = 1166;
+
 pub(super) const IDC_PRIMARY_DELAY: u16 = 1040;
 pub(super) const IDC_PRIMARY_DELAY_LABEL: u16 = 1064;
 pub(super) const IDC_PRIMARY_DELAY_SPIN: u16 = 1054;

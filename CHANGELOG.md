@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rust implementations now also show all the tooltips in the settings window like the C# version
+- rust-winsafe settings dialog is closer to the C# version
+- csharp-winforms settings dialog now sticks to the system colors
+
 ## v1.5.1
 
 - improved performance leads to less CPU usage

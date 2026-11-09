@@ -152,9 +152,14 @@ private bytes are the 20 s steady-state samples. Source-line counts are intentio
   their 12 tests; `Settings::save()` and `DesktopBorderStyle::as_u32()` were added to `settings.rs`.
 - Save/Cancel/Defaults use `IDOK`/`IDCANCEL`; Escape uses `wm_command_acc_menu(co::DLGID::CANCEL)`.
   Per-row revert buttons start hidden and appear when the option differs from the opening value.
-- Color rows use `ChooseColorW` and owner-drawn buttons: `WM_DRAWITEM` fills the swatch with the
-  selected color, draws a border and the RGB hex text in a contrasting color. The trackbar drives
-  opacity; numeric edits have `msctls_updown32` spinners using `UDS_AUTOBUDDY` + `UDS_SETBUDDYINT`
+- The fixed template is sized to the C# dialog's 520x570 client area (297x304 dialog units for
+  Segoe UI 9pt). Revert buttons keep `R` in the template as a fallback and get the `↺` glyph in
+  `wm_init_dialog` with `SetWindowText`, because the RC compiler in this build does not reliably
+  encode Unicode literals and the page controls do not exist before the dialog is created. Color
+  rows pair a separate owner-drawn preview with a `Choose...` button; `WM_DRAWITEM` fills only the
+  preview swatch and draws a border, converting the stored ARGB value to `COLORREF`'s BGR order. The
+  opacity trackbar uses `TBS_AUTOTICKS` with `TBM_SETTICFREQ` 5 to match the C# slider's tick
+  spacing; numeric edits have `msctls_updown32` spinners using `UDS_AUTOBUDDY` + `UDS_SETBUDDYINT`
   and ranges from the draft limits.
 - Live preview: every edit, combo, checkbox, color, revert and Defaults action applies the working
   copy to the pager without saving. Visual settings (layout, colors, opacity) update immediately;

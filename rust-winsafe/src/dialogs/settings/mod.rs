@@ -30,10 +30,7 @@ use std::rc::Rc;
 use winsafe::{self as w, co, gui, prelude::*};
 
 use windows::Win32::Foundation::{COLORREF, HWND as WinHWND, RECT};
-use windows::Win32::Graphics::Gdi::{
-    CreateSolidBrush, DT_CENTER, DT_SINGLELINE, DT_VCENTER, DeleteObject, DrawTextW, FillRect,
-    FrameRect, HGDIOBJ, SetBkMode, SetTextColor, TRANSPARENT,
-};
+use windows::Win32::Graphics::Gdi::{CreateSolidBrush, DeleteObject, FillRect, FrameRect, HGDIOBJ};
 use windows::Win32::UI::Controls::DRAWITEMSTRUCT;
 use windows::Win32::UI::Controls::Dialogs::{CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW, ChooseColorW};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -58,12 +55,19 @@ struct Controls {
     opacity_label: gui::Label,
     border_style: gui::ComboBox,
     desktop_bg: gui::Button,
+    desktop_bg_preview: gui::Label,
     desktop_border: gui::Button,
+    desktop_border_preview: gui::Label,
     active_desktop_border: gui::Button,
+    active_desktop_border_preview: gui::Label,
     window_bg: gui::Button,
+    window_bg_preview: gui::Label,
     window_border: gui::Button,
+    window_border_preview: gui::Label,
     active_window_border: gui::Button,
+    active_window_border_preview: gui::Label,
     active_window_bg: gui::Button,
+    active_window_bg_preview: gui::Label,
     primary_delay: gui::Edit,
     primary_delay_spin: gui::UpDown,
     secondary_delay: gui::Edit,
@@ -72,6 +76,11 @@ struct Controls {
 }
 
 type Reverts = Rc<RefCell<Vec<(Field, gui::Button)>>>;
+
+/// Undo arrow shown on every revert button. The RC compiler in this build does
+/// not reliably encode Unicode string literals, so the template keeps `R` and
+/// the glyph is applied in `wm_init_dialog`, after the page dialogs exist.
+const REVERT_GLYPH: &str = "\u{21BA}";
 
 /// Revert buttons per tab page, used to attach the shared tooltip.
 const LAYOUT_REVERTS: [u16; 4] = [
@@ -142,20 +151,51 @@ pub fn show(
         opacity_label: gui::Label::new_dlg(&theme_page, ids::IDC_OPACITY_LABEL, dont_move),
         border_style: gui::ComboBox::new_dlg(&theme_page, ids::IDC_BORDER_STYLE, dont_move),
         desktop_bg: gui::Button::new_dlg(&theme_page, ids::IDC_DESKTOP_BG, dont_move),
+        desktop_bg_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_DESKTOP_BG_PREVIEW,
+            dont_move,
+        ),
         desktop_border: gui::Button::new_dlg(&theme_page, ids::IDC_DESKTOP_BORDER, dont_move),
+        desktop_border_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_DESKTOP_BORDER_PREVIEW,
+            dont_move,
+        ),
         active_desktop_border: gui::Button::new_dlg(
             &theme_page,
             ids::IDC_ACTIVE_DESKTOP_BORDER,
             dont_move,
         ),
+        active_desktop_border_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_ACTIVE_DESKTOP_BORDER_PREVIEW,
+            dont_move,
+        ),
         window_bg: gui::Button::new_dlg(&theme_page, ids::IDC_WINDOW_BG, dont_move),
+        window_bg_preview: gui::Label::new_dlg(&theme_page, ids::IDC_WINDOW_BG_PREVIEW, dont_move),
         window_border: gui::Button::new_dlg(&theme_page, ids::IDC_WINDOW_BORDER, dont_move),
+        window_border_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_WINDOW_BORDER_PREVIEW,
+            dont_move,
+        ),
         active_window_border: gui::Button::new_dlg(
             &theme_page,
             ids::IDC_ACTIVE_WINDOW_BORDER,
             dont_move,
         ),
+        active_window_border_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_ACTIVE_WINDOW_BORDER_PREVIEW,
+            dont_move,
+        ),
         active_window_bg: gui::Button::new_dlg(&theme_page, ids::IDC_ACTIVE_WINDOW_BG, dont_move),
+        active_window_bg_preview: gui::Label::new_dlg(
+            &theme_page,
+            ids::IDC_ACTIVE_WINDOW_BG_PREVIEW,
+            dont_move,
+        ),
         primary_delay: gui::Edit::new_dlg(&misc_page, ids::IDC_PRIMARY_DELAY, dont_move),
         primary_delay_spin: gui::UpDown::new_dlg(
             &misc_page,
@@ -227,6 +267,10 @@ pub fn show(
         // SAFETY: these controls were created by the dialog and live on this
         // thread; UDM_SETBUDDY only associates the spinner with its edit.
         unsafe {
+            controls_init
+                .opacity
+                .hwnd()
+                .SendMessage(w::msg::TbmSetTicFreq { freq: 5 });
             let _ = controls_init
                 .pager_height_spin
                 .hwnd()
@@ -262,6 +306,9 @@ pub fn show(
         let working = draft_init.borrow().working().clone();
         load_all(&controls_init, &working);
         refresh_reverts(&reverts_init, &draft_init);
+        for (_, button) in reverts_init.borrow().iter() {
+            let _ = button.hwnd().SetWindowText(REVERT_GLYPH);
+        }
         install_tooltips(
             &wnd_init,
             &layout_page,
@@ -534,34 +581,54 @@ fn attach_combos(
     });
 }
 
-/// Wires the color buttons to the picker and previews the chosen color.
+/// Wires the color Choose buttons to the picker and previews the chosen color.
 fn attach_color_buttons(
     controls: &Controls,
     draft: &Rc<RefCell<SettingsDraft>>,
     reverts: &Reverts,
     preview: &Rc<dyn Fn(&Settings)>,
 ) {
-    let buttons = [
-        (&controls.desktop_bg, Field::DesktopBackgroundColor),
-        (&controls.desktop_border, Field::DesktopBorderColor),
+    let rows = [
+        (
+            &controls.desktop_bg,
+            &controls.desktop_bg_preview,
+            Field::DesktopBackgroundColor,
+        ),
+        (
+            &controls.desktop_border,
+            &controls.desktop_border_preview,
+            Field::DesktopBorderColor,
+        ),
         (
             &controls.active_desktop_border,
+            &controls.active_desktop_border_preview,
             Field::ActiveDesktopBorderColor,
         ),
-        (&controls.window_bg, Field::WindowBackgroundColor),
-        (&controls.window_border, Field::WindowBorderColor),
+        (
+            &controls.window_bg,
+            &controls.window_bg_preview,
+            Field::WindowBackgroundColor,
+        ),
+        (
+            &controls.window_border,
+            &controls.window_border_preview,
+            Field::WindowBorderColor,
+        ),
         (
             &controls.active_window_border,
+            &controls.active_window_border_preview,
             Field::ActiveWindowBorderColor,
         ),
         (
             &controls.active_window_bg,
+            &controls.active_window_bg_preview,
             Field::ActiveWindowBackgroundColor,
         ),
     ];
 
-    for (button, field) in buttons {
+    for (button, swatch, field) in rows {
         let button2 = button.clone();
+        let swatch2 = swatch.clone();
         let draft2 = Rc::clone(draft);
         let reverts2 = Rc::clone(reverts);
         let preview2 = Rc::clone(preview);
@@ -572,7 +639,7 @@ fn attach_color_buttons(
             };
             if let Some(argb) = choose_color(button2.hwnd(), current) {
                 draft2.borrow_mut().set_color(field, argb);
-                invalidate_color_button(&button2);
+                invalidate_preview(&swatch2);
                 refresh_reverts(&reverts2, &draft2);
                 let working = draft2.borrow().working().clone();
                 preview2(&working);
@@ -757,13 +824,13 @@ fn load_all(controls: &Controls, settings: &Settings) {
             DesktopBorderStyle::Underline => 1,
         }));
 
-    invalidate_color_button(&controls.desktop_bg);
-    invalidate_color_button(&controls.desktop_border);
-    invalidate_color_button(&controls.active_desktop_border);
-    invalidate_color_button(&controls.window_bg);
-    invalidate_color_button(&controls.window_border);
-    invalidate_color_button(&controls.active_window_border);
-    invalidate_color_button(&controls.active_window_bg);
+    invalidate_preview(&controls.desktop_bg_preview);
+    invalidate_preview(&controls.desktop_border_preview);
+    invalidate_preview(&controls.active_desktop_border_preview);
+    invalidate_preview(&controls.window_bg_preview);
+    invalidate_preview(&controls.window_border_preview);
+    invalidate_preview(&controls.active_window_border_preview);
+    invalidate_preview(&controls.active_window_bg_preview);
 
     let _ = controls
         .primary_delay
@@ -833,12 +900,12 @@ fn position_dialog(wnd: &gui::WindowModal, parent: &gui::WindowMain) {
     }
 }
 
-/// Repaints a color button so its owner-drawn swatch reflects the draft.
-fn invalidate_color_button(button: &gui::Button) {
-    let _ = button.hwnd().InvalidateRect(None, true);
+/// Repaints a color preview so its owner-drawn swatch reflects the draft.
+fn invalidate_preview(preview: &gui::Label) {
+    let _ = preview.hwnd().InvalidateRect(None, true);
 }
 
-/// Handles `WM_DRAWITEM` for the color buttons on the Theme page.
+/// Handles `WM_DRAWITEM` for the color previews on the Theme page.
 fn attach_color_draw(page: &gui::TabPage, draft: &Rc<RefCell<SettingsDraft>>) {
     let draft2 = Rc::clone(draft);
     page.on().wm(co::WM::DRAWITEM, move |p| {
@@ -849,59 +916,37 @@ fn attach_color_draw(page: &gui::TabPage, draft: &Rc<RefCell<SettingsDraft>>) {
                 let draft = draft2.borrow();
                 color_value(draft.working(), field)
             };
-            draw_color_swatch(item, argb);
+            draw_color_preview(item, argb);
         }
         Ok(0)
     });
 }
 
-/// Maps a color button control id to its draft field.
+/// Maps a color preview control id to its draft field.
 fn color_field(id: u16) -> Option<Field> {
     match id {
-        ids::IDC_DESKTOP_BG => Some(Field::DesktopBackgroundColor),
-        ids::IDC_DESKTOP_BORDER => Some(Field::DesktopBorderColor),
-        ids::IDC_ACTIVE_DESKTOP_BORDER => Some(Field::ActiveDesktopBorderColor),
-        ids::IDC_WINDOW_BG => Some(Field::WindowBackgroundColor),
-        ids::IDC_WINDOW_BORDER => Some(Field::WindowBorderColor),
-        ids::IDC_ACTIVE_WINDOW_BORDER => Some(Field::ActiveWindowBorderColor),
-        ids::IDC_ACTIVE_WINDOW_BG => Some(Field::ActiveWindowBackgroundColor),
+        ids::IDC_DESKTOP_BG_PREVIEW => Some(Field::DesktopBackgroundColor),
+        ids::IDC_DESKTOP_BORDER_PREVIEW => Some(Field::DesktopBorderColor),
+        ids::IDC_ACTIVE_DESKTOP_BORDER_PREVIEW => Some(Field::ActiveDesktopBorderColor),
+        ids::IDC_WINDOW_BG_PREVIEW => Some(Field::WindowBackgroundColor),
+        ids::IDC_WINDOW_BORDER_PREVIEW => Some(Field::WindowBorderColor),
+        ids::IDC_ACTIVE_WINDOW_BORDER_PREVIEW => Some(Field::ActiveWindowBorderColor),
+        ids::IDC_ACTIVE_WINDOW_BG_PREVIEW => Some(Field::ActiveWindowBackgroundColor),
         _ => None,
     }
 }
 
-/// Fills a color button with its color, a black frame, and a readable hex
-/// label.
-fn draw_color_swatch(item: &DRAWITEMSTRUCT, argb: u32) {
+/// Fills a color preview with its color and a black frame.
+fn draw_color_preview(item: &DRAWITEMSTRUCT, argb: u32) {
     unsafe {
-        let rgb = argb & 0x00FF_FFFF;
-        let brush = CreateSolidBrush(COLORREF(rgb));
+        // Settings store ARGB, but COLORREF expects 0x00BBGGRR.
+        let brush = CreateSolidBrush(COLORREF(colorref_from_argb(argb)));
         FillRect(item.hDC, &item.rcItem, brush);
         let _ = DeleteObject(HGDIOBJ(brush.0));
 
         let border = CreateSolidBrush(COLORREF(0));
         FrameRect(item.hDC, &item.rcItem, border);
         let _ = DeleteObject(HGDIOBJ(border.0));
-
-        let red = (rgb >> 16) & 0xFF;
-        let green = (rgb >> 8) & 0xFF;
-        let blue = rgb & 0xFF;
-        let brightness = (red * 299 + green * 587 + blue * 114) / 1000;
-        let text_color = if brightness > 128 {
-            COLORREF(0)
-        } else {
-            COLORREF(0x00FF_FFFF)
-        };
-        SetTextColor(item.hDC, text_color);
-        SetBkMode(item.hDC, TRANSPARENT);
-
-        let mut text: Vec<u16> = format!("#{rgb:06X}").encode_utf16().collect();
-        let mut rect = item.rcItem;
-        DrawTextW(
-            item.hDC,
-            &mut text,
-            &mut rect,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE,
-        );
     }
 }
 
