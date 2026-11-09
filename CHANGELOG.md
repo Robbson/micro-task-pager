@@ -7,6 +7,7 @@
   - C# / .NET 4.8 using WinForms
   - Rust / Reactor using Win UI 3
   - Rust / winsafe using plain Win32
+- added ARM64 builds for the rust implementations
 
 ## v1.5.0
 

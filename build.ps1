@@ -9,14 +9,21 @@
     selected implementation under prod\:
 
     - csharp-winforms: .NET Framework 4.8 WinForms build (prod\winforms)
-    - rust-winui:      Rust WinUI 3 build (prod\winui)
-    - rust-winsafe:    native Win32 winsafe build (prod\winsafe)
+    - rust-winui:      Rust WinUI 3 build (prod\winui, prod\winui-arm64)
+    - rust-winsafe:    native Win32 winsafe build (prod\winsafe, prod\winsafe-arm64)
+
+    The Rust builds produce both x64 and ARM64 artifacts by default. Use
+    -Architecture to restrict a build to one architecture.
 
     The WinForms build increments the build number in version.txt on every run.
     The Rust builds use the version from their Cargo.toml.
 
 .PARAMETER Target
     Which implementation to build: all (default), winforms, winui, or winsafe.
+
+.PARAMETER Architecture
+    Which Rust architecture to build: all (default), x64, or arm64. The WinForms
+    target always builds for its configured .NET Framework platform.
 
 .PARAMETER NoZip
     Build and stage the release but skip ZIP creation.
@@ -36,11 +43,18 @@
 .EXAMPLE
     pwsh .\build.ps1 -Target winforms -NoZip
     Builds the WinForms release without creating the ZIP archive.
+
+.EXAMPLE
+    pwsh .\build.ps1 -Target winui -Architecture arm64
+    Builds only the ARM64 WinUI 3 release.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('all', 'winforms', 'winui', 'rust-winui', 'winsafe', 'rust-winsafe')]
     [string]$Target = 'all',
+
+    [ValidateSet('all', 'x64', 'arm64')]
+    [string]$Architecture = 'all',
 
     [switch]$NoZip
 )
@@ -120,78 +134,89 @@ function Build-WinForms {
     New-ReleaseArchive -Stage $stage -ArchiveName "MicroTaskPager-winforms-v$version.zip" -Files $files
 }
 
-function Build-WinUi {
-    $projectDir = Join-Path $root 'rust-winui'
-    $stage = Join-Path $prodRoot 'winui'
+function Get-RustTargets {
+    param([Parameter(Mandatory)][string]$Architecture)
 
-    Write-Host '==> Building Rust WinUI 3 release'
-    Reset-Stage -Path $stage
-
-    Push-Location $projectDir
-    try {
-        cargo build --release
-
-        $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
-        $package = $metadata.packages | Where-Object { $_.name -eq 'micro-task-pager' }
-        if (-not $package) {
-            throw 'Unable to read the micro-task-pager version from Cargo metadata.'
+    $targets = @(
+        [pscustomobject]@{
+            Name          = 'x64'
+            Triple        = 'x86_64-pc-windows-msvc'
+            StageSuffix   = ''
+            ArchiveSuffix = ''
         }
-        $version = $package.version
-
-        $builtExe = Join-Path $projectDir 'target/release/micro-task-pager.exe'
-        if (-not (Test-Path -LiteralPath $builtExe)) {
-            throw "Expected release executable not found: $builtExe"
+        [pscustomobject]@{
+            Name          = 'arm64'
+            Triple        = 'aarch64-pc-windows-msvc'
+            StageSuffix   = '-arm64'
+            ArchiveSuffix = '-arm64'
         }
-        Copy-Item -LiteralPath $builtExe -Destination (Join-Path $stage 'MicroTaskPager.exe') -Force
-    }
-    finally {
-        Pop-Location
-    }
+    )
 
-    if ($NoZip) {
-        Write-Host "Skipped ZIP creation for $stage"
-        return
+    if ($Architecture -eq 'all') {
+        return $targets
     }
-
-    $files = @((Join-Path $stage 'MicroTaskPager.exe')) + $sharedDocs
-    New-ReleaseArchive -Stage $stage -ArchiveName "MicroTaskPager-winui-v$version.zip" -Files $files
+    return $targets | Where-Object { $_.Name -eq $Architecture }
 }
 
-function Build-Winsafe {
-    $projectDir = Join-Path $root 'rust-winsafe'
-    $stage = Join-Path $prodRoot 'winsafe'
+function Assert-RustTarget {
+    param([Parameter(Mandatory)][string]$Triple)
 
-    Write-Host '==> Building Rust winsafe native release'
-    Reset-Stage -Path $stage
+    $installed = & rustup target list --installed
+    if ($installed -notcontains $Triple) {
+        throw "Rust target '$Triple' is not installed. Run: rustup target add $Triple"
+    }
+}
 
-    Push-Location $projectDir
+function Build-Rust {
+    param(
+        [Parameter(Mandatory)][string]$DisplayName,
+        [Parameter(Mandatory)][string]$ProjectDir,
+        [Parameter(Mandatory)][string]$StageName,
+        [Parameter(Mandatory)][string]$ArchivePrefix,
+        [Parameter(Mandatory)][string]$Architecture
+    )
+
+    $targets = @(Get-RustTargets -Architecture $Architecture)
+    foreach ($target in $targets) {
+        Assert-RustTarget -Triple $target.Triple
+    }
+
+    $metadata = cargo metadata --manifest-path (Join-Path $ProjectDir 'Cargo.toml') --no-deps --format-version 1 | ConvertFrom-Json
+    $package = $metadata.packages | Where-Object { $_.name -eq 'micro-task-pager' }
+    if (-not $package) {
+        throw 'Unable to read the micro-task-pager version from Cargo metadata.'
+    }
+    $version = $package.version
+
+    Push-Location $ProjectDir
     try {
-        cargo build --release
+        foreach ($target in $targets) {
+            $stage = Join-Path $prodRoot ($StageName + $target.StageSuffix)
 
-        $metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
-        $package = $metadata.packages | Where-Object { $_.name -eq 'micro-task-pager' }
-        if (-not $package) {
-            throw 'Unable to read the micro-task-pager version from Cargo metadata.'
-        }
-        $version = $package.version
+            Write-Host "==> Building Rust $DisplayName release ($($target.Name))"
+            Reset-Stage -Path $stage
 
-        $builtExe = Join-Path $projectDir 'target/release/micro-task-pager.exe'
-        if (-not (Test-Path -LiteralPath $builtExe)) {
-            throw "Expected release executable not found: $builtExe"
+            cargo build --release --target $target.Triple
+
+            $builtExe = Join-Path $ProjectDir "target/$($target.Triple)/release/micro-task-pager.exe"
+            if (-not (Test-Path -LiteralPath $builtExe)) {
+                throw "Expected release executable not found: $builtExe"
+            }
+            Copy-Item -LiteralPath $builtExe -Destination (Join-Path $stage 'MicroTaskPager.exe') -Force
+
+            if ($NoZip) {
+                Write-Host "Skipped ZIP creation for $stage"
+                continue
+            }
+
+            $files = @((Join-Path $stage 'MicroTaskPager.exe')) + $sharedDocs
+            $archiveName = "$ArchivePrefix$($target.ArchiveSuffix)-v$version.zip"
+            New-ReleaseArchive -Stage $stage -ArchiveName $archiveName -Files $files
         }
-        Copy-Item -LiteralPath $builtExe -Destination (Join-Path $stage 'MicroTaskPager.exe') -Force
     }
     finally {
         Pop-Location
     }
-
-    if ($NoZip) {
-        Write-Host "Skipped ZIP creation for $stage"
-        return
-    }
-
-    $files = @((Join-Path $stage 'MicroTaskPager.exe')) + $sharedDocs
-    New-ReleaseArchive -Stage $stage -ArchiveName "MicroTaskPager-winsafe-v$version.zip" -Files $files
 }
 
 switch ($Target) {
@@ -199,21 +224,45 @@ switch ($Target) {
         Build-WinForms
     }
     'winui' {
-        Build-WinUi
+        Build-Rust -DisplayName 'WinUI 3' `
+            -ProjectDir (Join-Path $root 'rust-winui') `
+            -StageName 'winui' `
+            -ArchivePrefix 'MicroTaskPager-winui' `
+            -Architecture $Architecture
     }
     'rust-winui' {
-        Build-WinUi
+        Build-Rust -DisplayName 'WinUI 3' `
+            -ProjectDir (Join-Path $root 'rust-winui') `
+            -StageName 'winui' `
+            -ArchivePrefix 'MicroTaskPager-winui' `
+            -Architecture $Architecture
     }
     'winsafe' {
-        Build-Winsafe
+        Build-Rust -DisplayName 'winsafe native' `
+            -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -StageName 'winsafe' `
+            -ArchivePrefix 'MicroTaskPager-winsafe' `
+            -Architecture $Architecture
     }
     'rust-winsafe' {
-        Build-Winsafe
+        Build-Rust -DisplayName 'winsafe native' `
+            -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -StageName 'winsafe' `
+            -ArchivePrefix 'MicroTaskPager-winsafe' `
+            -Architecture $Architecture
     }
     'all' {
         Build-WinForms
-        Build-WinUi
-        Build-Winsafe
+        Build-Rust -DisplayName 'WinUI 3' `
+            -ProjectDir (Join-Path $root 'rust-winui') `
+            -StageName 'winui' `
+            -ArchivePrefix 'MicroTaskPager-winui' `
+            -Architecture $Architecture
+        Build-Rust -DisplayName 'winsafe native' `
+            -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -StageName 'winsafe' `
+            -ArchivePrefix 'MicroTaskPager-winsafe' `
+            -Architecture $Architecture
     }
     default {
         throw "Unknown target '$Target'."
