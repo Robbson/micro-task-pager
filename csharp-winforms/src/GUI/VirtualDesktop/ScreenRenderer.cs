@@ -69,6 +69,8 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
         private void RenderPreview(Graphics g, Window[] windows)
         {
+            int iconSize = Dpi.Scale(Form.Options.IconSize);
+
             foreach (var wnd in windows)
             {
                 // --- Calculating ---
@@ -113,9 +115,11 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 try
                 {
                     g.SetClip(area);
-                    g.DrawImage(wnd.Icon, new Point(
-                        (area.X + area.Width / 2) - wnd.Icon.Width / 2,
-                        (area.Y + area.Height / 2) - wnd.Icon.Height / 2));
+                    g.DrawImage(wnd.Icon, new Rectangle(
+                        (area.X + area.Width / 2) - iconSize / 2,
+                        (area.Y + area.Height / 2) - iconSize / 2,
+                        iconSize,
+                        iconSize));
                 }
                 finally
                 {
@@ -143,16 +147,15 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         private void RenderMicroTaskbar(Graphics g, Window[] windows)
         {
             int iconsNum = windows.Length;
-            int iconWidth = windows[0].Icon.Width;
-            int iconHeight = windows[0].Icon.Height;
+            int iconSize = Dpi.Scale(Form.Options.IconSize);
             int iconPaddingX = Dpi.Scale(Form.Options.IconPaddingX);
             int iconPaddingY = Dpi.Scale(Form.Options.IconPaddingY);
             int width = Size.Width;
             int height = Size.Height;
 
             // An icon can have user specified padding, together it's a tile
-            int tileWidth = iconWidth + iconPaddingX;
-            int tileHeight = iconHeight + iconPaddingY;
+            int tileWidth = iconSize + iconPaddingX;
+            int tileHeight = iconSize + iconPaddingY;
 
             // Calculate the available amount of columns and rows and if we have enough for all tiles
             int remainingIcons = 0; // for which we have no space
@@ -198,8 +201,8 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
                 // Calc selection area rectangle and the center position for the icon in it
                 var selectionArea = new Rectangle(rootX + xPos, rootY + yPos, tileWidth, tileHeight);
-                var areaCenterOffsetX = selectionArea.X + selectionArea.Width / 2 - iconWidth / 2;
-                var areaCenterOffsetY = selectionArea.Y + selectionArea.Height / 2 - iconHeight / 2;
+                var areaCenterOffsetX = selectionArea.X + selectionArea.Width / 2 - iconSize / 2;
+                var areaCenterOffsetY = selectionArea.Y + selectionArea.Height / 2 - iconSize / 2;
 
                 // --- Drawing ---
                 if (remainingIcons > 0 && col == colsNum - 1 && row == rowsNum - 1)
@@ -224,7 +227,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     }
 
                     // Place the icon in the selection area's center
-                    g.DrawImage(wnd.Icon, new Point(areaCenterOffsetX, areaCenterOffsetY));
+                    g.DrawImage(wnd.Icon, new Rectangle(areaCenterOffsetX, areaCenterOffsetY, iconSize, iconSize));
 
                     // Make the window selectable
                     WindowAreas[wnd.Handle] = selectionArea;

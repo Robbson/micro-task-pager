@@ -53,6 +53,7 @@ namespace MicroTaskPager.Core.API
         public const int HT_CAPTION = 0x2;
 
         public static int GCL_HICON = -14;
+        public static int ICON_BIG = 1;
         public static int ICON_SMALL2 = 2;
         public static uint GW_HWNDNEXT = 2;
         public static int IDI_APPLICATION = 0x7F00;
@@ -125,6 +126,14 @@ namespace MicroTaskPager.Core.API
 
         [DllImport("user32.dll")]
         public static extern int LoadIcon(IntPtr hInstance, IntPtr lpIconName);
+
+        [DllImport("user32.dll", EntryPoint = "PrivateExtractIconsW", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint PrivateExtractIcons(
+            string lpszFile, int nIconIndex, int cxIcon, int cyIcon, IntPtr[] phicon, int[] piconid, uint nIcons, uint flags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyIcon(IntPtr hIcon);
 
         [DllImport("user32.dll", EntryPoint = "GetClassLong")]
         public static extern uint GetClassLong32(IntPtr hWnd, int nIndex);

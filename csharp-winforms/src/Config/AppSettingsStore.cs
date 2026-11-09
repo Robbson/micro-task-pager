@@ -24,6 +24,7 @@ namespace MicroTaskPager.Config
                     DesktopChangeActivation = (DesktopChangeActivationMode)ReadInt(key, "DesktopChangeActivation", (int)defaults.DesktopChangeActivation),
                     BackgroundOpacity = ReadDouble(key, "BackgroundOpacity", defaults.BackgroundOpacity),
                     PagerHeight = ReadInt(key, "PagerHeight", defaults.PagerHeight),
+                    IconSize = ReadInt(key, "IconSize", defaults.IconSize),
                     IconPaddingX = ReadInt(key, "IconPaddingX", defaults.IconPaddingX),
                     IconPaddingY = ReadInt(key, "IconPaddingY", defaults.IconPaddingY),
 
@@ -64,6 +65,7 @@ namespace MicroTaskPager.Config
                 key.SetValue("DesktopChangeActivation", settings.DesktopChangeActivation, RegistryValueKind.DWord);
                 key.SetValue("BackgroundOpacity", settings.BackgroundOpacity.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 key.SetValue("PagerHeight", settings.PagerHeight, RegistryValueKind.DWord);
+                key.SetValue("IconSize", settings.IconSize, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingX", settings.IconPaddingX, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingY", settings.IconPaddingY, RegistryValueKind.DWord);
 

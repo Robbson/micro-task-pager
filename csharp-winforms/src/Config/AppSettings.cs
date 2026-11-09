@@ -32,6 +32,7 @@ namespace MicroTaskPager.Config
         public List<ViewMode> RendererViewModes { get; set; } = new List<ViewMode>();
 
         public int PagerHeight { get; set; } = 40;
+        public int IconSize { get; set; } = 16;
         public int IconPaddingX { get; set; } = 0;
         public int IconPaddingY { get; set; } = 0;
 
@@ -58,6 +59,7 @@ namespace MicroTaskPager.Config
                 ViewModeDefault = source.ViewModeDefault,
                 RendererViewModes = source.RendererViewModes == null ? null : new List<ViewMode>(source.RendererViewModes),
                 PagerHeight = source.PagerHeight,
+                IconSize = source.IconSize,
                 IconPaddingX = source.IconPaddingX,
                 IconPaddingY = source.IconPaddingY,
 

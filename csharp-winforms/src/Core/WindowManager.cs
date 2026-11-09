@@ -16,6 +16,9 @@ namespace MicroTaskPager.Core
     {
         private const int MaxDesktopIndexFailures = 10;
 
+        // High resolution icon preferred for the pager; smaller sources are only used as a fallback
+        private const int IconExtractionSize = 256;
+
         private static readonly ILogger _logger = Log.ForContext<WindowManager>();
         private static readonly uint _currentProcessId = (uint)Process.GetCurrentProcess().Id;
         private static readonly List<IntPtr> _hWndBlacklist = new List<IntPtr>();
@@ -28,10 +31,10 @@ namespace MicroTaskPager.Core
 
         // Icons are expensive GDI+ objects and GetOpenWindows runs several times per second,
         // so they are cached per window handle and shared between snapshots instead of recreated on every poll
-        private static readonly Dictionary<IntPtr, (IntPtr Source, Bitmap Bitmap)> IconCache =
-            new Dictionary<IntPtr, (IntPtr Source, Bitmap Bitmap)>();
+        private static readonly Dictionary<IntPtr, (IntPtr Source, bool Small, Bitmap Bitmap)> IconCache =
+            new Dictionary<IntPtr, (IntPtr Source, bool Small, Bitmap Bitmap)>();
 
-        public static List<Window> GetOpenWindows()
+        public static List<Window> GetOpenWindows(bool useSmallIcon = false)
         {
             var windowList = new List<Window>();
             var activeHandles = new HashSet<IntPtr>();
@@ -125,9 +128,18 @@ namespace MicroTaskPager.Core
 
                 if (index < 0) return true;
 
-                int hIcon = WinAPI.SendMessage(hWnd, WinAPI.WM_GETICON, WinAPI.ICON_SMALL2, 0);
-                if (hIcon == 0) { hIcon = WinAPI.GetClassLongPtr(hWnd, WinAPI.GCL_HICON); }
-                if (hIcon == 0) { hIcon = WinAPI.LoadIcon(IntPtr.Zero, (IntPtr)WinAPI.IDI_APPLICATION); }
+                IntPtr hIcon = useSmallIcon
+                    ? (IntPtr)WinAPI.SendMessage(hWnd, WinAPI.WM_GETICON, WinAPI.ICON_SMALL2, 0)
+                    : (IntPtr)WinAPI.SendMessage(hWnd, WinAPI.WM_GETICON, WinAPI.ICON_BIG, 0);
+                if (hIcon == IntPtr.Zero) { hIcon = (IntPtr)WinAPI.SendMessage(hWnd, WinAPI.WM_GETICON, WinAPI.ICON_SMALL2, 0); }
+                if (hIcon == IntPtr.Zero) { hIcon = (IntPtr)WinAPI.GetClassLongPtr(hWnd, WinAPI.GCL_HICON); }
+
+                bool useDefaultIcon = false;
+                if (hIcon == IntPtr.Zero)
+                {
+                    hIcon = (IntPtr)WinAPI.LoadIcon(IntPtr.Zero, (IntPtr)WinAPI.IDI_APPLICATION);
+                    useDefaultIcon = true;
+                }
 
                 activeHandles.Add(hWnd);
                 windowList.Add(new Window()
@@ -137,7 +149,7 @@ namespace MicroTaskPager.Core
                     ProcessID = pid,
                     Class = className.ToString(),
                     ZOrder = GetWindowZOrder(hWnd),
-                    Icon = GetWindowIcon(hWnd, (IntPtr)hIcon),
+                    Icon = GetWindowIcon(hWnd, pid, hIcon, useSmallIcon, useDefaultIcon),
                     IsActive = hWnd == WinAPI.GetForegroundWindow(),
                     Dimensions = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
                     VirtualDesktopIndex = index,
@@ -200,13 +212,13 @@ namespace MicroTaskPager.Core
             return zOrder;
         }
 
-        private static Bitmap GetWindowIcon(IntPtr hWnd, IntPtr hIcon)
+        private static Bitmap GetWindowIcon(IntPtr hWnd, uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon)
         {
             lock (IconCache)
             {
                 if (IconCache.TryGetValue(hWnd, out var cached))
                 {
-                    if (cached.Source == hIcon)
+                    if (cached.Source == hIcon && cached.Small == useSmallIcon)
                     {
                         return cached.Bitmap;
                     }
@@ -215,13 +227,76 @@ namespace MicroTaskPager.Core
                     IconCache.Remove(hWnd);
                 }
 
-                var bitmap = CreateWindowIcon(hIcon);
-                IconCache[hWnd] = (hIcon, bitmap);
+                var bitmap = CreateWindowIcon(processId, hIcon, useSmallIcon, useDefaultIcon);
+                IconCache[hWnd] = (hIcon, useSmallIcon, bitmap);
                 return bitmap;
             }
         }
 
-        private static Bitmap CreateWindowIcon(IntPtr hIcon)
+        // The window's own icon is the one the taskbar displays, so it is preferred for every
+        // size. Only when an application exposes no usable icon at all is the executable
+        // inspected for a higher resolution replacement.
+        private static Bitmap CreateWindowIcon(uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon)
+        {
+            Bitmap windowIcon = CreateBitmapFromIcon(hIcon);
+            if (useSmallIcon || !useDefaultIcon)
+            {
+                return windowIcon;
+            }
+
+            Bitmap executableIcon = TryExtractExecutableIcon(processId, IconExtractionSize);
+            if (executableIcon == null)
+            {
+                return windowIcon;
+            }
+
+            if (windowIcon == null || executableIcon.Width >= windowIcon.Width)
+            {
+                windowIcon?.Dispose();
+                return executableIcon;
+            }
+
+            executableIcon.Dispose();
+            return windowIcon;
+        }
+
+        private static Bitmap TryExtractExecutableIcon(uint processId, int size)
+        {
+            try
+            {
+                using (var process = Process.GetProcessById((int)processId))
+                {
+                    string fileName = process.MainModule?.FileName;
+                    if (string.IsNullOrEmpty(fileName))
+                    {
+                        return null;
+                    }
+
+                    var handles = new IntPtr[1];
+                    uint count = WinAPI.PrivateExtractIcons(fileName, 0, size, size, handles, null, 1, 0);
+                    if (count == 0 || handles[0] == IntPtr.Zero)
+                    {
+                        return null;
+                    }
+
+                    try
+                    {
+                        return CreateBitmapFromIcon(handles[0]);
+                    }
+                    finally
+                    {
+                        WinAPI.DestroyIcon(handles[0]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Could not extract a high resolution icon for process {ProcessId}", processId);
+                return null;
+            }
+        }
+
+        private static Bitmap CreateBitmapFromIcon(IntPtr hIcon)
         {
             if (hIcon == IntPtr.Zero)
             {
@@ -231,7 +306,7 @@ namespace MicroTaskPager.Core
             using (var icon = Icon.FromHandle(hIcon))
             using (var source = icon.ToBitmap())
             {
-                return new Bitmap(source, Dpi.Scale(16), Dpi.Scale(16));
+                return new Bitmap(source);
             }
         }
 

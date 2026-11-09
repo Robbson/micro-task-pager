@@ -354,7 +354,7 @@ namespace MicroTaskPager.GUI
                         try
                         {
                             // Change Detection via Hash (calculated on basic parameters of all opened windows) based on all windows sorted by their handles
-                            Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows());
+                            Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows(Options.IconSize <= 16));
                             var hash =
                             $"{_activeDesktopIndex}" +
                             $"{Windows.Sum(x => Math.Abs(x.Dimensions.X))}" +
@@ -436,7 +436,7 @@ namespace MicroTaskPager.GUI
                         {
                             _activeDesktopIndex = WindowsVirtualDesktopManager.GetInstance()
                                 .FromDesktop(WindowsVirtualDesktop.GetInstance().Current);
-                            Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows());
+                            Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows(Options.IconSize <= 16));
                             //Invalidate();
                         }
                         catch (Exception ex)
@@ -584,12 +584,21 @@ namespace MicroTaskPager.GUI
             bool resetDesktops = false;
             if (settings.PagerHeight != Options.PagerHeight) resetDesktops = true;
 
+            // The small and large icon variants come from different sources. Refreshing the
+            // snapshot before painting makes the live preview match the result after saving.
+            bool reloadIcons = (settings.IconSize <= 16) != (Options.IconSize <= 16);
+
             Options = settings;
 
             // Apply MainForm propertes
             ShowInTaskbar = Options.ShowAppInTaskbar;
             BackColor = Options.DesktopBackgroundColor;
             Opacity = Math.Max(0.25, Math.Min(1.0, Options.BackgroundOpacity));
+
+            if (reloadIcons)
+            {
+                Windows = new ConcurrentBag<Window>(WindowManager.GetOpenWindows(Options.IconSize <= 16));
+            }
 
             if (persist)
             {

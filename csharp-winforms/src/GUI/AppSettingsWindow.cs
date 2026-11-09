@@ -14,6 +14,8 @@ namespace MicroTaskPager.GUI
         private const int PlacementGap = 8;
         private const int MinPagerContentHeight = 16;
 
+        private static readonly int[] _iconSizes = { 16, 24, 32, 48, 64 };
+
         private readonly AppSettings _defaults = new AppSettings();
         private readonly AppSettings _settingsBefore;
         private readonly AppSettings _working;
@@ -92,6 +94,20 @@ namespace MicroTaskPager.GUI
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             table.RowCount = table.RowStyles.Count;
             return table.RowCount - 1;
+        }
+
+        private static int IconSizeIndex(int size)
+        {
+            int bestIndex = 0;
+            for (int i = 1; i < _iconSizes.Length; i++)
+            {
+                if (Math.Abs(_iconSizes[i] - size) < Math.Abs(_iconSizes[bestIndex] - size))
+                {
+                    bestIndex = i;
+                }
+            }
+
+            return bestIndex;
         }
 
         private void AddRow(
@@ -406,6 +422,64 @@ namespace MicroTaskPager.GUI
                 () => Math.Abs((trackBar.Value / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001);
         }
 
+        private void AddIconSizeRow(TableLayoutPanel table, TabPage page)
+        {
+            int initialIndex = IconSizeIndex(_working.IconSize);
+            _working.IconSize = _iconSizes[initialIndex];
+
+            var trackBar = new TrackBar
+            {
+                Minimum = 0,
+                Maximum = _iconSizes.Length - 1,
+                TickFrequency = 1,
+                LargeChange = 1,
+                SmallChange = 1,
+                Value = initialIndex,
+                AutoSize = false,
+                Width = 140,
+                Height = 32,
+                Margin = new Padding(0, 6, 4, 0),
+            };
+
+            var valueLabel = new Label
+            {
+                AutoSize = true,
+                Text = $"{_iconSizes[trackBar.Value]} px",
+                Margin = new Padding(4, 14, 0, 0),
+            };
+
+            var host = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(trackBar);
+            host.Controls.Add(valueLabel);
+
+            trackBar.ValueChanged += (s, e) =>
+            {
+                _working.IconSize = _iconSizes[trackBar.Value];
+                valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
+                OnEditorChanged();
+            };
+
+            AddRow(
+                table,
+                page,
+                "Icon Size",
+                "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
+                host,
+                s =>
+                {
+                    trackBar.Value = IconSizeIndex(s.IconSize);
+                    valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
+                    _working.IconSize = _iconSizes[trackBar.Value];
+                },
+                () => _iconSizes[trackBar.Value] != _settingsBefore.IconSize);
+        }
+
         // ------------------------------------------------------------------------------------
         // State changes
         // ------------------------------------------------------------------------------------
@@ -715,6 +789,8 @@ namespace MicroTaskPager.GUI
             AddPagerHeightRow(rendering, page);
 
             TableLayoutPanel icons = BeginGroup(page, "Icons Settings");
+
+            AddIconSizeRow(icons, page);
 
             AddNumericRow(
                 icons,
