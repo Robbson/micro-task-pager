@@ -21,6 +21,7 @@ namespace MicroTaskPager.Config
                     ViewModeDefault = (ViewMode)ReadInt(key, "ViewModeDefault", (int)defaults.ViewModeDefault),
                     RendererViewModes = ReadViewModes(key, "RendererViewModes", defaults.RendererViewModes),
                     DesktopBorderStyle = (DesktopBorderStyle)ReadInt(key, "DesktopBorderStyle", (int)defaults.DesktopBorderStyle),
+                    DesktopChangeActivation = (DesktopChangeActivationMode)ReadInt(key, "DesktopChangeActivation", (int)defaults.DesktopChangeActivation),
                     BackgroundOpacity = ReadDouble(key, "BackgroundOpacity", defaults.BackgroundOpacity),
                     PagerHeight = ReadInt(key, "PagerHeight", defaults.PagerHeight),
                     IconPaddingX = ReadInt(key, "IconPaddingX", defaults.IconPaddingX),
@@ -60,6 +61,7 @@ namespace MicroTaskPager.Config
                 }
 
                 key.SetValue("DesktopBorderStyle", settings.DesktopBorderStyle, RegistryValueKind.DWord);
+                key.SetValue("DesktopChangeActivation", settings.DesktopChangeActivation, RegistryValueKind.DWord);
                 key.SetValue("BackgroundOpacity", settings.BackgroundOpacity.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 key.SetValue("PagerHeight", settings.PagerHeight, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingX", settings.IconPaddingX, RegistryValueKind.DWord);

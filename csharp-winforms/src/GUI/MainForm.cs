@@ -132,6 +132,28 @@ namespace MicroTaskPager.GUI
             });
         }
 
+        // Activates a specific window of the desktop the pager just switched to
+        public void ActivateWindowAfterDesktopSwitch(int desktopIndex, IntPtr hwnd)
+        {
+            ActivateWindow(hwnd);
+
+            // The desktop switch can still be in progress, so retry once after the switch animation
+            int version = ++_desktopSwitchVersion;
+            Task.Run(async () =>
+            {
+                await Task.Delay(150);
+                TryInvoke(() =>
+                {
+                    if (version != _desktopSwitchVersion || GetActiveDesktopIndex() != desktopIndex)
+                    {
+                        return;
+                    }
+
+                    ActivateWindow(hwnd);
+                });
+            });
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -158,6 +180,24 @@ namespace MicroTaskPager.GUI
             _activeWindowTracker.Dispose();
             Program.ApplicationClosing.Cancel();
             base.OnFormClosing(e);
+        }
+
+        private static void ActivateWindow(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero || !WinAPI.IsWindow(hwnd) || !WinAPI.IsWindowVisible(hwnd))
+            {
+                return;
+            }
+
+            if (WinAPI.IsIconic(hwnd))
+            {
+                WinAPI.ShowWindow(hwnd, WinAPI.SW_RESTORE);
+            }
+
+            if (!WinAPI.SetForegroundWindow(hwnd))
+            {
+                _logger.Debug("Could not activate the window {Handle}", hwnd);
+            }
         }
 
         // Detects monitors being added/removed or their resolution/arrangement changing while the app runs

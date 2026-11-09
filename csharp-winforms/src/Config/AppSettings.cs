@@ -17,6 +17,14 @@ namespace MicroTaskPager.Config
         Underline,
     }
 
+    // Defines which window gets activated after the pager switched to another desktop
+    public enum DesktopChangeActivationMode
+    {
+        LastActiveWindow,
+        WindowUnderCursor,
+        None,
+    }
+
     public class AppSettings
     {
         // ViewModeDefault: Only changeable in the settings window, defines the default for newly created desktop's screens
@@ -30,6 +38,7 @@ namespace MicroTaskPager.Config
         public double BackgroundOpacity { get; set; } = 1.0;
 
         public DesktopBorderStyle DesktopBorderStyle { get; set; } = DesktopBorderStyle.Box;
+        public DesktopChangeActivationMode DesktopChangeActivation { get; set; } = DesktopChangeActivationMode.LastActiveWindow;
         public Color DesktopBackgroundColor { get; set; } = Color.FromArgb(64, 64, 64);
         public Color DesktopBorderColor { get; set; } = Color.FromArgb(32, 32, 32);
         public Color ActiveDesktopBorderColor { get; set; } = Color.LightBlue;
@@ -54,6 +63,7 @@ namespace MicroTaskPager.Config
 
                 BackgroundOpacity = source.BackgroundOpacity,
                 DesktopBorderStyle = source.DesktopBorderStyle,
+                DesktopChangeActivation = source.DesktopChangeActivation,
                 DesktopBackgroundColor = source.DesktopBackgroundColor,
                 DesktopBorderColor = source.DesktopBorderColor,
                 ActiveDesktopBorderColor = source.ActiveDesktopBorderColor,

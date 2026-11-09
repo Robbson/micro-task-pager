@@ -125,10 +125,31 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 }
                 else
                 {
+                    // Resolve the window under the cursor before switching, the preview data may change afterwards
+                    Window windowUnderCursor = Form.Options.DesktopChangeActivation == DesktopChangeActivationMode.WindowUnderCursor
+                        ? GetWindowUnderCursor(e.Location)
+                        : null;
+
                     // Changing Desktop has to be done when mouse gets up, otherwise we instantly select and focus an
                     // app of the new desktop
                     WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible();
-                    Form.RestoreLastActiveWindow(VirtualDesktopIndex);
+
+                    switch (Form.Options.DesktopChangeActivation)
+                    {
+                        case DesktopChangeActivationMode.WindowUnderCursor:
+                            if (windowUnderCursor != null)
+                            {
+                                Form.ActivateWindowAfterDesktopSwitch(VirtualDesktopIndex, windowUnderCursor.Handle);
+                            }
+
+                            break;
+                        case DesktopChangeActivationMode.None:
+                            break;
+                        default:
+                            Form.RestoreLastActiveWindow(VirtualDesktopIndex);
+                            break;
+                    }
+
                     Form.Invalidate();
                 }
             }

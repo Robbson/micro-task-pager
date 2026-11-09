@@ -796,6 +796,17 @@ namespace MicroTaskPager.GUI
 
         private void BuildMiscPage(TabPage page)
         {
+            TableLayoutPanel behaviour = BeginGroup(page, "Behaviour");
+
+            AddComboRow(
+                behaviour,
+                page,
+                "Desktop Change: Window Activation",
+                "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged.",
+                new[] { "Desktop's last window", "Window under cursor", "None" },
+                s => (int)s.DesktopChangeActivation,
+                (s, v) => s.DesktopChangeActivation = (DesktopChangeActivationMode)v);
+
             TableLayoutPanel performance = BeginGroup(page, "Performance");
 
             _primaryDelayBox = AddTextRow(
