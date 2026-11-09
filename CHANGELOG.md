@@ -4,8 +4,12 @@
 
 ### Internal
 
-- The Rust port now targets WinUI 3 through `windows-reactor` instead of extending the native Win32
-  UI. The native Win32 v1 remains the behavioral reference and fallback until the WinUI cutover.
+- The Rust port now targets WinUI 3 through `windows-reactor` and is the main Rust binary. The C#
+  implementation remains the behavioral reference and current release.
+- The Rust build requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime
+  2.4 or later framework package. Packaging is framework-dependent; the runtime is not bundled.
+- The WinUI manifest declares `PerMonitorV2` DPI awareness; the pager rebuilds its pixel grid and icon
+  cache when the window DPI changes.
 - Architecture, migration, agent, and third-party notice documentation updated for the WinUI target.
 
 ## v1.5.0

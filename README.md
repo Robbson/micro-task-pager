@@ -21,8 +21,10 @@
 
 > [!NOTE]
 > A native Rust port is in development. Its UI targets WinUI 3 through `windows-reactor`. The current
-> release remains the C#/.NET implementation; the Rust build is not published yet. See
-> [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md) and [`rust/MIGRATION.md`](rust/MIGRATION.md).
+> release remains the C#/.NET implementation; the Rust build is not published yet. The Rust build
+> requires Windows 10 version 1809 (build 17763) or later and the Windows App Runtime 2.4 or later
+> framework package, which is installed separately. See [`rust/ARCHITECTURE.md`](rust/ARCHITECTURE.md)
+> and [`rust/MIGRATION.md`](rust/MIGRATION.md).
 
 Unlike a simple desktop switcher, it can display each desktop in one of two ways:
 
@@ -74,6 +76,10 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 - Windows 10 or Windows 11, 64-bit. Current Windows 11 releases, including 26H2, are tested.
 - .NET Framework 4.8 or newer. It is included in Windows 10 version 1903 and later, as well as Windows 11.
 - On ARM64 devices running Windows 11, the x64 build runs through Windows emulation; there is no native ARM64 build yet.
+
+The unreleased Rust build has different prerequisites: Windows 10 version 1809 (build 17763) or
+later, and the Windows App Runtime 2.4 or later framework package. It is distributed
+framework-dependent and does not bundle the runtime.
 
 ### Installation
 

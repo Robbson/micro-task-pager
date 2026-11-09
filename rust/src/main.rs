@@ -33,5 +33,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    pager::run()
+    let result = pager::run();
+    logging::info("micro-task-pager stopped");
+    result
 }

@@ -5,8 +5,9 @@
 //! data comes from `EnumDisplayMonitors`. Monitors are sorted left-to-right
 //! and then top-to-bottom, matching the C# `OrderBy(Bounds.Left).ThenBy(Bounds.Top)`.
 //!
-//! The process is system DPI aware, so these rectangles are physical pixels and
-//! do not change when the window moves between monitors.
+//! The process is per-monitor DPI aware, but monitor rectangles are always in
+//! physical virtual-screen pixels; only the pager's DIP scale changes when it
+//! moves between monitors.
 
 use std::mem::size_of;
 

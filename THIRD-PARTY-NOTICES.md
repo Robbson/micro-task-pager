@@ -31,7 +31,7 @@ The Rust port is not part of the current C# release package yet. Its runtime dep
 - Project: <https://github.com/microsoft/WindowsAppSDK>
 - Copyright: Copyright © Microsoft Corporation
 - License: Microsoft Windows App SDK license terms
-- Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. The release packaging decision (framework-dependent or self-contained) is made in Phase 12.
+- Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. Release packaging is framework-dependent and requires Windows App Runtime 2.4 or later.
 
 ## Runtime components
 

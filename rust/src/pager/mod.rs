@@ -90,6 +90,10 @@ pub struct Pager {
     wheel_hook: Option<WheelHook>,
     pinned: bool,
     client_size: (f64, f64),
+    /// DPI the current layout and icon cache were built for. Under per-monitor
+    /// awareness a move to another monitor changes it, so the grid and icons
+    /// must be rebuilt.
+    metrics_dpi: u32,
     startup_error: Option<String>,
     sender: LocalSender<Message>,
     input: InputState,
@@ -297,14 +301,9 @@ impl Pager {
             .map_err(|error| error.to_string())?;
         let view_modes = initial_view_modes(&settings, snapshot.desktop_count, monitors.len());
         let mut icons = IconSources::default();
-        icons.refresh(&snapshot, icon_pixels(native_window::system_dpi()));
-        let layout = layout::build(
-            &snapshot,
-            &monitors,
-            &view_modes,
-            &settings,
-            native_window::system_dpi(),
-        );
+        let startup_dpi = native_window::system_dpi();
+        icons.refresh(&snapshot, icon_pixels(startup_dpi));
+        let layout = layout::build(&snapshot, &monitors, &view_modes, &settings, startup_dpi);
         let client_size = positive_size(&layout);
 
         crate::logging::info(format!(
@@ -329,6 +328,7 @@ impl Pager {
             wheel_hook: None,
             pinned: false,
             client_size,
+            metrics_dpi: startup_dpi,
             startup_error: None,
             sender,
             input: InputState::default(),
@@ -357,6 +357,7 @@ impl Pager {
             wheel_hook: None,
             pinned: false,
             client_size: ERROR_WINDOW_SIZE,
+            metrics_dpi: native_window::system_dpi(),
             startup_error: Some(error),
             sender,
             input: InputState::default(),
@@ -439,7 +440,7 @@ impl Pager {
             self.rebuild_layout();
             self.refresh_icons();
         }
-        self.sync_icon_size();
+        self.sync_metrics();
 
         let Some(desktop) = self.desktop.as_ref() else {
             return;
@@ -465,6 +466,7 @@ impl Pager {
             dpi,
         );
         self.client_size = positive_size(&self.layout);
+        self.metrics_dpi = dpi;
     }
 
     fn resize_view_modes(&mut self, desktop_count: u32, screen_count: usize) {
@@ -544,7 +546,10 @@ impl Pager {
         self.install_foreground(hwnd);
         crate::logging::info(format!("reactor pager window attached: {hwnd:?}"));
         self.window = Some(window);
-        self.refresh_icons();
+        // The window DPI can differ from the system DPI used before the window
+        // existed, so rebuild the grid and icon cache for the monitor it opened
+        // on.
+        self.sync_metrics();
     }
 
     fn refresh_icons(&mut self) {
@@ -556,13 +561,22 @@ impl Pager {
         self.icons.refresh(&self.snapshot, icon_pixels(dpi));
     }
 
-    fn sync_icon_size(&mut self) {
+    /// Rebuilds the pixel grid and icon cache when the window's DPI changes.
+    ///
+    /// The layout snaps physical pixels to the DIP grid, so moving the pager to
+    /// a monitor with a different scale factor needs a new grid; otherwise the
+    /// window keeps DIP sizes computed at the old scale and appears too large or
+    /// too small.
+    fn sync_metrics(&mut self) {
         let dpi = self
             .window
             .as_ref()
             .map(|window| native_window::window_dpi(window.hwnd()))
             .unwrap_or_else(native_window::system_dpi);
-        if self.icons.size_px() != icon_pixels(dpi) {
+        if self.metrics_dpi != dpi {
+            self.rebuild_layout();
+            self.refresh_icons();
+        } else if self.icons.size_px() != icon_pixels(dpi) {
             self.refresh_icons();
         }
     }

@@ -22,8 +22,8 @@ content; link to the relevant section instead.
 | 8. Reactor pager shell         | Complete | 2026-11-06 | 2026-11-06 | Borderless/tool-window/layered/topmost reactor window, HWND shim, pinning, and ticks verified on 26200; native v1 remains the main binary until Phase 11                                                                                                                             |
 | 9. Reactor pager content       | Complete | 2026-11-06 | 2026-11-06 | DIP layout/hit testing, Preview and Micro views, crisp display-sized icons, pointer drag/click, low-level Shift+wheel hook, and compact native context menu verified on 26200; drag cursor feedback is a follow-up, Settings/About wait for Phase 10                                 |
 | 10. Reactor dialogs            | Complete | 2026-11-06 | 2026-11-07 | Promoted About, added the Settings window with working copy, OK/Cancel, per-option revert to the opening values, per-section defaults, validation, coalesced live preview, C#-compatible persistence, C#-style dialog placement, dialog topmost handling, and discoverable numeric steppers |
-| 11. Cutover and cleanup        | Complete | 2026-11-07 | 2026-11-07 | Main binary now starts the reactor pager; native `app.rs`, `window.rs`, `about.rs`, and `render/` removed; docs and agent rules updated; Windows 10 1809 is now the app floor |
-| 12. Verification and packaging | Pending  |            |            | Checklist, OS floor, runtime packaging, supported builds                                                                                                                                                                                                                             |
+| 11. Cutover and cleanup        | Complete | 2026-11-07 | 2026-11-07 | Main binary now starts the reactor pager; native `app.rs`, `window.rs`, `about.rs`, and `render/` removed; docs and agent rules updated; Windows 10 1809 is now the app floor       |
+| 12. Verification and packaging | In progress | 2026-11-09 |            | Framework-dependent Windows App Runtime 2.4+ packaging decided; `PerMonitorV2` manifest and DPI-change rebuild added; release build, pinning, handle stability, and clean `WM_CLOSE` verified on 26200; multi-monitor with different per-screen DPI user-verified; manual C# parity walk and older Windows builds remain |
 
 Phases 1-6 record the retired native v1 baseline, which was the behavioral and functional fallback
 until the cutover. The current application is the WinUI 3 pager described in the rest of this
@@ -185,16 +185,22 @@ Follow-up fixes after user testing:
 
 - [x] Make the reactor pager the main binary.
 - [x] Delete `window.rs`, `render/`, native `about.rs`, and unused `windows` UI features.
+      `Win32_UI_Controls` was the last unused feature and was removed on 2026-11-09.
 - [x] Remove GDI/Painter references from docs and tests.
 - [x] Keep the C# implementation until parity is proven.
 
 ### Phase 12: Verification and Packaging
 
 - [ ] Walk the full checklist against the C# build.
-- [ ] Verify on supported Windows builds and mixed-DPI monitors.
-- [ ] Decide framework-dependent vs self-contained Windows App Runtime packaging.
-- [ ] Update user-facing requirements for Windows 10 1809 (17763) and the runtime.
-- [ ] Check shutdown, handle/COM leaks, log output, and release size.
+- [x] Verify multi-monitor layouts with a different DPI per screen. User-verified on 26200 on
+      2026-11-09.
+- [ ] Verify on the remaining supported Windows builds (Windows 10, Win10LTSC, Windows 11 21H2/22H2).
+- [x] Decide framework-dependent vs self-contained Windows App Runtime packaging. Decision:
+      framework-dependent, Windows App Runtime 2.4 or later.
+- [x] Update user-facing requirements for Windows 10 1809 (17763) and the runtime.
+- [x] Check shutdown, handle/COM leaks, log output, and release size.
+- [x] Set the WinUI DPI-awareness manifest entry to `PerMonitorV2` and rebuild the pixel grid and icon
+      cache when the window DPI changes.
 - [ ] Remove the C# implementation only on explicit instruction.
 
 ## Postponed
@@ -207,7 +213,6 @@ These items are not scheduled and do not block the next phase.
 | Run the probe on Windows 11 21H2 and 22H2                        | Same                                               | A suitable image is available         |
 | Validate pinning with `ShowInTaskbar` variants                   | Needs manual UI testing alongside the pager window | Phase 12                              |
 | Verify WinUI topmost across explorer restarts and shell restarts | Requires manual shell testing                      | Phase 12                              |
-| Choose framework-dependent vs self-contained runtime packaging   | Product/packaging decision                         | Phase 12                              |
 
 ## Decision log
 
@@ -269,6 +274,9 @@ These items are not scheduled and do not block the next phase.
 | 2026-11-07 | Position the Settings window with the C# placement sequence | Reactor 0.100 has no initial-window-position API, so the pager captures its own rect, computes right/left/below/above/center over the monitor work areas, and moves the secondary HWND when it first appears | ARCHITECTURE §9.2 |
 | 2026-11-07 | Scale the revert icon through a `Viewbox` | A raw 18 px glyph is clipped by the Button content padding; a 40x32 button with a `Viewbox`-scaled `Symbol::Undo` renders cleanly | ARCHITECTURE §9.2 |
 | 2026-11-07 | Cloak the Settings window during placement | Reactor shows a secondary window immediately at its default position. The pager retries every 1 ms, applies `DWMWA_CLOAK`, moves the HWND, and reveals it, preventing the default position from being presented | ARCHITECTURE §9.2 |
+| 2026-11-09 | Ship the Rust app framework-dependent | A ~3.5 MB executable plus the Windows App Runtime 2.4+ prerequisite is smaller and simpler than bundling 100+ MB of runtime files; reactor already resolves the installed framework package and prompts when it is missing | ARCHITECTURE §15 |
+| 2026-11-09 | Declare `PerMonitorV2` and rebuild layout/icons on DPI change | WinUI 3 requires per-monitor awareness. The old `system` manifest entry made reactor's `SetProcessDpiAwarenessContext` call fail and left the pixel grid stale when the window moved to another scale | ARCHITECTURE §6.5, §8.8 |
+| 2026-11-09 | Remove the unused `Win32_UI_Controls` feature | No module references it after the native UI deletion; `Win32_Security` stays because `CreateMutexW` is gated behind it | Phase 11 |
 
 ## Verified Windows builds
 
@@ -281,6 +289,8 @@ edition.
 | 26200 | Windows 11 25H2 | Win11 layout     | Reactor About rendered; borderless, `WS_EX_TOOLWINDOW`, layered alpha, and topmost reassertion work on a live WinUI window                                                                                                                                                                                                                                                         | 2026-10-30 | Topmost was reset once by WinUI after the style change; reasserting worked. Pinning through the HWND shim is not yet tested |
 | 26200 | Windows 11 25H2 | Win11 layout     | Reactor pager shell: `WS_POPUP` without caption, `WS_EX_APPWINDOW`, `WS_EX_LAYERED`, topmost, saved position, pinned (`probe pinned` = true), alpha 191 at `0.75`, and `WM_CLOSE` exited cleanly                                                                                                                                                                                   | 2026-11-06 | Single monitor, 100% DPI; shell run from `examples/reactor_pager` while the native v1 remains the main binary               |
 | 26200 | Windows 11 25H2 | Win11 layout     | Reactor pager content: mixed Micro/Preview desktops with crisp display-sized icons, borders, active highlighting, and `+N` overflow; compact native `TrackPopupMenu` with glyph labels and Toggle/Position/grayed Settings/About/Exit; real Shift+wheel toggled the mode under the cursor; dragging a probe window from desktop 0 to 1 moved it while the current desktop stayed 0 | 2026-11-06 | Single monitor, 100% DPI; drag cursor feedback is deferred, click-to-switch/focus remains for the Phase 12 live pass        |
+| 26200 | Windows 11 25H2 | Win11 layout     | Release binary from a clean folder: per-monitor DPI awareness (`PerMonitorV2` context match), `probe pinned` = true, stable handles/memory over 15 s, clean `WM_CLOSE` exit, no log errors; supervisor recreated the COM backend after two `RPC_E_DISCONNECTED` events                                                                                                                                                    | 2026-11-09 | Single monitor, 100% DPI; C# parity walk and older/mixed-DPI builds remain                                                                 |
+| 26200 | Windows 11 25H2 | Win11 layout     | Multi-monitor with a different DPI per screen: rendering, layout, and icon sizing work on all screens. Comparing with the C# build exposed that the C# Micro Taskbar counts windows from other screens, so secondary-screen icons are not centered; the Rust layout filters per screen and centers correctly                                                                                                              | 2026-11-09 | User-verified; the C# icon-centering bug is recorded as a known deviation in ARCHITECTURE §12                                             |
 
 ## Open questions
 
@@ -292,7 +302,7 @@ edition.
 | How can the pager show a move cursor during drag over WinUI content?                                   | The C# pager uses `Cursors.SizeAll`                                                    |       | Deferred 2026-11-06 by user request: `SetCursor`, class cursors, and `WM_SETCURSOR` are reset by WinUI; revisit with a reactor cursor API                                        |
 | Does a reactor `Menu` behave correctly on a layered, tool-window pager?                                | Right-click is the only entry point to settings/about/exit                             |       | Resolved 2026-11-06: 0.100 `Menu` is a button flyout. Phase 9 uses a temporary native `TrackPopupMenu`; true menu support waits for a reactor upgrade                            |
 | Should the toolchain be pinned to an exact version?                                                    | `1.99.1` is currently installed without `cargo.exe`, so `stable` (also 1.99.1) is used |       | Open                                                                                                                                                                             |
-| Framework-dependent or self-contained Windows App Runtime packaging?                                   | Affects release size and prerequisites                                                 |       | Phase 12                                                                                                                                                                         |
+| Framework-dependent or self-contained Windows App Runtime packaging?                                   | Affects release size and prerequisites                                                 |       | Resolved 2026-11-09: framework-dependent, Windows App Runtime 2.4 or later                                                                                                       |
 
 ## Verification log
 
@@ -323,6 +333,10 @@ narrative.
 | 2026-11-07 | 11 | Cutover verified on build 26200: `cargo run` now starts the reactor pager; the context menu opens both About and Settings from the main binary; the Settings Layout rows show minus/plus step buttons; live preview, cancel-restore, Apply persistence, and OK close still work; the native `app.rs`, `window.rs`, `about.rs`, and `render/` files are deleted; `cargo fmt --check`, Clippy, and 38 tests pass |
 | 2026-11-07 | 10 | Settings follow-up on build 26200, 3440x1440 at 100%: Apply was removed (OK persists and closes, Cancel/window close restores the opening values); the dialog opened at `x = pager.right + 8`, `y = work_area.bottom - dialog_height`, matching the C# right-placement sequence; changing Pager Height showed a scaled undo icon in a 40x32 revert button; 44 tests, `cargo fmt --check`, and Clippy pass |
 | 2026-11-07 | 10 | Placement flash follow-up: the first sighting of the Settings HWND now applies `DWMWA_CLOAK`, moves the window, and reveals it; the 40 ms retry was replaced with a 1 ms retry chain capped at 100 attempts; `DwmSetWindowAttribute` failures are logged. `cargo fmt --check`, Clippy, and 44 tests pass; the visual no-flash check is left for the next manual run |
+| 2026-11-09 | 11 | Removed the last unused `windows` feature (`Win32_UI_Controls`); `Win32_Security` stays because `CreateMutexW` is gated behind it. `cargo build --all-targets`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --all -- --check`, and 44 tests pass |
+| 2026-11-09 | 12 | Release build on 26200: `rust/target/release/micro-task-pager.exe` is 3,527,168 bytes, x64 Windows GUI, embeds the icon/version resource and an `asInvoker` manifest with `dpiAware=true/pm` and `PerMonitorV2`; no `VCRUNTIME`/`MSVCP140`/`api-ms-win-crt` import strings, so the static MSVC runtime holds. Ran from a clean temp folder: `GetProcessDpiAwareness` returned per-monitor and the window context matched `PER_MONITOR_AWARE_V2`, `probe pinned` returned true, handles stayed at 1734 -> 1742 and working set at 102.3 MB over 15 s (GDI 9, USER 36), `WM_CLOSE` exited the process, and the log showed no startup or shutdown errors. A second controlled close recorded `micro-task-pager stopped` in the log. The supervisor also recovered twice from `RPC_E_DISCONNECTED (0x80010108)` by recreating the backend. Manual C# parity walk and older Windows builds remain |
+| 2026-11-09 | 12 | Multi-monitor with different per-screen DPI user-verified on 26200: all screens render correctly and icons are centered. The comparison also exposed a C# bug: `RenderMicroTaskbar` counts every window on the desktop and only skips other-screen windows while drawing, so icons on secondary screens are mis-centered. The Rust layout filters windows per monitor before computing columns and centering, so it does not have the bug |
+| 2026-11-09 | 12 | End-to-end release smoke on 26200: the release binary starts the pager, opens About and Settings, applies the Settings window placement, and survives a COM backend recreation without user-visible errors; the clean `WM_CLOSE` path logs `micro-task-pager stopped` |
 
 ## Code map and glossary
 

@@ -90,8 +90,9 @@ cargo test
   version) and embeds `app.manifest` through the MSVC linker flags.
 - `windows-reactor` 0.100 is a normal dependency. The pager, About, and Settings are reactor
   components; `src/main.rs` starts the reactor pager.
-- WinUI 3 requires the Windows App Runtime 2.x framework package. It is installed on this machine
-  (2.6.4); the reactor examples are the quickest smoke test:
+- WinUI 3 requires the Windows App Runtime 2.x framework package (2.4 or later). Release packaging is
+  framework-dependent; the executable does not bundle the runtime. It is installed on this machine
+  (2.6.5); the reactor examples are the quickest smoke test:
 
   ```powershell
   cargo run --example reactor_about
@@ -105,6 +106,8 @@ cargo test
 - The app requires Windows 10 1809 (build 17763) or later because of the Windows App Runtime. The
   virtual-desktop backend still supports build 10240 and later, but the WinUI app cannot run below
   17763.
+- The app manifest declares `PerMonitorV2` DPI awareness, which WinUI 3 requires. The pager rebuilds its
+  pixel grid and icon cache when the window DPI changes; monitor rectangles stay in physical pixels.
 - The WinUI pager renders both view modes and supports click-to-switch, click-to-focus, pager
   dragging, window dragging between desktops, Shift+wheel mode toggle, and the context menu with
   Settings and About. It also pins itself to all desktops when `ShowAppInTaskbar` is enabled,
@@ -217,5 +220,5 @@ Guidance:
   mouse click to choose an item, or click outside/close the menu afterward. `windows-reactor` 0.100
   has no right-click context menu API.
 - Keep the C# and Rust settings registry values compatible while both implementations exist.
-- The Windows App Runtime 2.x framework package is a prerequisite for the WinUI target. The app must
-  either require it or bundle it self-contained; decide during Phase 12.
+- The Windows App Runtime 2.x framework package (2.4 or later) is a prerequisite for the WinUI target.
+  Packaging is framework-dependent; the executable does not bundle the runtime.

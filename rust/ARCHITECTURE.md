@@ -438,10 +438,10 @@ UI components must not contain raw handles, message constants, or `unsafe` block
 
 - `windows-reactor` bootstraps the Windows App Runtime 2.x framework package.
 - The minimum OS is Windows 10 1809 (build 17763), the minimum supported by the runtime.
-- Keep the application manifest `asInvoker`. WinUI 3 provides DPI-aware layout; verify the final
-  DPI-awareness manifest entry during Phase 12 instead of relying on the C# system-DPI setting.
-- Decide between framework-dependent (small app, runtime installed) and self-contained (larger app)
-  during the packaging phase. The architecture supports either.
+- Keep the application manifest `asInvoker`. It declares `PerMonitorV2`; WinUI 3 requires per-monitor
+  DPI awareness, and a manifest default would make reactor's `SetProcessDpiAwarenessContext` call fail.
+- Release packaging is framework-dependent: ship the executable and require Windows App Runtime 2.4 or
+  later. Reactor resolves the installed framework package and prompts when it is missing.
 
 ## 7. Virtual Desktop Subsystem
 
@@ -629,9 +629,13 @@ The icon cache currently returns `HICON`. Reactor `Image` needs image data:
 
 ### 8.8 DPI and Multi-Monitor
 
-- Reactor and WinUI use DIPs; remove the manual `scale()` helpers from UI layout.
+- Reactor and WinUI use DIPs; the pager's own layout still snaps to whole device pixels.
+- The manifest declares `PerMonitorV2`, as WinUI 3 requires. The pager computes its pixel grid from
+  the pager window DPI and rebuilds the layout and icon cache when that DPI changes, so moving the
+  pager to a monitor with another scale keeps its intended DIP size.
 - WinUI handles per-monitor DPI. This is an intentional improvement over the C# system-DPI behavior.
-- Keep the monitor enumeration used to compute pager width and preview rectangles.
+- Keep the monitor enumeration used to compute pager width and preview rectangles. Monitor rectangles
+  are always physical pixels; only the window DPI scale changes.
 - Keep the C# limitation for vertically arranged monitors until the layout model is redesigned.
 
 ## 9. Dialogs
@@ -758,7 +762,7 @@ Use this as the acceptance list. Every item should be verified against the C# bu
 - [ ] Logs in `%LOCALAPPDATA%\MicroTaskPager\logs`, rotated, retained for 14 days.
 - [ ] About content matches the C# dialog (logo, version, author, acknowledgments, Close).
 - [ ] Settings exposes the same options, limits, revert, and reset-per-section behavior as the C# dialog.
-- [ ] DPI scaling is correct on high-DPI and mixed-DPI monitors.
+- [x] DPI scaling is correct on high-DPI and mixed-DPI monitors (user-verified 2026-11-09).
 - [ ] WinUI look and feel: themed controls, focus visuals, keyboard navigation, accessibility names.
 
 ## 12. Known Deviations from the C# Implementation
@@ -787,6 +791,10 @@ as it is made.
 - Clip each monitor's preview to its pager rectangle, so a window that extends across monitors cannot
   paint into the neighboring screen.
 - Clamp Micro Taskbar columns to at least one to avoid a division by zero in very narrow layouts.
+- Filter windows by screen before counting and centering Micro Taskbar tiles. The C# renderer counts
+  every window on the desktop and then skips windows from other screens while drawing, which can
+  mis-center or mis-wrap the icons of secondary screens. The Rust layout uses only the windows that
+  belong to each screen.
 - Replace OLE drag-and-drop with an internal pointer-capture drag: the payload is only a window handle
   and a source desktop, so `IDropSource`/`IDropTarget` registration is unnecessary. The drag ghost is a
   reactor element. Keep the gesture alive through pointer-capture loss; reactor's release event still
@@ -864,7 +872,7 @@ verifiable on its own; the current app is the reactor pager.
 
 - Walk the section 11 checklist against the C# build.
 - Verify on supported Windows builds and mixed-DPI monitors.
-- Decide framework-dependent vs self-contained runtime packaging.
+- Framework-dependent packaging decided: Windows App Runtime 2.4 or later is a prerequisite.
 - Update user-facing requirements for Windows 10 1809 and the Windows App Runtime.
 - Keep the C# implementation until parity is proven; remove it only on explicit instruction.
 
@@ -887,11 +895,12 @@ verifiable on its own; the current app is the reactor pager.
 - `#![windows_subsystem = "windows"]` so no console window appears.
 - Statically link the MSVC runtime (`rust/.cargo/config.toml`) so the executable does not require the
   Visual C++ redistributable.
-- Windows App Runtime 2.x is required. Choose framework-dependent or self-contained during Phase 12.
+- Windows App Runtime 2.4 or later is required. Packaging is framework-dependent: reactor resolves the
+  installed framework package and shows an install prompt when it is missing. The executable does not
+  bundle the runtime.
 - Minimum OS: Windows 10 1809 (build 17763).
 - Embed the icon and version resource.
-- Keep the application manifest `asInvoker`. Verify the final WinUI DPI-awareness manifest entry in
-  Phase 12.
+- Keep the application manifest `asInvoker` with `PerMonitorV2` DPI awareness.
 - Keep the C# mutex name (`micro-task-pager-win-app`) for release builds so the two implementations
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
