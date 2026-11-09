@@ -7,6 +7,7 @@
 - csharp-winforms settings dialog now sticks to the system colors
 - csharp-winforms pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
 - added `run.ps1` to build and start any implementation from the repository root
+- `run.ps1` no longer opens an extra console window for the Rust debug builds
 
 ## v1.5.1
 

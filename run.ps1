@@ -125,6 +125,9 @@ Write-Host "==> Starting $executable"
 $startParameters = @{
     FilePath         = $executable
     WorkingDirectory = $root
+    # Rust debug builds use the console subsystem; keep them in the current
+    # console instead of letting Start-Process open an additional window.
+    NoNewWindow      = $true
 }
 
 if ($Wait) {
