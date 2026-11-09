@@ -1,4 +1,8 @@
-$version = (Get-Content version.txt).Trim()
+$projectDir = $PSScriptRoot
+$versionFile = Join-Path $projectDir 'version.txt'
+$generatedFile = Join-Path $projectDir 'src\GeneratedVersion.cs'
+
+$version = (Get-Content -LiteralPath $versionFile).Trim()
 
 $parts = $version.Split('.')
 
@@ -11,7 +15,7 @@ $parts[3] = ([int]$parts[3] + 1).ToString()
 
 $newVersion = $parts -join '.'
 
-Set-Content version.txt $newVersion
+Set-Content -LiteralPath $versionFile $newVersion
 
 @"
 using System.Reflection;
@@ -19,4 +23,4 @@ using System.Reflection;
 [assembly: AssemblyVersion("$newVersion")]
 [assembly: AssemblyFileVersion("$newVersion")]
 [assembly: AssemblyInformationalVersion("$newVersion")]
-"@ | Set-Content GeneratedVersion.cs
+"@ | Set-Content -LiteralPath $generatedFile

@@ -115,7 +115,7 @@ sufficient. The required capabilities are:
 - Map a desktop object to its index and a window handle to its desktop.
 - Pin the pager process/application to all desktops via `IVirtualDesktopPinnedApps`.
 
-The C# implementation contains four version-specific variants under `csharp-winforms/Core/API/` (`Win10`,
+The C# implementation contains four version-specific variants under `csharp-winforms/src/Core/API/` (`Win10`,
 `Win10LTSC`, `Win11`, `Win11_`). These variants differ in vtable layout, not in application logic.
 
 ### 2.5 Always-On Behavior

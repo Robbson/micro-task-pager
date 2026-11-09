@@ -229,12 +229,12 @@ backend, in 740 code lines including its tests.
 
 | C#                                            | Code lines | Branch points |
 | --------------------------------------------- | ---------: | ------------: |
-| `csharp-winforms/GUI/AppSettingsWindow.cs`                |        828 |            53 |
-| `csharp-winforms/GUI/MainForm.cs`                         |        435 |            35 |
-| `csharp-winforms/Core/API/VirtualDesktopAPI-Win11_.cs`    |        381 |            20 |
-| `csharp-winforms/Core/API/VirtualDesktopAPI-Win11.cs`     |        364 |            17 |
-| `csharp-winforms/Core/API/VirtualDesktopAPI-Win10LTSC.cs` |        348 |            17 |
-| `csharp-winforms/Core/API/VirtualDesktopAPI-Win10.cs`     |        347 |            17 |
+| `csharp-winforms/src/GUI/AppSettingsWindow.cs`                |        828 |            53 |
+| `csharp-winforms/src/GUI/MainForm.cs`                         |        435 |            35 |
+| `csharp-winforms/src/Core/API/VirtualDesktopAPI-Win11_.cs`    |        381 |            20 |
+| `csharp-winforms/src/Core/API/VirtualDesktopAPI-Win11.cs`     |        364 |            17 |
+| `csharp-winforms/src/Core/API/VirtualDesktopAPI-Win10LTSC.cs` |        348 |            17 |
+| `csharp-winforms/src/Core/API/VirtualDesktopAPI-Win10.cs`     |        347 |            17 |
 
 | Rust                                | Code lines | Branch points |
 | ----------------------------------- | ---------: | ------------: |

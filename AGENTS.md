@@ -205,7 +205,7 @@ dotnet build csharp-winforms/MicroTaskPager.csproj -c Debug
 The following files are generated automatically by the build:
 
 - `csharp-winforms/version.txt`
-- `csharp-winforms/GeneratedVersion.cs`
+- `csharp-winforms/src/GeneratedVersion.cs`
 
 `csharp-winforms/MicroTaskPager.csproj` runs `csharp-winforms/IncrementVersion.ps1` before every build. The script increments
 the fourth version component (`Major.Minor.Patch.Build`) and rewrites both files.
@@ -221,13 +221,15 @@ Guidance:
 
 ## Repository layout
 
-- `csharp-winforms/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
+- `csharp-winforms/src/` - C# source root (`Program.cs`, `Config`, `Core`, `GUI`).
+- `csharp-winforms/src/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
   `Win10`, `Win10LTSC`, `Win11`, and `Win11_`. The current selector uses `Win11_` for build 22621 and
   later; `rust-winui/ARCHITECTURE.md` §7.3 flags that the real boundary still needs verification.
   Keep shared changes in sync across all four files.
-- `csharp-winforms/Core/` - window enumeration, types, DPI helpers.
-- `csharp-winforms/GUI/` - pager, desktops, settings dialog, about dialog.
-- `csharp-winforms/Config/` - settings model, registry storage, saved pager position.
+- `csharp-winforms/src/Core/` - window enumeration, types, DPI helpers.
+- `csharp-winforms/src/GUI/` - pager, desktops, settings dialog, about dialog.
+- `csharp-winforms/src/Config/` - settings model, registry storage, saved pager position.
+- `csharp-winforms/Resources/` - icon and logo assets shared with the Rust resource files.
 - `rust-winui/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
 - `rust-winui/MIGRATION.md` - phase status, verification log, and open questions.
 - `rust-winui/src/` - Rust implementation (settings, COM apartment, single instance, desktop API, window
