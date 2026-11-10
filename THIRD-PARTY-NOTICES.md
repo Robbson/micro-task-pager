@@ -6,11 +6,11 @@ These notices cover the bundled C# assemblies and the dependencies of the Rust p
 
 Microsoft .NET Framework is a system prerequisite and is not included in this distribution.
 
-The versions below reflect the dependencies used by the current release. Update this file when the dependencies change.
+The versions below reflect the current dependencies. Update this file when the dependencies change.
 
-## Rust implementation (in development)
+## Rust WinUI implementation (experimental)
 
-The Rust port is not part of the current C# release package yet. Its runtime dependencies are:
+The Rust WinUI port is experimental and is not planned to receive updates in the near future. Its runtime dependencies are:
 
 ### windows-reactor 0.100.0
 
@@ -33,7 +33,7 @@ The Rust port is not part of the current C# release package yet. Its runtime dep
 - License: Microsoft Windows App SDK license terms
 - Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. Release packaging is framework-dependent and requires Windows App Runtime 2.4 or later.
 
-## Rust winsafe implementation (experimental)
+## Rust winsafe implementation (stable)
 
 The native Win32 build does not use `windows-reactor` or the Windows App Runtime. Its additional runtime dependencies are:
 

@@ -8,6 +8,11 @@ Keep this document focused on progress and evidence. Update it when a phase star
 a Windows build is verified, or when an open question is resolved. Do not duplicate architecture
 content; link to the relevant section instead.
 
+Status: experimental implementation. It currently matches the `rust-winsafe` feature set, but it is
+not planned to be updated in the near future because `windows-reactor` is not stable yet; it also uses
+considerably more resources and a large runtime dependency. The stable implementation is
+`rust-winsafe`, and `csharp-winforms` has the latest features.
+
 ## Phase status
 
 | Phase                          | Status   | Started    | Completed  | Notes                                                                                                                                                                                                                                                                                |

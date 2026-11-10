@@ -1,8 +1,9 @@
 # rust-winsafe - Migration Log
 
-Status: experimental third implementation. It is a native Win32 pager built with
+Status: stable implementation. It is a native Win32 pager built with
 [`winsafe`](https://crates.io/crates/winsafe) and has **no Windows App Runtime / WinUI dependency**.
-The shipping implementation remains `rust-winui`; `csharp-winforms` remains the behavioral reference.
+It has fewer features than `csharp-winforms`, and new features are added only after a delay.
+`csharp-winforms` has the latest features; `rust-winui` is the experimental WinUI 3 implementation.
 
 This document tracks the winsafe variant only. For the WinUI migration see
 [`../rust-winui/MIGRATION.md`](../rust-winui/MIGRATION.md); for the framework trade-offs see

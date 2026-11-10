@@ -1,7 +1,8 @@
 # Rust Migration – Architecture and Development Guidelines
 
-Status: working draft. The status column in section 3 and the decisions in section 15 define the
-current direction; everything else is a candidate or deferred.
+Status: working draft for the stable `rust-winsafe` implementation. The status column in section 3
+and the decisions in section 15 define the current direction; everything else is a candidate or
+deferred.
 
 ## 1. Project Overview
 

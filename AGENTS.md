@@ -6,14 +6,17 @@ Instructions for AI agents working in this repository.
 
 Micro Task Pager is a Windows-only virtual desktop pager. The repository contains:
 
-- `csharp-winforms/` - the original C#/.NET Framework 4.8 Windows Forms application. It remains the behavioral
-  reference and ships separately while parity is verified.
-- `rust-winui/` - the Rust implementation and the shipping WinUI 3 pager. It uses
-  `windows-reactor` for all UI. Read `rust-winui/ARCHITECTURE.md` and `rust-winui/MIGRATION.md` before making
-  structural changes.
-- `rust-winsafe/` - an experimental third implementation: native Win32 through `winsafe`, with no
-  Windows App Runtime or reactor dependency. Read `rust-winsafe/MIGRATION.md`. It is not the shipping
-  build.
+- `csharp-winforms/` - the C#/.NET Framework 4.8 Windows Forms application. It has the latest
+  features, but it is less tested in production than `rust-winsafe`; some features may be
+  experimental and could change or be removed.
+- `rust-winsafe/` - the stable implementation: native Win32 through `winsafe`, with no Windows App
+  Runtime or reactor dependency. It has fewer features than `csharp-winforms`, and new features are
+  added only after a delay. Read `rust-winsafe/MIGRATION.md`.
+- `rust-winui/` - the experimental Rust implementation. It currently matches the `rust-winsafe`
+  feature set but is not planned to be updated in the near future because `windows-reactor` is not
+  stable yet; it also uses considerably more resources and a large runtime dependency. It uses
+  `windows-reactor` for all UI. Read `rust-winui/ARCHITECTURE.md` and `rust-winui/MIGRATION.md`
+  before making structural changes.
 
 All three use undocumented Windows virtual-desktop COM interfaces, so changes that touch virtual
 desktop interop must be handled carefully and tested on real Windows builds.
@@ -85,7 +88,7 @@ Outputs are written to `prod/winforms/`, `prod/winui/`, and `prod/winsafe/`, eac
 `MicroTaskPager-<target>-v<version>.zip`. The C# build increments `csharp-winforms/version.txt`; the
 Rust archives use the version from their `Cargo.toml` (`rust-winui` or `rust-winsafe`).
 
-### Rust (implementation)
+### Rust WinUI 3 (experimental)
 
 Run Cargo commands from the `rust-winui/` directory; the repository root is not a Cargo workspace.
 
@@ -163,7 +166,7 @@ cargo test
   desktops and fight over topmost. The release mutex prevents this; a development build may use a
   different mutex for side-by-side comparison.
 
-### Rust winsafe (native Win32, experimental)
+### Rust winsafe (native Win32, stable)
 
 Run Cargo commands from the `rust-winsafe/` directory; the repository root is not a Cargo workspace.
 
@@ -189,7 +192,7 @@ cargo test
 - Do not run the winsafe build while another pager is running; all implementations share the
   single-instance mutex and the topmost/pinning behavior.
 
-### C# (reference implementation)
+### C# (latest features)
 
 ```powershell
 dotnet build csharp-winforms/MicroTaskPager.csproj -c Debug

@@ -1,9 +1,12 @@
 # Rust Migration – Architecture and Development Guidelines
 
-Status: active architecture. The application UI is **WinUI 3 through `windows-reactor`**. The retired
-native Win32 v1 is preserved only in migration history; the C# implementation remains the behavioral
-reference. New UI work must follow this document; do not reintroduce a native Win32 UI, GDI renderer,
-or dialog runtime.
+Status: experimental architecture. The application UI is **WinUI 3 through `windows-reactor`**. This
+implementation currently matches the `rust-winsafe` feature set, but it is not planned to be updated
+in the near future because `windows-reactor` is not stable yet; it also uses considerably more
+resources and a large runtime dependency. The stable implementation is `rust-winsafe`, and
+`csharp-winforms` has the latest features. The retired native Win32 v1 is preserved only in migration
+history. New UI work, if any, must follow this document; do not reintroduce a native Win32 UI, GDI
+renderer, or dialog runtime.
 
 ## 1. Project Overview
 
@@ -959,7 +962,9 @@ safe Rust.
 | Runtime           | Windows App Runtime 2.x                                |
 | Minimum OS        | Windows 10 1809 (17763)                                |
 | .NET dependency   | Removed in the final implementation                    |
-| C# implementation | Behavioral reference; Rust is the shipping WinUI app   |
+| C# implementation | Latest features; behavioral reference                   |
+| Rust winsafe      | Stable implementation; fewer features, updates delayed  |
+| Rust WinUI        | Experimental; feature set frozen, not actively updated  |
 
 ## 18. Instructions for AI Coding Assistants
 

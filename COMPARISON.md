@@ -1,10 +1,12 @@
 # C# WinForms vs Rust WinUI 3
 
 Deployment, footprint, and code comparison for the C# WinForms and Rust WinUI 3 implementations.
-An experimental third build (`rust-winsafe`) is summarized at the end of this document.
+The stable build is `rust-winsafe`; it is summarized at the end of this document.
 
-Measured on 2026-11-09. The C#/.NET implementation is the current release; the rust-winui/WinUI 3 port
-is feature-complete but unreleased.
+Measured on 2026-11-09. The C#/.NET implementation has the latest features but is less tested in
+production; some features may be experimental. The rust-winui/WinUI 3 port is experimental: it
+currently matches the winsafe feature set but is not planned to receive updates in the near future
+because its `windows-reactor` foundation is not stable yet.
 
 For alternatives to the current WinUI 3 dependency and their trade-offs, see
 [`UI-FRAMEWORK-COMPARISON.md`](UI-FRAMEWORK-COMPARISON.md).
@@ -194,7 +196,7 @@ explicit: error handling, the COM vtable definitions, reactor declarations, and 
 Rust test code adds another 845 lines.
 
 Branch density is lower in Rust when tests are excluded (58.4 vs 73.7 per 1,000 code lines), so the
-shipping code is not branchier per line. The metric says nothing about how hard each branch is to
+application code is not branchier per line. The metric says nothing about how hard each branch is to
 reason about; the C# version concentrates complexity in a few very large Form files, while the Rust
 version splits state machines into testable modules.
 
@@ -304,10 +306,11 @@ Resource measurements used `Get-Process` (`WorkingSet64`, `PrivateMemorySize64`,
 `user32.dll`. The code metrics were produced with a one-off analyzer; the counting rules are listed
 in the measurement setup above so the numbers can be reproduced or challenged.
 
-## Experimental rust-winsafe build
+## Stable rust-winsafe build
 
-A third implementation in `rust-winsafe/` uses native Win32 through `winsafe` and has no separate UI
-runtime. It is experimental and not the shipping build. Measured on 2026-11-09 on the same machine;
+The stable implementation in `rust-winsafe/` uses native Win32 through `winsafe` and has no separate
+UI runtime. It is the stable build, with fewer features than the C# implementation; new features are
+added only after a delay. Measured on 2026-11-09 on the same machine;
 source-line metrics are intentionally omitted for this comparison. Full status is in
 [`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md).
 

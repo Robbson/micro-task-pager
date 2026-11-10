@@ -8,8 +8,9 @@ Companion documents:
 
 - [`COMPARISON.md`](COMPARISON.md) - measured C# WinForms vs current Rust WinUI 3 deployment and
   resource comparison.
-- [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) - current behavior contract and UI direction.
-- [`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md) - the experimental native `winsafe`
+- [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) - behavior contract and UI direction for
+  the experimental WinUI 3 implementation.
+- [`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md) - the stable native `winsafe`
   implementation, which does not use `windows-reactor`.
 - [`AGENTS.md`](AGENTS.md) - current repository rules: `rust-winui` UI goes through `windows-reactor`;
   `rust-winsafe` deliberately uses native winsafe controls and dialogs.
@@ -67,7 +68,7 @@ application's feature set. Only the WinUI row is measured.
 
 | Option                                | System dependency                         |            App size | UI model                  | Native look       | Accessibility / IME                                    | Effort      | Main risk                                                    |
 | ------------------------------------- | ----------------------------------------- | ------------------: | ------------------------- | ----------------- | ------------------------------------------------------ | ----------- | ------------------------------------------------------------ |
-| WinUI 3 + `windows-reactor` (current) | Windows App Runtime 2.4+, 111-119 MiB x64 | 3.36 MiB (measured) | Declarative retained tree | Yes, WinUI/Fluent | Inherited from WinUI                                   | Done        | Young reactor API; runtime install                           |
+| WinUI 3 + `windows-reactor` (experimental) | Windows App Runtime 2.4+, 111-119 MiB x64 | 3.36 MiB (measured) | Declarative retained tree | Yes, WinUI/Fluent | Inherited from WinUI                                   | Done        | Young reactor API; runtime install                           |
 | Win32 + GDI                           | OS DLLs only                              |        ~0.5-1.5 MiB | Imperative drawing        | Yes, custom-drawn | Manual for custom surface; native controls for dialogs | Medium      | Drawing, hit testing, DPI are manual (largely already built) |
 | Win32 + Direct2D/DirectWrite          | OS DLLs only                              |            ~1-2 MiB | Imperative drawing        | Yes, custom-drawn | Same as GDI                                            | Medium-high | Direct2D resource/COM boilerplate                            |
 | Thin declarative layer over Win32     | OS DLLs only                              |            ~1-2 MiB | Declarative-ish wrapper   | Yes               | Native controls help                                   | High        | You own focus, layout, theming, accessibility glue           |
@@ -459,7 +460,7 @@ Assessment:
 - **A production Win32 backend including Settings: high, roughly two to four additional weeks
   depending on how much native dialog polish is required.** The pager itself is the easier half
   because the layout and input models already exist.
-- **Difficulty rating: 5/10 for the boundary, 8/10 for shipping two polished backends.**
+- **Difficulty rating: 5/10 for the boundary, 8/10 for maintaining two polished backends.**
 
 Recommendation: do steps 1-3 only if multiple backends are genuinely likely. That split improves
 testability and keeps the Reactor build working, with no user-visible change. The pure state machines

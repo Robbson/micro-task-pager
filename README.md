@@ -66,13 +66,21 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 
 ### Select the implementation you like
 
-Three implementations are available from the same repository. The C# build is the current published
-release, the WinUI 3 build is feature-complete and can be built from source, and the native winsafe
-build is an experimental no-runtime variant. The table compares them by requirements, app footprint,
-performance, runtime memory, and look.
+Three implementations are available from the same repository, with different maturity levels:
+
+- **C# WinForms** has the latest features. It is less tested in production than the stable build,
+  and some features may be experimental and change or disappear.
+- **Rust winsafe** is the stable build. It has fewer features than the C# build, and new features
+  reach it only after a delay.
+- **Rust WinUI 3** is experimental. It currently matches the winsafe feature set, but it is not
+  planned to receive updates in the near future because its `windows-reactor` foundation is not
+  stable yet. It also uses considerably more resources and requires a large framework dependency.
+
+The table compares them by requirements, app footprint, performance, runtime memory, and look.
 
 | Aspect                         | C# WinForms                                        | Rust WinUI 3                                                       | Rust winsafe                                |
 | ------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
+| Status                         | Latest features; lightly tested, some experimental | Experimental; frozen feature set, not actively updated             | Stable; fewer features, updates arrive later |
 | Runtime requirement            | Windows 10/11 x64; .NET Framework 4.8 (inbox 1903+) | Windows 10 1809+ x64; Windows App Runtime 2.4+ (~111-119 MiB, install) | Windows 10/11 x64; no extra runtime         |
 | App footprint                  | 1.49 MiB in 13 files                               | 3.37 MiB in 1 file                                                 | 1.06 MiB in 1 file                          |
 | Idle CPU                       | 7.2% of one core / 0.30% total                     | 5.9% of one core / 0.25% total                                     | 3.7-4.1% of one core / 0.155-0.170% total   |
@@ -93,19 +101,19 @@ Details: [`COMPARISON.md`](COMPARISON.md),
 - On ARM64 devices running Windows 11, the x64 build runs through Windows emulation; there is no native ARM64 build yet.
 
 The three builds have different runtime prerequisites; the comparison table above lists them. The
-WinUI build is framework-dependent and does not bundle the Windows App Runtime.
+experimental WinUI build is framework-dependent and does not bundle the Windows App Runtime.
 
 ### Installation
 
 1. Download the release for the implementation you want: `MicroTaskPager-winforms-v*.zip` (C#),
-   `MicroTaskPager-winui-v*.zip` (Rust WinUI 3), or `MicroTaskPager-winsafe-v*.zip` (experimental
-   native Rust, when published) from the
+   `MicroTaskPager-winsafe-v*.zip` (stable native Rust), or `MicroTaskPager-winui-v*.zip`
+   (experimental Rust WinUI 3) from the
    [releases page](https://github.com/Robbson/micro-task-pager/releases/latest), or build it from
    source as described below.
 2. Extract the archive.
 3. Run `MicroTaskPager.exe`.
 
-No installer is required. Keep the extracted files together: the WinForms executable needs the bundled DLLs and `MicroTaskPager.exe.config`, while the Rust WinUI build ships as a single executable and requires the Windows App Runtime 2.4 or later. The winsafe build is also a single executable and has no runtime prerequisite. Each archive also contains this README, the changelog, the license, and the third-party notices.
+No installer is required. Keep the extracted files together: the WinForms executable needs the bundled DLLs and `MicroTaskPager.exe.config`, while the experimental Rust WinUI build ships as a single executable and requires the Windows App Runtime 2.4 or later. The winsafe build is also a single executable and has no runtime prerequisite. Each archive also contains this README, the changelog, the license, and the third-party notices.
 
 > [!IMPORTANT]
 > The application is not code-signed yet. Windows SmartScreen may therefore show a warning the first time you start it.
