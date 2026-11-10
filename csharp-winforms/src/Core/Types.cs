@@ -7,6 +7,8 @@ namespace MicroTaskPager.Core
     {
         public bool IsActive { get; set; }
 
+        public bool IsMinimized { get; set; }
+
         public int VirtualDesktopIndex { get; set; }
 
         public int ZOrder { get; set; }

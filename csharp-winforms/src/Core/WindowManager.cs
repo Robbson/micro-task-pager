@@ -169,6 +169,7 @@ namespace MicroTaskPager.Core
                         useDefaultIcon,
                         className.ToString() == "ApplicationFrameWindow"),
                     IsActive = hWnd == WinAPI.GetForegroundWindow(),
+                    IsMinimized = WinAPI.IsIconic(hWnd),
                     Dimensions = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
                     VirtualDesktopIndex = index,
                 });

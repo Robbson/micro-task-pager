@@ -24,6 +24,10 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         private static readonly Font _font =
             new Font("Segoe UI Symbol", Dpi.Scale(12), FontStyle.Regular, GraphicsUnit.Pixel);
 
+        // A translucent black overlay dims both the tile background and the icon without
+        // changing the configured window colors.
+        private static readonly Color _minimizedOverlayColor = Color.FromArgb(120, 0, 0, 0);
+
         public Size Size { get; set; }
         public MainForm Form { get; set; }
         public Point Location { get; set; }
@@ -38,22 +42,42 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void Render(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
+            WindowAreas.Clear();
 
             // Only windows that belong to this renderer's monitor take part in the mode. Counting
             // windows from other monitors here would mis-center and mis-wrap the Micro Taskbar tiles.
-            var visibleWindows = Form.Windows.Where(x =>
+            // Minimized windows have no useful screen geometry, so they are only offered to the
+            // Micro Taskbar view and only when the user enabled them.
+            var candidateWindows = Form.Windows.Where(x =>
                 x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex &&
-                !WinAPI.IsIconic(x.Handle) &&
+                ((Mode == ViewMode.MicroTaskbar
+                    && Form.Options.ShowWhenMinimized != MinimizedWindowVisibility.No) || !x.IsMinimized) &&
                 Screen.FromHandle(x.Handle).DeviceName == AttachedScreen.DeviceName);
 
-            Window[] windows = Mode == ViewMode.Preview
-
+            Window[] windows;
+            if (Mode == ViewMode.Preview)
+            {
                 // For preview view mode, all windows have to be sorted in z-order to draw from back to front
-                ? visibleWindows.OrderBy(x => x.ZOrder).ToArray()
-
+                windows = candidateWindows.OrderBy(x => x.ZOrder).ToArray();
+            }
+            else if (Form.Options.ShowWhenMinimized == MinimizedWindowVisibility.AfterOthers)
+            {
+                // Keep the normal order but append minimized windows after all others.
+                windows = candidateWindows
+                    .OrderBy(x => x.IsMinimized ? 1 : 0)
+                    .ThenBy(x => x.ProcessID)
+                    .ThenBy(x => x.Handle.ToInt64())
+                    .ToArray();
+            }
+            else
+            {
                 // Otherwise order should stay the same (using process id and handle)
                 // -> Order by process id is similar to order in taskbar, as long as the user doesn't move them.
-                : visibleWindows.OrderBy(x => x.ProcessID).ThenBy(x => x.Handle.ToInt64()).ToArray();
+                windows = candidateWindows
+                    .OrderBy(x => x.ProcessID)
+                    .ThenBy(x => x.Handle.ToInt64())
+                    .ToArray();
+            }
 
             if (windows.Length == 0) return;
 
@@ -259,6 +283,15 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
                     // Place the icon in the selection area's center
                     DrawIcon(g, wnd.Icon, new Rectangle(areaCenterOffsetX, areaCenterOffsetY, iconSize, iconSize));
+
+                    // Dim minimized windows so they can be told apart from normal ones
+                    if (wnd.IsMinimized)
+                    {
+                        using (var overlayBrush = new SolidBrush(_minimizedOverlayColor))
+                        {
+                            g.FillRectangle(overlayBrush, selectionArea);
+                        }
+                    }
 
                     // Make the window selectable
                     WindowAreas[wnd.Handle] = selectionArea;

@@ -110,6 +110,33 @@ namespace MicroTaskPager.GUI
             return bestIndex;
         }
 
+        // The combo box lists "No" last even though it is the default and has the value 0.
+        private static int MinimizedVisibilityIndex(MinimizedWindowVisibility visibility)
+        {
+            switch (visibility)
+            {
+                case MinimizedWindowVisibility.Yes:
+                    return 0;
+                case MinimizedWindowVisibility.AfterOthers:
+                    return 1;
+                default:
+                    return 2;
+            }
+        }
+
+        private static MinimizedWindowVisibility MinimizedVisibilityFromIndex(int index)
+        {
+            switch (index)
+            {
+                case 0:
+                    return MinimizedWindowVisibility.Yes;
+                case 1:
+                    return MinimizedWindowVisibility.AfterOthers;
+                default:
+                    return MinimizedWindowVisibility.No;
+            }
+        }
+
         private void AddRow(
             TableLayoutPanel table,
             TabPage page,
@@ -792,8 +819,10 @@ namespace MicroTaskPager.GUI
 
             AddIconSizeRow(icons, page);
 
+            TableLayoutPanel microTaskbar = BeginGroup(page, "MicroTaskbar");
+
             AddNumericRow(
-                icons,
+                microTaskbar,
                 page,
                 "Icon Padding X",
                 "Negative values are supported as well so less space is taken and the icons look stacked.",
@@ -803,7 +832,7 @@ namespace MicroTaskPager.GUI
                 (s, v) => s.IconPaddingX = v);
 
             AddNumericRow(
-                icons,
+                microTaskbar,
                 page,
                 "Icon Padding Y",
                 "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar.",
@@ -811,6 +840,15 @@ namespace MicroTaskPager.GUI
                 9999,
                 s => s.IconPaddingY,
                 (s, v) => s.IconPaddingY = v);
+
+            AddComboRow(
+                microTaskbar,
+                page,
+                "Show When Minimized",
+                "Defines whether minimized windows are shown in the Micro Taskbar view mode.\n\nYes: Minimized windows are shown in their normal order.\n\nYes, after the others: Minimized windows are shown after all normal windows.\n\nNo: Minimized windows are hidden.\n\nMinimized windows are painted darker to tell them apart from normal windows.",
+                new[] { "Yes", "Yes, after the others", "No" },
+                s => MinimizedVisibilityIndex(s.ShowWhenMinimized),
+                (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v));
         }
 
         private void AddPagerHeightRow(TableLayoutPanel table, TabPage page)

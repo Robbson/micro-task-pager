@@ -120,6 +120,11 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     var w = GetWindowUnderCursor(e.Location);
                     if (w != null)
                     {
+                        if (WinAPI.IsIconic(w.Handle))
+                        {
+                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_RESTORE);
+                        }
+
                         WinAPI.SetForegroundWindow(w.Handle);
                     }
                 }
@@ -291,7 +296,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         {
             var coord = Form.PointToClient(mousePosition);
             var visibleWindows = Form.Windows
-                .Where(x => x.VirtualDesktopIndex == VirtualDesktopIndex && !WinAPI.IsIconic(x.Handle));
+                .Where(x => x.VirtualDesktopIndex == VirtualDesktopIndex);
 
             // For desktop preview mode, we search across all screens for the clicked window in z-order from front to back,
             // otherwise order should stay the same (using process id & handle)
