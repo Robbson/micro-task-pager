@@ -312,7 +312,7 @@ The stable implementation in `rust-winsafe/` uses native Win32 through `winsafe`
 UI runtime. It is the stable build, with fewer features than the C# implementation; new features are
 added only after a delay. Measured on 2026-11-09 on the same machine;
 source-line metrics are intentionally omitted for this comparison. Full status is in
-[`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md).
+[`rust-winsafe/MIGRATION.md`](../rust-winsafe/MIGRATION.md).
 
 | Metric | rust-winsafe | C# WinForms | Rust WinUI 3 |
 |---|---:|---:|---:|

@@ -34,6 +34,9 @@
 //!
 //! The crate exposes no UI features. Front ends choose their own toolkit and
 //! keep rendering, input, and dialog widgets in their own crate.
+//!
+//! The architecture, behavior contract, and parity checklist are in
+//! `ARCHITECTURE.md`; the quick module map is in `README.md`.
 
 pub mod com;
 pub mod desktop;

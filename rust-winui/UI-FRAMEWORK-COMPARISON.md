@@ -8,12 +8,14 @@ Companion documents:
 
 - [`COMPARISON.md`](COMPARISON.md) - measured C# WinForms vs current Rust WinUI 3 deployment and
   resource comparison.
-- [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) - behavior contract and UI direction for
-  the experimental WinUI 3 implementation.
-- [`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md) - the stable native `winsafe`
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) - WinUI-specific architecture and UI direction for the
+  experimental WinUI 3 implementation.
+- [`../crates/micro-task-pager-core/ARCHITECTURE.md`](../crates/micro-task-pager-core/ARCHITECTURE.md) -
+  shared platform contract and behavioral reference.
+- [`../rust-winsafe/MIGRATION.md`](../rust-winsafe/MIGRATION.md) - the stable native `winsafe`
   implementation, which does not use `windows-reactor`.
-- [`AGENTS.md`](AGENTS.md) - current repository rules: `rust-winui` UI goes through `windows-reactor`;
-  `rust-winsafe` deliberately uses native winsafe controls and dialogs.
+- [`../AGENTS.md`](../AGENTS.md) - current repository rules: `rust-winui` UI goes through
+  `windows-reactor`; `rust-winsafe` deliberately uses native winsafe controls and dialogs.
 
 Measured on 2026-11-09. Estimates for alternative stacks are order-of-magnitude figures, not
 measurements, and are marked as such.

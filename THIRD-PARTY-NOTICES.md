@@ -8,51 +8,6 @@ Microsoft .NET Framework is a system prerequisite and is not included in this di
 
 The versions below reflect the current dependencies. Update this file when the dependencies change.
 
-## Rust WinUI implementation (experimental)
-
-The Rust WinUI port is experimental and is not planned to receive updates in the near future. Its runtime dependencies are:
-
-### windows-reactor 0.100.0
-
-- Project: <https://github.com/microsoft/windows-rs>
-- Copyright: Copyright © Microsoft Corporation
-- License: MIT OR Apache-2.0
-- Notes: WinUI 3 component framework used for the pager, About, and Settings UI.
-
-### windows / windows-core 0.62 and 0.100
-
-- Project: <https://github.com/microsoft/windows-rs>
-- Copyright: Copyright © Microsoft Corporation
-- License: MIT OR Apache-2.0
-- Notes: Win32, COM, and shell bindings. The 0.62 and 0.100 lines coexist because `windows-reactor` uses the 0.100 line.
-
-### Windows App SDK / Windows App Runtime 2.x
-
-- Project: <https://github.com/microsoft/WindowsAppSDK>
-- Copyright: Copyright © Microsoft Corporation
-- License: Microsoft Windows App SDK license terms
-- Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. Release packaging is framework-dependent and requires Windows App Runtime 2.4 or later.
-
-## Rust winsafe implementation (stable)
-
-The native Win32 build does not use `windows-reactor` or the Windows App Runtime. Its additional runtime dependencies are:
-
-### winsafe 0.0.29
-
-- Project: <https://github.com/rodrigocfd/winsafe>
-- Copyright: Copyright © the winsafe contributors
-- License: MIT
-- Notes: Safe Win32 wrappers used for the pager window and native dialogs.
-
-### png 0.18
-
-- Project: <https://github.com/image-rs/image-png>
-- Copyright: Copyright © the image-rs contributors
-- License: MIT OR Apache-2.0
-- Notes: Decodes the embedded About dialog logo.
-
-The `windows` / `windows-core` crates listed above are also used by this build for GDI, COM, timers, menus, and the color picker.
-
 ## Runtime components
 
 ### Serilog 4.4.0
@@ -94,6 +49,51 @@ The following assemblies are copyright © .NET Foundation and Contributors and a
 - System.Threading.Tasks.Extensions 4.5.4
 
 Project: <https://github.com/dotnet/runtime>
+
+## Rust winsafe implementation (stable)
+
+The native Win32 build does not use `windows-reactor` or the Windows App Runtime. Its additional runtime dependencies are:
+
+### winsafe 0.0.29
+
+- Project: <https://github.com/rodrigocfd/winsafe>
+- Copyright: Copyright © the winsafe contributors
+- License: MIT
+- Notes: Safe Win32 wrappers used for the pager window and native dialogs.
+
+### png 0.18
+
+- Project: <https://github.com/image-rs/image-png>
+- Copyright: Copyright © the image-rs contributors
+- License: MIT OR Apache-2.0
+- Notes: Decodes the embedded About dialog logo.
+
+The `windows` / `windows-core` crates listed above are also used by this build for GDI, COM, timers, menus, and the color picker.
+
+## Rust WinUI implementation (experimental)
+
+The Rust WinUI port is experimental and is not planned to receive updates in the near future. Its runtime dependencies are:
+
+### windows-reactor 0.100.0
+
+- Project: <https://github.com/microsoft/windows-rs>
+- Copyright: Copyright © Microsoft Corporation
+- License: MIT OR Apache-2.0
+- Notes: WinUI 3 component framework used for the pager, About, and Settings UI.
+
+### windows / windows-core 0.62 and 0.100
+
+- Project: <https://github.com/microsoft/windows-rs>
+- Copyright: Copyright © Microsoft Corporation
+- License: MIT OR Apache-2.0
+- Notes: Win32, COM, and shell bindings. The 0.62 and 0.100 lines coexist because `windows-reactor` uses the 0.100 line.
+
+### Windows App SDK / Windows App Runtime 2.x
+
+- Project: <https://github.com/microsoft/WindowsAppSDK>
+- Copyright: Copyright © Microsoft Corporation
+- License: Microsoft Windows App SDK license terms
+- Notes: A Microsoft framework package and system prerequisite for WinUI 3, not bundled with the application. Release packaging is framework-dependent and requires Windows App Runtime 2.4 or later.
 
 ## Apache License 2.0
 

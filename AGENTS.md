@@ -11,7 +11,7 @@ Micro Task Pager is a Windows-only virtual desktop pager. The repository contain
   experimental and could change or be removed.
 - `rust-winsafe/` - the stable implementation: native Win32 through `winsafe`, with no Windows App
   Runtime or reactor dependency. It has fewer features than `csharp-winforms`, and new features are
-  added only after a delay. Read `rust-winsafe/MIGRATION.md`.
+  added only after a delay. Read `rust-winsafe/ARCHITECTURE.md` and `rust-winsafe/MIGRATION.md`.
 - `rust-winui/` - the experimental Rust implementation. It currently matches the `rust-winsafe`
   feature set but is not planned to be updated in the near future because `windows-reactor` is not
   stable yet; it also uses considerably more resources and a large runtime dependency. It uses
@@ -20,8 +20,9 @@ Micro Task Pager is a Windows-only virtual desktop pager. The repository contain
 - `crates/micro-task-pager-core/` - the shared Rust platform crate. It contains everything that does
   not depend on the UI toolkit: COM bootstrap, virtual desktops, window enumeration, settings,
   logging, single instance, monitor/foreground tracking, and the pure dialog helpers. Both Rust front
-  ends consume it. Read `crates/micro-task-pager-core/README.md` before changing it or adding a new
-  Rust implementation.
+  ends consume it. Read `crates/micro-task-pager-core/ARCHITECTURE.md` and its `README.md` before
+  changing it or adding a new Rust implementation. The architecture document holds the shared
+  behavior contract and the parity checklist.
 
 The two Rust front ends and `micro-task-pager-core` form one Cargo workspace rooted at `Cargo.toml`.
 Shared platform behavior belongs in the core crate, not duplicated per front end.
@@ -270,7 +271,8 @@ Guidance:
 - `csharp-winforms/src/` - C# source root (`Program.cs`, `Config`, `Core`, `GUI`).
 - `csharp-winforms/src/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
   `Win10`, `Win10LTSC`, `Win11`, and `Win11_`. The current selector uses `Win11_` for build 22621 and
-  later; `rust-winui/ARCHITECTURE.md` §7.3 flags that the real boundary still needs verification.
+  later; `crates/micro-task-pager-core/ARCHITECTURE.md` §4.2 flags that the real boundary still
+  needs verification.
   Keep shared changes in sync across all four files.
 - `csharp-winforms/src/Core/` - window enumeration, types, DPI helpers.
 - `csharp-winforms/src/GUI/` - pager, desktops, settings dialog, about dialog.
@@ -278,14 +280,18 @@ Guidance:
 - `csharp-winforms/Resources/` - icon and logo assets shared with the Rust resource files.
 - `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` - workspace membership, static-runtime
   flags, and the toolchain.
-- `crates/micro-task-pager-core/` - shared Rust platform crate. See its `README.md`.
+- `crates/micro-task-pager-core/` - shared Rust platform crate. See its `ARCHITECTURE.md` for the
+  shared behavior contract and boundary rules, and its `README.md` for the module map.
+- `crates/micro-task-pager-core/ARCHITECTURE.md` - shared platform architecture, COM/threading
+  contract, window model, settings, and behavioral parity checklist.
 - `crates/micro-task-pager-core/src/desktop/` - safe `VirtualDesktopApi`, the Win10/Win11 COM layout
   backends, and the restart supervisor.
 - `crates/micro-task-pager-core/src/windows/` - window enumeration, filtering, snapshot model, and the
   icon-handle cache.
 - `crates/micro-task-pager-core/src/dialogs/` - pure `placement` and `settings_draft` helpers.
 - `crates/micro-task-pager-core/examples/probe/` - the shared virtual-desktop COM probe.
-- `rust-winui/ARCHITECTURE.md` - migration architecture, WinUI 3 direction, and behavioral contract.
+- `rust-winui/ARCHITECTURE.md` - WinUI-specific architecture: reactor components, pager UI, dialogs,
+  native window shim, DPI, packaging, and WinUI deviations.
 - `rust-winui/MIGRATION.md` - phase status, verification log, and open questions.
 - `rust-winui/src/` - WinUI 3 implementation (pager component and dialogs). Platform modules are
   re-exported from `micro-task-pager-core`.
@@ -296,6 +302,8 @@ Guidance:
 - `rust-winui/examples/reactor_about.rs` - reactor About reference and regression sample.
 - `rust-winui/examples/reactor_settings.rs` - standalone Settings window runner.
 - `rust-winui/examples/reactor_pager.rs` - the same reactor pager runner as the main binary.
+- `rust-winsafe/ARCHITECTURE.md` - winsafe-specific architecture: coordinator, window host, GDI
+  renderer, native dialogs, system-DPI behavior, and winsafe deviations.
 - `rust-winsafe/MIGRATION.md` - winsafe variant status, source commit, verification log, and gaps.
 - `rust-winsafe/src/` - native implementation (app coordinator, GDI renderer, winsafe window host).
 - `rust-winsafe/src/render/` - `layout.rs` geometry and hit testing, `paint.rs` drawing instructions,
@@ -312,8 +320,10 @@ Guidance:
   thread that will use it and keep all `desktop` calls on that thread. In `rust-winui` that thread is
   the reactor UI thread; in `rust-winsafe` it is the winsafe UI thread.
 - Windows belonging to the pager process are intentionally excluded from the pager.
-- The Rust implementation must preserve the behavior described in `rust-winui/ARCHITECTURE.md` §11.
-  Intentional deviations from the C# implementation are listed in §12 there.
+- The Rust implementations must preserve the behavior described in
+  `crates/micro-task-pager-core/ARCHITECTURE.md` §11.2. Shared deviations from the C# implementation
+  are listed in §11.1 there; front-end-specific deviations are in `rust-winsafe/ARCHITECTURE.md` §9
+  and `rust-winui/ARCHITECTURE.md` §8.
 - Shared platform behavior goes in `micro-task-pager-core`, never copied into a front end. A new
   front end (for example another UI toolkit) depends on the core crate and re-exports its modules if
   it wants the existing `crate::desktop` / `crate::settings` style paths.

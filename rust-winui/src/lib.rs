@@ -6,9 +6,11 @@
 //!    instance, pager.
 //! 2. [`pager`] for the UI component. Its module documentation explains the
 //!    state model and how one refresh flows from a tick to the view.
-//! 3. `rust-winui/ARCHITECTURE.md` for the behavior contract and the C# comparison,
-//!    and `rust-winui/MIGRATION.md` for the code map and phase status.
-//! 4. `crates/micro-task-pager-core/README.md` for the shared platform crate.
+//! 3. `rust-winui/ARCHITECTURE.md` for the WinUI-specific design, and
+//!    `rust-winui/MIGRATION.md` for the code map and phase status.
+//! 4. `crates/micro-task-pager-core/ARCHITECTURE.md` for the shared behavior
+//!    contract, and `crates/micro-task-pager-core/README.md` for the shared
+//!    platform module map.
 //!
 //! # Mental model
 //!

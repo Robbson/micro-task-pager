@@ -13,6 +13,9 @@ rust-winsafe                   native Win32 front end (winsafe + GDI)
 rust-winui                     WinUI 3 front end (windows-reactor)
 ```
 
+The shared behavior contract, COM/threading rules, settings format, and the parity checklist are in
+[`ARCHITECTURE.md`](ARCHITECTURE.md). This README is the quick module map.
+
 ## Workspace
 
 The three crates form one Cargo workspace rooted at the repository `Cargo.toml`.

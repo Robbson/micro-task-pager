@@ -88,11 +88,12 @@ The table compares them by requirements, app footprint, performance, runtime mem
 | Runtime memory                 | 59-62 MiB working set, 33-37 MiB private            | 99 MiB working set, 63-64 MiB private                              | 23.1 MiB working set, 3.1 MiB private       |
 | Look                           | Native WinForms; functional                        | Modern Fluent/WinUI 3; the only genuinely polished one             | Native Win32 controls; functional, plain    |
 
-Details: [`COMPARISON.md`](COMPARISON.md),
-[`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
+Details: [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
 [`rust-winui/MIGRATION.md`](rust-winui/MIGRATION.md),
-[`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md), and
-[`UI-FRAMEWORK-COMPARISON.md`](UI-FRAMEWORK-COMPARISON.md).
+[`rust-winui/UI-FRAMEWORK-COMPARISON.md`](rust-winui/UI-FRAMEWORK-COMPARISON.md),
+[`rust-winsafe/ARCHITECTURE.md`](rust-winsafe/ARCHITECTURE.md), and
+[`rust-winsafe/MIGRATION.md`](rust-winsafe/MIGRATION.md). Shared platform behavior is documented in
+[`crates/micro-task-pager-core/ARCHITECTURE.md`](crates/micro-task-pager-core/ARCHITECTURE.md).
 
 ### Requirements
 
@@ -205,7 +206,8 @@ See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the WinUI bui
 include the MSVC build tools, the Windows SDK, and the Windows App Runtime 2.4 or later framework
 package. The winsafe build needs only the MSVC build tools and Windows SDK.
 [`crates/micro-task-pager-core/README.md`](crates/micro-task-pager-core/README.md) explains the shared
-module boundaries and how to add another UI front end.
+module boundaries and how to add another UI front end; its
+[`ARCHITECTURE.md`](crates/micro-task-pager-core/ARCHITECTURE.md) holds the shared behavior contract.
 
 ### Run from source
 

@@ -19,7 +19,7 @@
 //! device-pixel grid. Hit testing then runs in the same DIP space.
 //!
 //! The geometry follows the C# `ScreenRenderer`, with the deviations recorded
-//! in `ARCHITECTURE.md` §12: per-`(desktop, screen)` view modes, DIP units, and
+//! in `ARCHITECTURE.md` §8: per-`(desktop, screen)` view modes, DIP units, and
 //! preview rectangles clipped to their monitor before they are positioned.
 
 use windows::Win32::Foundation::HWND;

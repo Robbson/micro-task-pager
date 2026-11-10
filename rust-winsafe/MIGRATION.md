@@ -7,7 +7,7 @@ It has fewer features than `csharp-winforms`, and new features are added only af
 
 This document tracks the winsafe variant only. For the WinUI migration see
 [`../rust-winui/MIGRATION.md`](../rust-winui/MIGRATION.md); for the framework trade-offs see
-[`../UI-FRAMEWORK-COMPARISON.md`](../UI-FRAMEWORK-COMPARISON.md).
+[`../rust-winui/UI-FRAMEWORK-COMPARISON.md`](../rust-winui/UI-FRAMEWORK-COMPARISON.md).
 
 ## Baseline
 
@@ -16,9 +16,10 @@ pure-Win32 Rust implementation before the reactor migration. That baseline alrea
 pager, GDI renderer, virtual-desktop COM layer, settings storage, About dialog, and 18 unit tests, but
 built the window class and dialog by hand.
 
-The copy is deliberate: platform modules (`desktop/`, `windows/`, `monitors`, `foreground`,
-`settings`, `com`, `single_instance`, `logging`) are kept identical to the baseline for now. They are
-not refactored into UI-independent modules, so `rust-winui` is untouched.
+The platform modules (`desktop/`, `windows/`, `monitors`, `foreground`, `settings`, `com`,
+`single_instance`, `logging`) moved into `crates/micro-task-pager-core` on 2026-11-10. Their
+behavior stays compatible with the baseline, and both Rust front ends now share them. See the
+"Shared platform crate" section below.
 
 ## Source layout
 
@@ -40,7 +41,7 @@ stacks allow it:
 | Area | Status | Notes |
 |---|---|---|
 | Crate scaffold, resources, manifest | Done | Resource paths point at `../csharp-winforms/Resources/` |
-| Virtual-desktop COM, snapshot, settings | Done (copied) | Unchanged from the baseline commit |
+| Virtual-desktop COM, snapshot, settings | Done (shared core) | Moved to `micro-task-pager-core`; behavior unchanged from the baseline |
 | Pager window host | **Migrated to winsafe** | `gui::WindowMain` + typed events, no `WNDCLASSW`/`WndProc`/manual message loop |
 | Pager rendering | Copied | Raw GDI `Painter`; winsafe adds no drawing value here |
 | Context menu | Copied | Raw `TrackPopupMenu` shim |
@@ -51,7 +52,8 @@ stacks allow it:
 ## What changed versus the baseline
 
 - Added `winsafe = 0.0.29` (pinned; the crate is `0.0.x` and its API may change). The raw `windows`
-  crate is retained for GDI, WIC, COM, shell helpers, timers, menus, and layered-window calls.
+  crate is retained for GDI, shell helpers, timers, menus, and layered-window calls; COM and the
+  platform layer live in `micro-task-pager-core`.
 - Removed the `windows-reactor` dev-dependency and `examples/reactor_about.rs`. This crate is
   reactor-free and does not require the Windows App Runtime.
 - `src/window.rs` was rewritten:
@@ -95,7 +97,8 @@ The modules that do not depend on the UI toolkit moved into `crates/micro-task-p
 `probe` example. `rust-winsafe` and `rust-winui` now depend on the core crate and re-export its
 modules, so application code keeps using paths such as `crate::settings` and `crate::windows`. The
 GDI renderer, winsafe window host, About dialog, `.rc` Settings dialog, and winsafe-specific icon
-drawing stay in this crate. See `crates/micro-task-pager-core/README.md` for the boundary rules.
+drawing stay in this crate. See `crates/micro-task-pager-core/ARCHITECTURE.md` for the shared contract
+and `crates/micro-task-pager-core/README.md` for the boundary rules.
 
 ### Follow-up fixes after the first interaction test (2026-11-09)
 

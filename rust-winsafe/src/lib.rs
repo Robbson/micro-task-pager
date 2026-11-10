@@ -13,7 +13,9 @@
 //!    flow and groups the handlers by concern.
 //! 3. `rust-winsafe/MIGRATION.md` for the source baseline, verification log, and
 //!    known gaps.
-//! 4. `crates/micro-task-pager-core/README.md` for the shared platform crate.
+//! 4. `crates/micro-task-pager-core/ARCHITECTURE.md` for the shared behavior
+//!    contract, and `crates/micro-task-pager-core/README.md` for the shared
+//!    platform module map.
 //!
 //! # Mental model
 //!
