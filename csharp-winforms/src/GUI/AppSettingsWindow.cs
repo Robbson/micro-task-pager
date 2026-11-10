@@ -213,24 +213,47 @@ namespace MicroTaskPager.GUI
 
         private TabPage CreateLayoutTab()
         {
-            TabPage page = CreateTabPage("Layout");
+            TabPage layoutPage = CreateTabPage("Layout");
 
             Render(
-                page,
-                BeginGroup(page, "Rendering"),
+                layoutPage,
+                BeginGroup(layoutPage, "Rendering"),
                 ComboRow(
                     "View Mode Default",
                     "Only affects newly created desktops and their screens.",
                     new[] { "Preview", "MicroTaskbar" },
                     s => (int)s.ViewModeDefault,
                     (s, v) => s.ViewModeDefault = (ViewMode)v),
-                PagerHeightRow());
+                NumericRow(
+                    "Pager Height",
+                    "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
+                    MinPagerContentHeight,
+                    9999,
+                    s => s.PagerHeight,
+                    (s, v) => s.PagerHeight = v,
+                    value => Math.Max(value, _working.IconPaddingY + MinPagerContentHeight)));
 
-            Render(page, BeginGroup(page, "Icons Settings"), IconSizeRow());
+            // Snap the working icon size to the nearest entry the slider can represent.
+            _working.IconSize = _iconSizes[IconSizeIndex(_working.IconSize)];
 
             Render(
-                page,
-                BeginGroup(page, "MicroTaskbar"),
+                layoutPage,
+                BeginGroup(layoutPage, "Icons Settings"),
+                SliderRow(
+                    "Icon Size",
+                    "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
+                    0,
+                    _iconSizes.Length - 1,
+                    1,
+                    1,
+                    s => IconSizeIndex(s.IconSize),
+                    (s, p) => s.IconSize = _iconSizes[p],
+                    p => $"{_iconSizes[p]} px",
+                    p => _iconSizes[p] != _settingsBefore.IconSize));
+
+            Render(
+                layoutPage,
+                BeginGroup(layoutPage, "MicroTaskbar"),
                 NumericRow(
                     "Icon Padding X",
                     "Negative values are supported as well so less space is taken and the icons look stacked.",
@@ -252,18 +275,31 @@ namespace MicroTaskPager.GUI
                     s => MinimizedVisibilityIndex(s.ShowWhenMinimized),
                     (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v)));
 
-            return page;
+            return layoutPage;
         }
 
         private TabPage CreateThemeTab()
         {
-            TabPage page = CreateTabPage("Theme");
-
-            Render(page, BeginGroup(page, "General"), OpacityRow());
+            TabPage themePage = CreateTabPage("Theme");
 
             Render(
-                page,
-                BeginGroup(page, "Desktops"),
+                themePage,
+                BeginGroup(themePage, "General"),
+                SliderRow(
+                    "App Background Opacity",
+                    null,
+                    25,
+                    100,
+                    5,
+                    10,
+                    s => (int)Math.Round(s.BackgroundOpacity * 100),
+                    (s, p) => s.BackgroundOpacity = p / 100.0,
+                    p => FormatOpacity(p / 100.0),
+                    p => Math.Abs((p / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001));
+
+            Render(
+                themePage,
+                BeginGroup(themePage, "Desktops"),
                 ComboRow(
                     "Border Style",
                     null,
@@ -278,8 +314,8 @@ namespace MicroTaskPager.GUI
                     (s, c) => s.ActiveDesktopBorderColor = c));
 
             Render(
-                page,
-                BeginGroup(page, "Preview Windows"),
+                themePage,
+                BeginGroup(themePage, "Preview Windows"),
                 ColorRow("Background Color", s => s.WindowBackgroundColor,
                     (s, c) => s.WindowBackgroundColor = c),
                 ColorRow("Border Color", s => s.WindowBorderColor,
@@ -289,16 +325,16 @@ namespace MicroTaskPager.GUI
                 ColorRow("Background Color (Active)", s => s.ActiveWindowBackgroundColor,
                     (s, c) => s.ActiveWindowBackgroundColor = c));
 
-            return page;
+            return themePage;
         }
 
         private TabPage CreateMiscTab()
         {
-            TabPage page = CreateTabPage("Misc");
+            TabPage miscPage = CreateTabPage("Misc");
 
             Render(
-                page,
-                BeginGroup(page, "Behaviour"),
+                miscPage,
+                BeginGroup(miscPage, "Behaviour"),
                 ComboRow(
                     "Desktop Change: Window Activation",
                     "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged.",
@@ -321,27 +357,18 @@ namespace MicroTaskPager.GUI
             _primaryDelayBox = (TextBox)primaryDelay.Editor;
             _secondaryDelayBox = (TextBox)secondaryDelay.Editor;
 
-            Render(page, BeginGroup(page, "Performance"), primaryDelay, secondaryDelay);
+            Render(miscPage, BeginGroup(miscPage, "Performance"), primaryDelay, secondaryDelay);
 
-            TableLayoutPanel pinning = BeginGroup(page, "App Pinning");
+            TableLayoutPanel pinningGroup = BeginGroup(miscPage, "App Pinning");
 
             Render(
-                page,
-                pinning,
+                miscPage,
+                pinningGroup,
                 CheckBoxRow(
                     "Show App In Taskbar",
                     null,
                     s => s.ShowAppInTaskbar,
                     (s, v) => s.ShowAppInTaskbar = v));
-
-            var note = new Label
-            {
-                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
-                AutoSize = true,
-                MaximumSize = new Size(420, 0),
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(8, 4, 8, 4),
-            };
 
             var noteBox = new Panel
             {
@@ -351,11 +378,20 @@ namespace MicroTaskPager.GUI
                 Padding = new Padding(8),
                 Margin = new Padding(6, 12, 6, 4),
             };
+
+            var note = new Label
+            {
+                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
+                AutoSize = true,
+                MaximumSize = new Size(420, 0),
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(8, 4, 8, 4),
+            };
             noteBox.Controls.Add(note);
 
-            AddSpanningControl(pinning, noteBox);
+            AddSpanningControl(pinningGroup, noteBox);
 
-            return page;
+            return miscPage;
         }
 
         // ------------------------------------------------------------------------------------
@@ -463,7 +499,7 @@ namespace MicroTaskPager.GUI
         private AppSettings TryBuildSettings(bool showValidationErrors)
         {
             if (!int.TryParse(
-                    GetPrimaryDelayText(),
+                    (string)_primaryDelayBox.Text,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture,
                     out int primaryDelay)
@@ -478,7 +514,7 @@ namespace MicroTaskPager.GUI
             }
 
             if (!int.TryParse(
-                    GetSecondaryDelayText(),
+                    (string)_secondaryDelayBox.Text,
                     NumberStyles.Integer,
                     CultureInfo.InvariantCulture,
                     out int secondaryDelay)
@@ -497,10 +533,6 @@ namespace MicroTaskPager.GUI
             result.SecondaryUpdateDelay = secondaryDelay;
             return result;
         }
-
-        private string GetPrimaryDelayText() => _primaryDelayBox.Text;
-
-        private string GetSecondaryDelayText() => _secondaryDelayBox.Text;
 
         private void ShowValidationError(string message)
         {
@@ -658,7 +690,9 @@ namespace MicroTaskPager.GUI
 
         /// <summary>
         /// Creates a numeric row. Label and toolTip are the caption and optional hover text, min and
-        /// max clamp the editor, and get/set map the value to and from the settings.
+        /// max clamp the editor, and get/set map the value to and from the settings. An optional
+        /// normalize callback adjusts a freshly entered value (for a dynamic lower bound) before it
+        /// is written back.
         /// </summary>
         /// <returns>The row spec for the numeric editor.</returns>
         private RowSpec NumericRow(
@@ -667,7 +701,8 @@ namespace MicroTaskPager.GUI
             int min,
             int max,
             Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
+            Action<AppSettings, int> set,
+            Func<int, int> normalize = null)
         {
             var editor = new NumericUpDown
             {
@@ -677,74 +712,62 @@ namespace MicroTaskPager.GUI
                 TextAlign = HorizontalAlignment.Right,
                 Value = Math.Max(min, Math.Min(max, get(_working))),
             };
-
-            return LinkedRow(
-                label,
-                toolTip,
-                editor,
-                () => (int)editor.Value,
-                value => editor.Value = Math.Max(min, Math.Min(max, value)),
-                handler => editor.ValueChanged += (s, e) => handler(),
-                get,
-                set);
-        }
-
-        /// <summary>
-        /// Creates the pager height row. The value is raised to the current icon padding plus the
-        /// minimum content height so the pager cannot become too small for its icons.
-        /// </summary>
-        /// <returns>The row spec for the pager height editor.</returns>
-        private RowSpec PagerHeightRow()
-        {
-            var editor = new NumericUpDown
-            {
-                Minimum = MinPagerContentHeight,
-                Maximum = 9999,
-                Width = 150,
-                TextAlign = HorizontalAlignment.Right,
-            };
-            editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, _working.PagerHeight));
-
             editor.ValueChanged += (s, e) =>
             {
                 int value = (int)editor.Value;
-                int minimum = _working.IconPaddingY + MinPagerContentHeight;
-                if (value < minimum)
+                if (normalize != null)
                 {
-                    value = (int)Math.Min(editor.Maximum, minimum);
-                    Suppress(() => editor.Value = value);
+                    int normalized = Math.Max(min, Math.Min(max, normalize(value)));
+                    if (normalized != value)
+                    {
+                        value = normalized;
+                        Suppress(() => editor.Value = value);
+                    }
                 }
 
-                _working.PagerHeight = value;
+                set(_working, value);
                 OnEditorChanged();
             };
 
             return new RowSpec(
-                "Pager Height",
-                "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
+                label,
+                toolTip,
                 editor,
-                s => editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, s.PagerHeight)),
-                () => (int)editor.Value != _settingsBefore.PagerHeight);
+                s =>
+                {
+                    editor.Value = Math.Max(min, Math.Min(max, get(s)));
+                    set(_working, (int)editor.Value);
+                },
+                () => (int)editor.Value != get(_settingsBefore));
         }
 
         /// <summary>
-        /// Creates the icon size row. The track bar selects one of the fixed icon sizes and the
-        /// working setting snaps to that entry immediately.
+        /// Creates a slider row with a companion value label. Min and max bound the slider position,
+        /// tickFrequency and largeChange tune its stepping, and getPosition/setPosition translate
+        /// between a settings value and that integer position. Label formats the position for the
+        /// value label, and isModified decides whether a position differs from the initial settings.
         /// </summary>
-        /// <returns>The row spec for the icon size slider.</returns>
-        private RowSpec IconSizeRow()
+        /// <returns>The row spec for the slider.</returns>
+        private RowSpec SliderRow(
+            string label,
+            string toolTip,
+            int min,
+            int max,
+            int tickFrequency,
+            int largeChange,
+            Func<AppSettings, int> getPosition,
+            Action<AppSettings, int> setPosition,
+            Func<int, string> format,
+            Func<int, bool> isModified)
         {
-            int initialIndex = IconSizeIndex(_working.IconSize);
-            _working.IconSize = _iconSizes[initialIndex];
-
             var trackBar = new TrackBar
             {
-                Minimum = 0,
-                Maximum = _iconSizes.Length - 1,
-                TickFrequency = 1,
-                LargeChange = 1,
+                Minimum = min,
+                Maximum = max,
+                TickFrequency = tickFrequency,
+                LargeChange = largeChange,
                 SmallChange = 1,
-                Value = initialIndex,
+                Value = Math.Max(min, Math.Min(max, getPosition(_working))),
                 AutoSize = false,
                 Width = 140,
                 Height = 32,
@@ -754,7 +777,7 @@ namespace MicroTaskPager.GUI
             var valueLabel = new Label
             {
                 AutoSize = true,
-                Text = $"{_iconSizes[trackBar.Value]} px",
+                Text = format(trackBar.Value),
                 Margin = new Padding(4, 14, 0, 0),
             };
 
@@ -770,22 +793,23 @@ namespace MicroTaskPager.GUI
 
             trackBar.ValueChanged += (s, e) =>
             {
-                _working.IconSize = _iconSizes[trackBar.Value];
-                valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
+                setPosition(_working, trackBar.Value);
+                valueLabel.Text = format(trackBar.Value);
                 OnEditorChanged();
             };
 
             return new RowSpec(
-                "Icon Size",
-                "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
+                label,
+                toolTip,
                 host,
                 s =>
                 {
-                    trackBar.Value = IconSizeIndex(s.IconSize);
-                    valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
-                    _working.IconSize = _iconSizes[trackBar.Value];
+                    int position = Math.Max(min, Math.Min(max, getPosition(s)));
+                    trackBar.Value = position;
+                    valueLabel.Text = format(position);
+                    setPosition(_working, position);
                 },
-                () => _iconSizes[trackBar.Value] != _settingsBefore.IconSize);
+                () => isModified(trackBar.Value));
         }
 
         /// <summary>
@@ -916,63 +940,6 @@ namespace MicroTaskPager.GUI
                     preview.BackColor = get(s);
                 },
                 () => get(_working).ToArgb() != get(_settingsBefore).ToArgb());
-        }
-
-        /// <summary>
-        /// Creates the pager background opacity row, expressed as a percentage with two decimals.
-        /// </summary>
-        /// <returns>The row spec for the opacity slider.</returns>
-        private RowSpec OpacityRow()
-        {
-            var trackBar = new TrackBar
-            {
-                Minimum = 25,
-                Maximum = 100,
-                TickFrequency = 5,
-                LargeChange = 10,
-                SmallChange = 1,
-                Value = Math.Max(25, Math.Min(100, (int)Math.Round(_working.BackgroundOpacity * 100))),
-                AutoSize = false,
-                Width = 140,
-                Height = 32,
-                Margin = new Padding(0, 6, 4, 0),
-            };
-
-            var valueLabel = new Label
-            {
-                AutoSize = true,
-                Text = FormatOpacity(trackBar.Value / 100.0),
-                Margin = new Padding(4, 14, 0, 0),
-            };
-
-            var host = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Margin = new Padding(0),
-            };
-            host.Controls.Add(trackBar);
-            host.Controls.Add(valueLabel);
-
-            trackBar.ValueChanged += (s, e) =>
-            {
-                _working.BackgroundOpacity = trackBar.Value / 100.0;
-                valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
-                OnEditorChanged();
-            };
-
-            return new RowSpec(
-                "App Background Opacity",
-                null,
-                host,
-                s =>
-                {
-                    trackBar.Value = Math.Max(25, Math.Min(100, (int)Math.Round(s.BackgroundOpacity * 100)));
-                    valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
-                    _working.BackgroundOpacity = trackBar.Value / 100.0;
-                },
-                () => Math.Abs((trackBar.Value / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001);
         }
 
         // ------------------------------------------------------------------------------------
