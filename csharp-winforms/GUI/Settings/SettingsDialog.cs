@@ -224,7 +224,7 @@ namespace MicroTaskPager.GUI
                 BeginGroup(layoutPage, "Rendering"),
                 ComboRow(
                     "View Mode Default",
-                    new[] { "Preview", "MicroTaskbar" },
+                    new[] { "Preview", "MicroTaskbar Light", "MicroTaskbar" },
                     s => (int)s.ViewModeDefault,
                     (s, v) => s.ViewModeDefault = (ViewMode)v,
                     toolTip: "Only affects newly created desktops and their screens."),

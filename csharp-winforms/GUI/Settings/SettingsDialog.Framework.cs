@@ -597,6 +597,7 @@ namespace MicroTaskPager.GUI
         private sealed class RowGroup
         {
             /// <summary>
+            /// Initializes a new instance of the <see cref="RowGroup"/> class.
             /// Initializes a group binding. Page owns the tab the rows belong to, and table is the
             /// three-column target the rows are added to.
             /// </summary>
@@ -618,6 +619,7 @@ namespace MicroTaskPager.GUI
         private sealed class RowSpec
         {
             /// <summary>
+            /// Initializes a new instance of the <see cref="RowSpec"/> class.
             /// Initializes a row description. Host is the control placed in the middle column, label
             /// the caption, and toolTip the optional hover text. Load applies a settings snapshot to
             /// the host and working state, while isModified reports whether the row differs from the
@@ -655,6 +657,7 @@ namespace MicroTaskPager.GUI
         private sealed class RowBinding
         {
             /// <summary>
+            /// Initializes a new instance of the <see cref="RowBinding"/> class.
             /// Initializes a rendered-row binding. Page is the tab the row belongs to, revert is its
             /// button, load applies a settings snapshot, and isModified reports whether the row
             /// differs from the initial settings.

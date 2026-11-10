@@ -8,6 +8,7 @@ namespace MicroTaskPager.Config
     public enum ViewMode
     {
         Preview,
+        MicroTaskbarLight,
         MicroTaskbar,
     }
 
@@ -36,7 +37,7 @@ namespace MicroTaskPager.Config
     public class AppSettings
     {
         // ViewModeDefault: Only changeable in the settings window, defines the default for newly created desktop's screens
-        public ViewMode ViewModeDefault { get; set; } = ViewMode.MicroTaskbar;
+        public ViewMode ViewModeDefault { get; set; } = ViewMode.MicroTaskbarLight;
         public List<ViewMode> RendererViewModes { get; set; } = new List<ViewMode>();
 
         public int PagerHeight { get; set; } = 40;

@@ -1,6 +1,6 @@
 $projectDir = $PSScriptRoot
 $versionFile = Join-Path $projectDir 'version.txt'
-$generatedFile = Join-Path $projectDir 'src\GeneratedVersion.cs'
+$generatedFile = Join-Path $projectDir 'GeneratedVersion.cs'
 
 $version = (Get-Content -LiteralPath $versionFile).Trim()
 

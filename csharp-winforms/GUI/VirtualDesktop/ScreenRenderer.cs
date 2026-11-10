@@ -49,10 +49,10 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             // Minimized windows have no useful screen geometry, so they are only offered to the
             // Micro Taskbar view and only when the user enabled them.
             var candidateWindows = Form.Windows.Where(x =>
-                x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex &&
-                ((Mode == ViewMode.MicroTaskbar
-                    && Form.Options.ShowWhenMinimized != MinimizedWindowVisibility.No) || !x.IsMinimized) &&
-                Screen.FromHandle(x.Handle).DeviceName == AttachedScreen.DeviceName);
+                x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex
+                && (
+                    (Mode == ViewMode.MicroTaskbarLight) || !x.IsMinimized)
+                && Screen.FromHandle(x.Handle).DeviceName == AttachedScreen.DeviceName);
 
             Window[] windows;
             if (Mode == ViewMode.Preview)
