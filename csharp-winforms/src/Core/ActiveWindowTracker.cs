@@ -88,6 +88,12 @@ namespace MicroTaskPager.Core
             }
         }
 
+        // Returns the window the pager last considered active on the given desktop
+        public IntPtr GetLastActiveWindow(int desktopIndex)
+        {
+            return _lastActiveWindows.TryGetValue(desktopIndex, out IntPtr hwnd) ? hwnd : IntPtr.Zero;
+        }
+
         // Brings back the last active window of a desktop, if it still exists on that desktop
         public void RestoreLastActiveWindow(int desktopIndex)
         {

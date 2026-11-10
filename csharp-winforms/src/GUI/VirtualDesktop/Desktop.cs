@@ -120,12 +120,28 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     var w = GetWindowUnderCursor(e.Location);
                     if (w != null)
                     {
-                        if (WinAPI.IsIconic(w.Handle))
+                        // A second click on the already selected window minimizes it. The first
+                        // click still only selects a window, so selecting never minimizes by accident.
+                        IntPtr selectedWindow = Form.GetLastActiveWindow(VirtualDesktopIndex);
+                        if (!w.IsMinimized
+                            && (w.Handle == selectedWindow || WinAPI.GetForegroundWindow() == w.Handle))
                         {
-                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_RESTORE);
+                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
                         }
+                        else
+                        {
+                            if (WinAPI.IsIconic(w.Handle))
+                            {
+                                WinAPI.ShowWindow(w.Handle, WinAPI.SW_RESTORE);
+                            }
 
-                        WinAPI.SetForegroundWindow(w.Handle);
+                            if (WinAPI.SetForegroundWindow(w.Handle))
+                            {
+                                // Update the selection immediately instead of waiting for the
+                                // foreground WinEvent, so a fast second click still minimizes.
+                                Form.RememberActiveWindow(w.Handle);
+                            }
+                        }
                     }
                 }
                 else

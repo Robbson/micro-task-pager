@@ -110,6 +110,10 @@ namespace MicroTaskPager.GUI
         // Application Options: Configurable by user
         public AppSettings Options { get; private set; }
 
+        public IntPtr GetLastActiveWindow(int desktopIndex) => _activeWindowTracker.GetLastActiveWindow(desktopIndex);
+
+        public void RememberActiveWindow(IntPtr hwnd) => _activeWindowTracker.RememberWindow(hwnd);
+
         // Restores the last active window of the desktop the pager just switched to
         public void RestoreLastActiveWindow(int desktopIndex)
         {
