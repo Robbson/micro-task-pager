@@ -216,7 +216,6 @@ namespace MicroTaskPager.GUI
             TabPage layoutPage = CreateTabPage("Layout");
 
             Render(
-                layoutPage,
                 BeginGroup(layoutPage, "Rendering"),
                 ComboRow(
                     "View Mode Default",
@@ -237,7 +236,6 @@ namespace MicroTaskPager.GUI
             _working.IconSize = _iconSizes[IconSizeIndex(_working.IconSize)];
 
             Render(
-                layoutPage,
                 BeginGroup(layoutPage, "Icons Settings"),
                 SliderRow(
                     "Icon Size",
@@ -252,7 +250,6 @@ namespace MicroTaskPager.GUI
                     p => _iconSizes[p] != _settingsBefore.IconSize));
 
             Render(
-                layoutPage,
                 BeginGroup(layoutPage, "MicroTaskbar"),
                 NumericRow(
                     "Icon Padding X",
@@ -283,7 +280,6 @@ namespace MicroTaskPager.GUI
             TabPage themePage = CreateTabPage("Theme");
 
             Render(
-                themePage,
                 BeginGroup(themePage, "General"),
                 SliderRow(
                     "App Background Opacity",
@@ -298,7 +294,6 @@ namespace MicroTaskPager.GUI
                     p => Math.Abs((p / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001));
 
             Render(
-                themePage,
                 BeginGroup(themePage, "Desktops"),
                 ComboRow(
                     "Border Style",
@@ -314,7 +309,6 @@ namespace MicroTaskPager.GUI
                     (s, c) => s.ActiveDesktopBorderColor = c));
 
             Render(
-                themePage,
                 BeginGroup(themePage, "Preview Windows"),
                 ColorRow("Background Color", s => s.WindowBackgroundColor,
                     (s, c) => s.WindowBackgroundColor = c),
@@ -333,7 +327,6 @@ namespace MicroTaskPager.GUI
             TabPage miscPage = CreateTabPage("Misc");
 
             Render(
-                miscPage,
                 BeginGroup(miscPage, "Behaviour"),
                 ComboRow(
                     "Desktop Change: Window Activation",
@@ -357,12 +350,11 @@ namespace MicroTaskPager.GUI
             _primaryDelayBox = (TextBox)primaryDelay.Editor;
             _secondaryDelayBox = (TextBox)secondaryDelay.Editor;
 
-            Render(miscPage, BeginGroup(miscPage, "Performance"), primaryDelay, secondaryDelay);
+            Render(BeginGroup(miscPage, "Performance"), primaryDelay, secondaryDelay);
 
-            TableLayoutPanel pinningGroup = BeginGroup(miscPage, "App Pinning");
+            RowGroup pinningGroup = BeginGroup(miscPage, "App Pinning");
 
             Render(
-                miscPage,
                 pinningGroup,
                 CheckBoxRow(
                     "Show App In Taskbar",
@@ -389,7 +381,7 @@ namespace MicroTaskPager.GUI
             };
             noteBox.Controls.Add(note);
 
-            AddSpanningControl(pinningGroup, noteBox);
+            AddSpanningControl(pinningGroup.Table, noteBox);
 
             return miscPage;
         }
@@ -559,13 +551,16 @@ namespace MicroTaskPager.GUI
         // ------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Renders the given rows into the group table in order, adding a label, editor and revert
-        /// slot per row and registering each row against the page so revert and the per-tab Defaults
-        /// action can reach it. All change, load and modified wiring lives here, so rows cannot drift
-        /// apart.
+        /// Renders the given rows into the group in order, adding a label, editor and revert slot
+        /// per row and registering each row against the group's page so revert and the per-tab
+        /// Defaults action can reach it. All change, load and modified wiring lives here, so rows
+        /// cannot drift apart.
         /// </summary>
-        private void Render(TabPage page, TableLayoutPanel table, params RowSpec[] specs)
+        private void Render(RowGroup group, params RowSpec[] specs)
         {
+            TabPage page = group.Page;
+            TableLayoutPanel table = group.Table;
+
             foreach (RowSpec spec in specs)
             {
                 int row = AddTableRow(table);
@@ -989,11 +984,11 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// Adds a group box with the given caption to the page's stack and returns the three-column
-        /// table inside it, which is the target for Render.
+        /// Adds a group box with the given caption to the page's stack and returns its page and
+        /// three-column table, which is the target for Render.
         /// </summary>
-        /// <returns>The table that receives the group's rows.</returns>
-        private TableLayoutPanel BeginGroup(TabPage page, string title)
+        /// <returns>The group's page and table.</returns>
+        private RowGroup BeginGroup(TabPage page, string title)
         {
             var stack = (TableLayoutPanel)page.Tag;
             var group = new GroupBox
@@ -1022,7 +1017,7 @@ namespace MicroTaskPager.GUI
             int row = AddTableRow(stack);
             stack.Controls.Add(group, 0, row);
 
-            return table;
+            return new RowGroup(page, table);
         }
 
         // ------------------------------------------------------------------------------------
@@ -1118,6 +1113,27 @@ namespace MicroTaskPager.GUI
         // ------------------------------------------------------------------------------------
         // Row model
         // ------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// A group's tab page and its three-column table, so Render does not need the page passed
+        /// separately. Created by BeginGroup.
+        /// </summary>
+        private sealed class RowGroup
+        {
+            /// <summary>
+            /// Initializes a group binding. Page owns the tab the rows belong to, and table is the
+            /// three-column target the rows are added to.
+            /// </summary>
+            public RowGroup(TabPage page, TableLayoutPanel table)
+            {
+                Page = page;
+                Table = table;
+            }
+
+            public TabPage Page { get; }
+
+            public TableLayoutPanel Table { get; }
+        }
 
         /// <summary>
         /// A single settings row in declarative form: the label, editor, reset behavior and
