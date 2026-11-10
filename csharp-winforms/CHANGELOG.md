@@ -1,23 +1,23 @@
 # Changelog
 
-## v1.6.0
+## unreleased
 
-- ... all c#-only changes (but this should be separated in 1.6.0, others should be in 1.5.2)
-- Rust implementations now also show all the tooltips in the settings window like the C# version
-- rust-winsafe settings dialog is closer to the C# version
-- csharp-winforms settings dialog now sticks to the system colors
-- csharp-winforms pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
+- fixed painting artefacts in the settings window by enabling double buffering 
+- updated: Allow minimizing of a window in the pager itself by clicking on an already selected window
+- PLANNED: New view mode for MicroTaskbar Light
+- added visualization of minimized windows in MicroTaskbar view mode, including a setting related their order in the pager
+- added support for icons of UWP applications
+- added support for bicubic interpolation of icon images when size is not their native size
+- added new settings parameter for icon size
+- added new settings parameter for desktop change behaviour 
+- settings dialog now sticks to the system colors
+- pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
 - added `run.ps1` to build and start any implementation from the repository root
-- `run.ps1` no longer opens an extra console window for the Rust debug builds
+- refactored settings window
 
 ## v1.5.1
 
 - improved performance leads to less CPU usage
-- there are now 3 versions of the application available, each with their own benefits / limitations (see README):
-  - C# / .NET 4.8 using WinForms
-  - Rust / Reactor using Win UI 3
-  - Rust / winsafe using plain Win32
-- added ARM64 builds for the rust implementations
 
 ## v1.5.0
 
