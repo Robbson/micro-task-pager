@@ -19,7 +19,6 @@
 //! The draft, its limits, and the placement algorithm are shared with
 //! `rust-winui`; keep both sides behavior-compatible.
 
-mod draft;
 mod ids;
 mod tooltips;
 
@@ -40,7 +39,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use super::placement::{self, Rect};
 use crate::monitors;
 use crate::settings::{DesktopBorderStyle, Settings};
-use draft::{Field, Section, SettingsDraft};
+use micro_task_pager_core::dialogs::settings_draft as draft;
+use micro_task_pager_core::dialogs::settings_draft::{Field, Section, SettingsDraft};
 
 #[derive(Clone)]
 struct Controls {

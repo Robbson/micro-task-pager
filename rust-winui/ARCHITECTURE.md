@@ -322,7 +322,7 @@ These rules exist to keep the application understandable without building a cust
 | Minimum OS                 | Windows 10 1809 (build 17763)                                        | decided    |
 | Logging                    | In-house file logger, daily file, 14-day retention                   | decided    |
 | Build system               | Cargo                                                                | decided    |
-| Testing                    | `cargo test`, reactor component tests, `examples/probe`              | decided    |
+| Testing                    | `cargo test`, reactor component tests, shared `probe` example        | decided    |
 | GDI / `Painter` / Direct2D | Removed at the WinUI cutover                                       | removed    |
 | Native Win32 dialogs       | Removed at the WinUI cutover                                       | removed    |
 
@@ -693,9 +693,10 @@ The Settings dialog is a reactor secondary window:
   `ContentDialog` hosting a `ColorPicker`. Sections are cards rather than recreated WinForms group
   boxes.
 
-The component is split into `src/dialogs/settings/mod.rs` (state and update loop), `draft.rs` (pure
-working-copy model), `view.rs` (declarative view), and `src/dialogs/placement.rs` (pure window
-placement).
+The component is split into `src/dialogs/settings/mod.rs` (state and update loop) and `view.rs`
+(declarative view). The pure working-copy model and the window placement algorithm are shared with
+the winsafe front end and live in `crates/micro-task-pager-core/src/dialogs/` (`settings_draft.rs`
+and `placement.rs`).
 
 ## 10. Settings and Persistence
 
@@ -899,8 +900,8 @@ verifiable on its own; the current app is the reactor pager.
 
 - x64 MSVC build; no .NET runtime and no installer.
 - `#![windows_subsystem = "windows"]` so no console window appears.
-- Statically link the MSVC runtime (`rust-winui/.cargo/config.toml`) so the executable does not require the
-  Visual C++ redistributable.
+- Statically link the MSVC runtime (`.cargo/config.toml` at the workspace root) so the executable
+  does not require the Visual C++ redistributable.
 - Windows App Runtime 2.4 or later is required. Packaging is framework-dependent: reactor resolves the
   installed framework package and shows an install prompt when it is missing. The executable does not
   bundle the runtime.
@@ -911,7 +912,7 @@ verifiable on its own; the current app is the reactor pager.
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
 - Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
-- The release artifact is `rust-winui/target/release/micro-task-pager.exe`. A distribution folder may rename
+- The release artifact is `target/release/micro-task-pager-winui.exe`. A distribution folder may rename
   it to `MicroTaskPager.exe`; the embedded icon/version/manifest stay intact.
 
 ## 16. Rust Development Guidelines

@@ -1,8 +1,8 @@
 //! Window model: enumerate top-level windows and turn them into a snapshot.
 //!
-//! This is the Phase 3 layer between the COM desktop API and the future
-//! renderer. It does not draw anything. It produces an immutable
-//! [`WindowSnapshot`] that the UI can compare against the previous frame:
+//! This is the layer between the COM desktop API and the UI renderer. It does
+//! not draw anything. It produces an immutable [`WindowSnapshot`] that the UI
+//! can compare against the previous frame:
 //!
 //! - [`WindowSnapshotter`] is stateful: it remembers desktop-index failures,
 //!   blacklisted windows, and icon cache entries between snapshots.
@@ -10,8 +10,8 @@
 //!   changes, so the UI can skip a repaint when nothing moved.
 //!
 //! The filters and fallbacks intentionally mirror `WindowManager.cs`; the
-//! failure-counter pruning is fixed compared to the C# version (see
-//! `ARCHITECTURE.md` §10).
+//! failure-counter pruning is fixed compared to the C# version (see the
+//! per-implementation architecture notes).
 
 mod icons;
 
@@ -129,7 +129,7 @@ impl WindowSnapshotter {
     pub fn capture(&mut self, api: &dyn VirtualDesktopApi) -> Result<WindowSnapshot, ApiError> {
         let desktop_count = api.count()?;
         // Fetch the desktop list once and resolve every window against it.
-        // Asking the shell for the list per window dominated the polling cost.
+        // Asking the shell for the list per window dominates the polling cost.
         let desktop_ids = api.desktop_ids()?;
         let current_desktop = api
             .current_desktop_id()?
@@ -439,19 +439,6 @@ mod tests {
     }
 
     #[test]
-    fn windows_can_be_filtered_by_desktop() {
-        let mut snapshot = sample_snapshot("Editor");
-        snapshot.windows.push(WindowInfo {
-            desktop_index: 1,
-            ..snapshot.windows[0].clone()
-        });
-
-        assert_eq!(snapshot.windows_on_desktop(0).count(), 1);
-        assert_eq!(snapshot.windows_on_desktop(1).count(), 1);
-        assert_eq!(snapshot.windows_on_desktop(2).count(), 0);
-    }
-
-    #[test]
     fn desktop_index_resolves_against_the_fetched_list() {
         let first = GUID::from_u128(1);
         let second = GUID::from_u128(2);
@@ -466,9 +453,28 @@ mod tests {
             None
         );
         assert_eq!(resolve_desktop_index(None, &ids, 1), None);
+    }
+
+    #[test]
+    fn pinned_windows_follow_the_current_desktop() {
+        let ids = [GUID::from_u128(1), GUID::from_u128(2)];
+
         assert_eq!(
             resolve_desktop_index(Some(WindowDesktopId::AllDesktops), &ids, 1),
             Some(1)
         );
+    }
+
+    #[test]
+    fn windows_can_be_filtered_by_desktop() {
+        let mut snapshot = sample_snapshot("Editor");
+        snapshot.windows.push(WindowInfo {
+            desktop_index: 1,
+            ..snapshot.windows[0].clone()
+        });
+
+        assert_eq!(snapshot.windows_on_desktop(0).count(), 1);
+        assert_eq!(snapshot.windows_on_desktop(1).count(), 1);
+        assert_eq!(snapshot.windows_on_desktop(2).count(), 0);
     }
 }

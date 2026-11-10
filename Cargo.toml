@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/micro-task-pager-core",
+    "rust-winsafe",
+    "rust-winui",
+]
+
+# Release settings for every member. Profiles are only valid in the workspace
+# root, so the individual crates must not declare their own.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = "symbols"

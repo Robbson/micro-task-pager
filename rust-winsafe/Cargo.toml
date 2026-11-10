@@ -1,5 +1,5 @@
 [package]
-name = "micro-task-pager"
+name = "micro-task-pager-winsafe"
 version = "1.5.1"
 edition = "2024"
 rust-version = "1.95"
@@ -7,9 +7,21 @@ publish = false
 
 build = "build.rs"
 
+[lib]
+name = "micro_task_pager_winsafe"
+path = "src/lib.rs"
+
+[[bin]]
+name = "micro-task-pager-winsafe"
+path = "src/main.rs"
+
 [dependencies]
+# Shared, toolkit-independent platform code: COM, virtual desktops, window
+# enumeration, settings, logging, single instance, monitor/foreground tracking,
+# and the pure dialog helpers.
+micro-task-pager-core = { path = "../crates/micro-task-pager-core" }
 # The umbrella windows crate is still on 0.62; the focused Microsoft crates
-# (registry, version, and the optional canvas) use the 0.100 line.
+# (registry and version) live in micro-task-pager-core.
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
@@ -28,9 +40,6 @@ windows = { version = "0.62", features = [
     "Win32_UI_Shell_Common",
     "Win32_UI_WindowsAndMessaging",
 ] }
-windows-core = "0.62"
-windows-registry = "0.100"
-windows-version = "0.100"
 # High-level, safe Win32 wrappers for the window host and the dialogs. The raw
 # `windows` crate stays in use for the APIs winsafe does not wrap (GDI drawing,
 # virtual-desktop COM, shell helpers).
@@ -54,12 +63,5 @@ png = "0.18"
 # foreign call is visible at its use site.
 unsafe_op_in_unsafe_fn = "deny"
 
-[dev-dependencies]
-
 [build-dependencies]
 embed-resource = "3.0"
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = "symbols"

@@ -78,39 +78,27 @@ switch ($Target) {
         $projectDir = Join-Path $root 'rust-winui'
         if (-not $NoBuild) {
             Write-Host "==> Building Rust WinUI 3 ($Configuration)"
-            Push-Location $projectDir
-            try {
-                if ($Configuration -eq 'release') {
-                    cargo build --release
-                }
-                else {
-                    cargo build
-                }
+            if ($Configuration -eq 'release') {
+                cargo build --release --package micro-task-pager-winui --manifest-path (Join-Path $projectDir 'Cargo.toml')
             }
-            finally {
-                Pop-Location
+            else {
+                cargo build --package micro-task-pager-winui --manifest-path (Join-Path $projectDir 'Cargo.toml')
             }
         }
-        $executable = Join-Path $projectDir "target/$Configuration/micro-task-pager.exe"
+        $executable = Join-Path $root "target/$Configuration/micro-task-pager-winui.exe"
     }
     { $_ -in 'winsafe', 'rust-winsafe' } {
         $projectDir = Join-Path $root 'rust-winsafe'
         if (-not $NoBuild) {
             Write-Host "==> Building Rust winsafe ($Configuration)"
-            Push-Location $projectDir
-            try {
-                if ($Configuration -eq 'release') {
-                    cargo build --release
-                }
-                else {
-                    cargo build
-                }
+            if ($Configuration -eq 'release') {
+                cargo build --release --package micro-task-pager-winsafe --manifest-path (Join-Path $projectDir 'Cargo.toml')
             }
-            finally {
-                Pop-Location
+            else {
+                cargo build --package micro-task-pager-winsafe --manifest-path (Join-Path $projectDir 'Cargo.toml')
             }
         }
-        $executable = Join-Path $projectDir "target/$Configuration/micro-task-pager.exe"
+        $executable = Join-Path $root "target/$Configuration/micro-task-pager-winsafe.exe"
     }
     default {
         throw "Unknown target '$Target'."

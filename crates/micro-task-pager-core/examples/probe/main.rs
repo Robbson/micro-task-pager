@@ -26,10 +26,10 @@ use std::io::Write;
 use std::thread::sleep;
 use std::time::Duration;
 
-use micro_task_pager::com::Apartment;
-use micro_task_pager::desktop::{self, PinOutcome, VirtualDesktopApi};
-use micro_task_pager::logging;
-use micro_task_pager::windows::WindowSnapshotter;
+use micro_task_pager_core::com::Apartment;
+use micro_task_pager_core::desktop::{self, PinOutcome, VirtualDesktopApi};
+use micro_task_pager_core::logging;
+use micro_task_pager_core::windows::WindowSnapshotter;
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::CreateSolidBrush;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;

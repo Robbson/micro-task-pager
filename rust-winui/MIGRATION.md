@@ -13,6 +13,16 @@ not planned to be updated in the near future because `windows-reactor` is not st
 considerably more resources and a large runtime dependency. The stable implementation is
 `rust-winsafe`, and `csharp-winforms` has the latest features.
 
+## Shared platform crate
+
+The toolkit-independent modules (`com`, `desktop`, `windows` enumeration and icon handles, `settings`,
+`logging`, `single_instance`, `monitors`, `foreground`, `dialogs::placement`, `dialogs::settings_draft`,
+and the probe example) now live in `crates/micro-task-pager-core`. The two Rust front ends and the
+core crate form one Cargo workspace. This crate keeps the WinUI component, the DIP layout, the
+`native_window` shim, the reactor dialogs, and the WIC `HICON`→PNG conversion, because those depend on
+`windows-reactor` or WinUI-specific units. See `crates/micro-task-pager-core/README.md` for the
+boundary rules and the new-front-end checklist.
+
 ## Phase status
 
 | Phase                          | Status   | Started    | Completed  | Notes                                                                                                                                                                                                                                                                                |
@@ -358,7 +368,8 @@ Suggested reading order for onboarding:
 3. `src/pager/layout.rs`, `src/pager/view.rs` - geometry, then how it becomes WinUI elements.
 4. `src/pager/input.rs`, `src/pager/dialog_state.rs` - the two pure state machines.
 5. `src/native_window.rs` - the Win32 shim and when each part runs.
-6. `src/desktop/mod.rs` - the safe virtual-desktop API and its restart supervisor.
+6. `crates/micro-task-pager-core/src/desktop/mod.rs` - the safe virtual-desktop API and its restart
+   supervisor. Rows below that point at the core crate are shared with `rust-winsafe`.
 
 The pager is the only place that mutates application state. Everything below it returns data:
 `WindowSnapshotter` produces snapshots, `layout::build` produces geometry, `DialogState` and
@@ -378,25 +389,25 @@ The pager is the only place that mutates application state. Everything below it 
 | `src/dialogs/mod.rs`                 | `DialogLink`/`DialogEvent` bridge and the dialog module root.                                       |
 | `src/dialogs/about.rs`               | Reactor About window, promoted from the example.                                                    |
 | `src/dialogs/settings/mod.rs`        | Settings component: state, messages, update loop, and coalesced preview.                            |
-| `src/dialogs/settings/draft.rs`      | Pure working-copy model: revert, reset-per-section, clamps, and tests.                              |
 | `src/dialogs/settings/view.rs`       | Declarative Pivot/cards Settings view, step buttons, and modal color picker.                        |
-| `src/dialogs/placement.rs`           | Pure C#-compatible Settings window placement and tests.                                             |
 | `src/native_window.rs`               | HWND lookup, styles, topmost, layered alpha, position, wheel hook, cursor helpers, and pin handoff. |
-| `src/monitors.rs`                    | Monitor enumeration and work areas.                                                                 |
-| `src/com.rs`                         | RAII guard that initializes the COM apartment on the calling thread.                                |
-| `src/single_instance.rs`             | Named-mutex guard that prevents two pagers from running.                                            |
-| `src/settings.rs`                    | Registry-compatible settings model, defaults, and persistence.                                      |
-| `src/logging.rs`                     | Daily file logger with 14-day retention.                                                            |
-| `src/foreground.rs`                  | Foreground WinEvent hook and last-active-window tracking per desktop.                               |
-| `src/desktop/mod.rs`                 | Public safe API (`VirtualDesktopApi`), errors, and `SupervisedDesktop`.                              |
-| `src/desktop/com/core.rs`            | Shared COM interface definitions and the generic backend.                                           |
-| `src/desktop/com/win10.rs`           | Win10 layout (build 10240-21999).                                                                   |
-| `src/desktop/com/win11.rs`           | Win11 layout (build 22000 and later).                                                               |
-| `src/windows/mod.rs`                 | Window enumeration, filtering, snapshot model, and change hash.                                     |
-| `src/windows/icons.rs`               | Icon fallback chain, per-window icon cache, and PNG encoding for reactor.                           |
+| `crates/micro-task-pager-core/src/dialogs/settings_draft.rs` | Shared pure working-copy model: revert, reset-per-section, clamps, and tests.   |
+| `crates/micro-task-pager-core/src/dialogs/placement.rs`      | Shared pure C#-compatible Settings window placement and tests.                  |
+| `crates/micro-task-pager-core/src/monitors.rs`               | Monitor enumeration and work areas.                                             |
+| `crates/micro-task-pager-core/src/com.rs`                    | RAII guard that initializes the COM apartment on the calling thread.            |
+| `crates/micro-task-pager-core/src/single_instance.rs`        | Named-mutex guard that prevents two pagers from running.                        |
+| `crates/micro-task-pager-core/src/settings.rs`               | Registry-compatible settings model, defaults, and persistence.                  |
+| `crates/micro-task-pager-core/src/logging.rs`                | Daily file logger with 14-day retention.                                        |
+| `crates/micro-task-pager-core/src/foreground.rs`             | Foreground WinEvent hook and last-active-window tracking per desktop.           |
+| `crates/micro-task-pager-core/src/desktop/mod.rs`            | Public safe API (`VirtualDesktopApi`), errors, and `SupervisedDesktop`.         |
+| `crates/micro-task-pager-core/src/desktop/com/core.rs`       | Shared COM interface definitions and the generic backend.                       |
+| `crates/micro-task-pager-core/src/desktop/com/win10.rs`      | Win10 layout (build 10240-21999).                                               |
+| `crates/micro-task-pager-core/src/desktop/com/win11.rs`      | Win11 layout (build 22000 and later).                                           |
+| `crates/micro-task-pager-core/src/windows/mod.rs`            | Window enumeration, filtering, snapshot model, and change hash.                 |
+| `crates/micro-task-pager-core/src/windows/icons.rs`          | Icon fallback chain and per-window icon-handle cache.                           |
 | `app.rc`, `app.manifest`, `build.rs` | Icon, version resource, manifest, and resource embedding.                                           |
-| `.cargo/config.toml`                 | Static MSVC runtime.                                                                                |
-| `examples/probe/main.rs`             | Standalone COM probe; not part of the pager binary.                                                 |
+| `<root>/.cargo/config.toml`          | Static MSVC runtime.                                                                                |
+| `crates/micro-task-pager-core/examples/probe/main.rs` | Standalone COM probe; not part of the pager binary.                              |
 | `examples/reactor_about.rs`          | Reactor About reference and regression sample.                                                      |
 | `examples/reactor_settings.rs`       | Standalone Settings window runner for visual and regression checks.                                 |
 | `examples/reactor_pager.rs`          | Same reactor pager runner as the main binary.                                                       |
@@ -408,7 +419,7 @@ Terms that appear in the code:
 | `VirtualDesktopApi`         | The only trait the rest of the application should use. It hides COM pointers and version differences behind plain Rust methods and `Result`.                                                  |
 | `SupervisedDesktop`         | A small resilience wrapper. It owns one backend and forwards calls. If a call fails with a restartable COM error, it throws the backend away, creates a new one, and retries once.            |
 | Backend / layout            | The actual COM implementation for a Windows build family. There are two layouts instead of four C# variants because the used vtables are identical inside each pair.                          |
-| Probe                       | A separate binary built by Cargo from `examples/probe` (`cargo run --example probe`). It exercises the COM layer without starting the pager UI.                                               |
+| Probe                       | A separate binary built by Cargo from the core crate's `examples/probe` (`cargo run -p micro-task-pager-core --example probe`). It exercises the COM layer without starting the pager UI. |
 | HWND                        | An opaque Windows window handle. The probe accepts it in decimal or `0x` hexadecimal. The pager finds its reactor HWND in `native_window`.                                                    |
 | Snapshot                    | An immutable view of desktops and windows at one moment. The pager view is built from it.                                                                                                     |
 | Z-order                     | Stacking order. In the snapshot, larger values are closer to the top.                                                                                                                         |
@@ -429,14 +440,15 @@ Terms that appear in the code:
 
 The project uses Microsoft's official `windows` crate and keeps `unsafe` at the FFI boundary:
 
-- Raw COM vtables and pointers live in `src/desktop/com/`.
-- Window enumeration and shell calls live in `src/windows/`, `src/monitors.rs`, `src/foreground.rs`,
-  and `src/single_instance.rs`.
-- The pager window shim lives in `src/native_window.rs`.
-- Logging file-system calls live in `src/logging.rs`.
+- Raw COM vtables and pointers live in `crates/micro-task-pager-core/src/desktop/com/`.
+- Window enumeration and shell calls live in `crates/micro-task-pager-core/src/windows/`,
+  `monitors.rs`, `foreground.rs`, and `single_instance.rs`.
+- The pager window shim lives in `src/native_window.rs`; the WinUI icon conversion adds WIC calls in
+  `src/pager/icons.rs`.
+- Logging file-system calls live in `crates/micro-task-pager-core/src/logging.rs`.
 - The COM apartment bootstrap lives in `src/main.rs`.
-- Reactor components, layout, hit testing, settings, and the supervisor are safe Rust and contain no
-  raw pointers.
+- Reactor components, layout, hit testing, dialog state, the settings draft, and the supervisor are
+  safe Rust and contain no raw pointers.
 
 Every `unsafe` block has a nearby safety comment explaining the pointer/thread/handle invariant. The
 WinUI migration removes the native window procedure and GDI backend, which removes a large part of the

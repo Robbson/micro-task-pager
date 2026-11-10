@@ -73,17 +73,29 @@ stacks allow it:
 
 ## Verification
 
-Run from `rust-winsafe/`:
+Run from the repository root (the Rust crates are one Cargo workspace):
 
 ```powershell
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
-cargo build --release
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test -p micro-task-pager-winsafe
+cargo test -p micro-task-pager-core
+cargo build --release -p micro-task-pager-winsafe
 ```
 
-Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, 34 unit tests
-pass, and the release executable is 1,111,552 bytes (1.06 MiB).
+Current results (2026-11-09): formatting clean, clippy clean with `-D warnings`, the winsafe package
+and the shared core package pass all tests, and the release executable is 1,111,552 bytes
+(1.06 MiB).
+
+### Shared platform crate (2026-11-10)
+
+The modules that do not depend on the UI toolkit moved into `crates/micro-task-pager-core`:
+`com`, `desktop`, `windows` (window enumeration and icon handle only), `settings`, `logging`,
+`single_instance`, `monitors`, `foreground`, `dialogs::placement`, `dialogs::settings_draft`, and the
+`probe` example. `rust-winsafe` and `rust-winui` now depend on the core crate and re-export its
+modules, so application code keeps using paths such as `crate::settings` and `crate::windows`. The
+GDI renderer, winsafe window host, About dialog, `.rc` Settings dialog, and winsafe-specific icon
+drawing stay in this crate. See `crates/micro-task-pager-core/README.md` for the boundary rules.
 
 ### Follow-up fixes after the first interaction test (2026-11-09)
 
@@ -149,8 +161,10 @@ private bytes are the 20 s steady-state samples. Source-line counts are intentio
 - `src/dialogs/settings/mod.rs` loads the dialog with `gui::WindowModal::new_dlg`, turns the three
   pages into `gui::TabPage::new_dlg` children of a `gui::Tab`, and wraps every control with the
   matching `new_dlg` constructor. Tab switching and page resizing are handled by winsafe.
-- `src/dialogs/settings/draft.rs` and `src/dialogs/placement.rs` are copied from `rust-winui` with
-  their 12 tests; `Settings::save()` and `DesktopBorderStyle::as_u32()` were added to `settings.rs`.
+- The pure settings working copy and dialog placement model live in
+  `crates/micro-task-pager-core/src/dialogs/` (`settings_draft.rs`, `placement.rs`) with their tests,
+  shared with `rust-winui`; `Settings::save()` and `DesktopBorderStyle::as_u32()` are in
+  `settings.rs` in the same core crate.
 - Save/Cancel/Defaults use `IDOK`/`IDCANCEL`; Escape uses `wm_command_acc_menu(co::DLGID::CANCEL)`.
   Per-row revert buttons start hidden and appear when the option differs from the opening value.
 - The fixed template is sized to the C# dialog's 520x570 client area (297x304 dialog units for

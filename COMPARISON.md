@@ -289,11 +289,11 @@ into the executable. The C# package graph is smaller, but its runtime pieces are
 dotnet build csharp-winforms/MicroTaskPager.csproj -c Release
 Get-ChildItem csharp-winforms/bin/Release/net48 -File
 
-# Rust release
-Push-Location rust
-cargo build --release
-Pop-Location
-Get-Item rust-winui/target/release/micro-task-pager.exe
+# Rust release (both Rust crates and the shared core are one workspace)
+cargo build --release -p micro-task-pager-winui
+cargo build --release -p micro-task-pager-winsafe
+Get-Item target/release/micro-task-pager-winui.exe
+Get-Item target/release/micro-task-pager-winsafe.exe
 
 # Runtime versions on this machine
 Get-AppxPackage -Name "Microsoft.WindowsAppRuntime.2" |

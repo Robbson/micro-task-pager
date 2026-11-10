@@ -4,7 +4,6 @@
 //! and Misc sections. All edits target a working copy; the pager receives live
 //! previews and only persists settings when OK is pressed.
 
-mod draft;
 mod view;
 
 use std::time::Duration;
@@ -13,7 +12,8 @@ use windows_reactor::{Color, Component, ComponentContext, ContentDialogResult, V
 
 use super::{DialogEvent, DialogLink};
 use crate::settings::Settings;
-use draft::{Field, Section, SettingsDraft};
+use micro_task_pager_core::dialogs::settings_draft as draft;
+use micro_task_pager_core::dialogs::settings_draft::{Field, Section, SettingsDraft};
 
 /// Window title used by the pager to reassert topmost for the open dialog.
 pub const WINDOW_TITLE: &str = "Micro Task Pager Settings";

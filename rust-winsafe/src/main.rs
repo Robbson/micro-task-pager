@@ -6,7 +6,7 @@
 //! state, then the Win32 message loop. The COM apartment guard must stay alive
 //! for the whole loop because the pager's virtual desktop objects belong to it.
 
-use micro_task_pager::{app, com, logging, single_instance, window};
+use micro_task_pager_winsafe::{app, com, logging, single_instance, window};
 
 use single_instance::Acquisition;
 

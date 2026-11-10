@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.6.0
 
+- ... all c#-only changes (but this should be separated in 1.6.0, others should be in 1.5.2)
 - Rust implementations now also show all the tooltips in the settings window like the C# version
 - rust-winsafe settings dialog is closer to the C# version
 - csharp-winforms settings dialog now sticks to the system colors

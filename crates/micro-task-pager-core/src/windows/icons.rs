@@ -5,8 +5,8 @@
 //! fallback icon (`IDI_APPLICATION`) is a shared system icon for the same
 //! reason.
 //!
-//! Phase 3 stores the handle and detects icon changes. Phase 4 converts it to a
-//! GDI bitmap when rendering; that is also when a sized bitmap cache matters.
+//! The front end owns the conversion to its own image type (a GDI bitmap for
+//! winsafe, an encoded PNG for WinUI). Only the source handle is cached here.
 
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
@@ -26,9 +26,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
 pub struct WindowIcon(HICON);
 
 impl WindowIcon {
-    /// Returns the raw handle for the renderer. Kept crate-private so the raw
-    /// handle does not leak into the public API.
-    pub(crate) fn handle(self) -> HICON {
+    /// Returns the borrowed raw handle for the UI renderer.
+    ///
+    /// The caller must only read or copy the icon. Destroying it is a bug:
+    /// the window, its class, or the system owns it. A front end that needs a
+    /// scaled or converted copy must make its own copy first.
+    pub fn handle(self) -> HICON {
         self.0
     }
 }

@@ -171,6 +171,8 @@ function Build-Rust {
     param(
         [Parameter(Mandatory)][string]$DisplayName,
         [Parameter(Mandatory)][string]$ProjectDir,
+        [Parameter(Mandatory)][string]$PackageName,
+        [Parameter(Mandatory)][string]$BinaryName,
         [Parameter(Mandatory)][string]$StageName,
         [Parameter(Mandatory)][string]$ArchivePrefix,
         [Parameter(Mandatory)][string]$Architecture
@@ -181,24 +183,26 @@ function Build-Rust {
         Assert-RustTarget -Triple $target.Triple
     }
 
-    $metadata = cargo metadata --manifest-path (Join-Path $ProjectDir 'Cargo.toml') --no-deps --format-version 1 | ConvertFrom-Json
-    $package = $metadata.packages | Where-Object { $_.name -eq 'micro-task-pager' }
-    if (-not $package) {
-        throw 'Unable to read the micro-task-pager version from Cargo metadata.'
-    }
-    $version = $package.version
-
-    Push-Location $ProjectDir
+    Push-Location $root
     try {
+        $manifest = Join-Path $ProjectDir 'Cargo.toml'
+        $metadata = cargo metadata --manifest-path $manifest --no-deps --format-version 1 | ConvertFrom-Json
+        $package = $metadata.packages | Where-Object { $_.name -eq $PackageName }
+        if (-not $package) {
+            throw "Unable to read the $PackageName version from Cargo metadata."
+        }
+        $version = $package.version
+        $targetRoot = $metadata.target_directory
+
         foreach ($target in $targets) {
             $stage = Join-Path $prodRoot ($StageName + $target.StageSuffix)
 
             Write-Host "==> Building Rust $DisplayName release ($($target.Name))"
             Reset-Stage -Path $stage
 
-            cargo build --release --target $target.Triple
+            cargo build --release --target $target.Triple --package $PackageName --manifest-path $manifest
 
-            $builtExe = Join-Path $ProjectDir "target/$($target.Triple)/release/micro-task-pager.exe"
+            $builtExe = Join-Path $targetRoot "$($target.Triple)/release/$BinaryName.exe"
             if (-not (Test-Path -LiteralPath $builtExe)) {
                 throw "Expected release executable not found: $builtExe"
             }
@@ -226,6 +230,8 @@ switch ($Target) {
     'winui' {
         Build-Rust -DisplayName 'WinUI 3' `
             -ProjectDir (Join-Path $root 'rust-winui') `
+            -PackageName 'micro-task-pager-winui' `
+            -BinaryName 'micro-task-pager-winui' `
             -StageName 'winui' `
             -ArchivePrefix 'MicroTaskPager-winui' `
             -Architecture $Architecture
@@ -233,6 +239,8 @@ switch ($Target) {
     'rust-winui' {
         Build-Rust -DisplayName 'WinUI 3' `
             -ProjectDir (Join-Path $root 'rust-winui') `
+            -PackageName 'micro-task-pager-winui' `
+            -BinaryName 'micro-task-pager-winui' `
             -StageName 'winui' `
             -ArchivePrefix 'MicroTaskPager-winui' `
             -Architecture $Architecture
@@ -240,6 +248,8 @@ switch ($Target) {
     'winsafe' {
         Build-Rust -DisplayName 'winsafe native' `
             -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -PackageName 'micro-task-pager-winsafe' `
+            -BinaryName 'micro-task-pager-winsafe' `
             -StageName 'winsafe' `
             -ArchivePrefix 'MicroTaskPager-winsafe' `
             -Architecture $Architecture
@@ -247,6 +257,8 @@ switch ($Target) {
     'rust-winsafe' {
         Build-Rust -DisplayName 'winsafe native' `
             -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -PackageName 'micro-task-pager-winsafe' `
+            -BinaryName 'micro-task-pager-winsafe' `
             -StageName 'winsafe' `
             -ArchivePrefix 'MicroTaskPager-winsafe' `
             -Architecture $Architecture
@@ -255,11 +267,15 @@ switch ($Target) {
         Build-WinForms
         Build-Rust -DisplayName 'WinUI 3' `
             -ProjectDir (Join-Path $root 'rust-winui') `
+            -PackageName 'micro-task-pager-winui' `
+            -BinaryName 'micro-task-pager-winui' `
             -StageName 'winui' `
             -ArchivePrefix 'MicroTaskPager-winui' `
             -Architecture $Architecture
         Build-Rust -DisplayName 'winsafe native' `
             -ProjectDir (Join-Path $root 'rust-winsafe') `
+            -PackageName 'micro-task-pager-winsafe' `
+            -BinaryName 'micro-task-pager-winsafe' `
             -StageName 'winsafe' `
             -ArchivePrefix 'MicroTaskPager-winsafe' `
             -Architecture $Architecture

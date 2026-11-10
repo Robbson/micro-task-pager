@@ -10,7 +10,7 @@
 //! example.
 
 pub mod about;
-pub(crate) mod placement;
+pub use micro_task_pager_core::dialogs::placement;
 pub mod settings;
 
 use std::rc::Rc;

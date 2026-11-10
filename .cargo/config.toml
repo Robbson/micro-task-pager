@@ -1,0 +1,11 @@
+# Build self-contained executables: static MSVC runtime, so the pager does not
+# require the Visual C++ redistributable on the target machine.
+#
+# This lives at the workspace root. Cargo discovers `.cargo/config.toml` from
+# the current directory upward, so it applies whether cargo runs from the
+# repository root or from a member directory.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

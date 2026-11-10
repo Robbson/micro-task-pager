@@ -7,8 +7,8 @@
 //! Stop the native or reactor pager first only when you want to compare
 //! settings side by side; this example does not create the pager mutex.
 
-use micro_task_pager::dialogs::settings::{SettingsDialog, SettingsInput};
-use micro_task_pager::settings::Settings;
+use micro_task_pager_winui::dialogs::settings::{SettingsDialog, SettingsInput};
+use micro_task_pager_winui::settings::Settings;
 use windows_reactor::App;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

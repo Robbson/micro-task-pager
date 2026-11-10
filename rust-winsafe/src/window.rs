@@ -14,7 +14,7 @@
 //! plain arguments and calls one [`App`] method. State changes, COM calls, and
 //! drawing all happen in [`crate::app`], never here. The only exception is the
 //! native context menu, which must run its own modal `TrackPopupMenu` loop in
-//! [`show_context_menu`].
+//! `show_context_menu` (private helper).
 //!
 //! # Window lifetime
 //!

@@ -18,7 +18,7 @@ BEGIN
             VALUE "FileDescription", "Micro Task Pager"
             VALUE "FileVersion", "0.1.0.0"
             VALUE "InternalName", "micro-task-pager"
-            VALUE "OriginalFilename", "micro-task-pager.exe"
+            VALUE "OriginalFilename", "micro-task-pager-winui.exe"
             VALUE "ProductName", "Micro Task Pager"
             VALUE "ProductVersion", "0.1.0.0"
         END

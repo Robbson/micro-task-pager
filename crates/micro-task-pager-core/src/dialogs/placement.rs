@@ -5,23 +5,23 @@
 //! pager. A candidate is accepted only when the whole dialog fits inside one
 //! monitor's work area.
 
-pub(crate) const PLACEMENT_GAP: i32 = 8;
+pub const PLACEMENT_GAP: i32 = 8;
 
 /// A screen-space rectangle in physical pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Rect {
-    pub(crate) left: i32,
-    pub(crate) top: i32,
-    pub(crate) right: i32,
-    pub(crate) bottom: i32,
+pub struct Rect {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
 }
 
 impl Rect {
-    pub(crate) fn width(self) -> i32 {
+    pub fn width(self) -> i32 {
         self.right - self.left
     }
 
-    pub(crate) fn height(self) -> i32 {
+    pub fn height(self) -> i32 {
         self.bottom - self.top
     }
 }
@@ -38,7 +38,7 @@ impl From<windows::Win32::Foundation::RECT> for Rect {
 }
 
 /// Returns the top-left corner for a dialog of `size` relative to `owner`.
-pub(crate) fn find_placement(owner: Rect, size: (i32, i32), work_areas: &[Rect]) -> (i32, i32) {
+pub fn find_placement(owner: Rect, size: (i32, i32), work_areas: &[Rect]) -> (i32, i32) {
     try_right(owner, size, work_areas)
         .or_else(|| try_left(owner, size, work_areas))
         .or_else(|| try_below(owner, size, work_areas))

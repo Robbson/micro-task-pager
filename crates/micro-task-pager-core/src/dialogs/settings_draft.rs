@@ -7,18 +7,18 @@
 
 use crate::settings::{DesktopBorderStyle, Settings, ViewMode};
 
-pub(super) const MIN_PAGER_HEIGHT: i32 = 16;
-pub(super) const MAX_PAGER_HEIGHT: i32 = 9999;
-pub(super) const MAX_ICON_PADDING: i32 = 9999;
-pub(super) const MIN_PRIMARY_DELAY: u32 = 1;
-pub(super) const MIN_SECONDARY_DELAY: u32 = 100;
-pub(super) const MAX_DELAY: u32 = 60_000;
-pub(super) const MIN_OPACITY_PERCENT: f64 = 25.0;
-pub(super) const MAX_OPACITY_PERCENT: f64 = 100.0;
+pub const MIN_PAGER_HEIGHT: i32 = 16;
+pub const MAX_PAGER_HEIGHT: i32 = 9999;
+pub const MAX_ICON_PADDING: i32 = 9999;
+pub const MIN_PRIMARY_DELAY: u32 = 1;
+pub const MIN_SECONDARY_DELAY: u32 = 100;
+pub const MAX_DELAY: u32 = 60_000;
+pub const MIN_OPACITY_PERCENT: f64 = 25.0;
+pub const MAX_OPACITY_PERCENT: f64 = 100.0;
 
 /// One configurable option.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Field {
+pub enum Field {
     ViewModeDefault,
     PagerHeight,
     IconPaddingX,
@@ -39,7 +39,7 @@ pub(super) enum Field {
 
 /// A Settings dialog section.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) enum Section {
+pub enum Section {
     #[default]
     Layout,
     Theme,
@@ -47,7 +47,15 @@ pub(super) enum Section {
 }
 
 impl Section {
-    pub(super) fn from_index(index: usize) -> Self {
+    pub fn index(self) -> usize {
+        match self {
+            Self::Layout => 0,
+            Self::Theme => 1,
+            Self::Misc => 2,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
         match index {
             1 => Self::Theme,
             2 => Self::Misc,
@@ -57,30 +65,29 @@ impl Section {
 }
 
 /// The values the dialog opened with and the current working copy.
-pub(super) struct SettingsDraft {
+pub struct SettingsDraft {
     original: Settings,
     working: Settings,
 }
 
 impl SettingsDraft {
-    pub(super) fn new(initial: Settings) -> Self {
+    pub fn new(initial: Settings) -> Self {
         Self {
             original: initial.clone(),
             working: initial,
         }
     }
 
-    pub(super) fn working(&self) -> &Settings {
+    pub fn working(&self) -> &Settings {
         &self.working
     }
 
-    #[cfg(test)]
-    pub(super) fn original(&self) -> &Settings {
+    pub fn original(&self) -> &Settings {
         &self.original
     }
 
     /// Restores one option to the value the dialog opened with.
-    pub(super) fn revert(&mut self, field: Field) {
+    pub fn revert(&mut self, field: Field) {
         match field {
             Field::ViewModeDefault => {
                 self.working.view_mode_default = self.original.view_mode_default;
@@ -131,7 +138,7 @@ impl SettingsDraft {
     }
 
     /// Resets one section to the built-in defaults.
-    pub(super) fn reset_section(&mut self, section: Section) {
+    pub fn reset_section(&mut self, section: Section) {
         let defaults = Settings::default();
         match section {
             Section::Layout => {
@@ -162,7 +169,7 @@ impl SettingsDraft {
     }
 
     /// Whether an option differs from the value the dialog opened with.
-    pub(super) fn is_modified(&self, field: Field) -> bool {
+    pub fn is_modified(&self, field: Field) -> bool {
         let working = &self.working;
         let original = &self.original;
         match field {
@@ -204,7 +211,7 @@ impl SettingsDraft {
     }
 
     /// Applies a rounded numeric control value with the C# dialog's limits.
-    pub(super) fn set_number(&mut self, field: Field, value: f64) {
+    pub fn set_number(&mut self, field: Field, value: f64) {
         if !value.is_finite() {
             return;
         }
@@ -237,14 +244,14 @@ impl SettingsDraft {
         }
     }
 
-    pub(super) fn set_opacity_percent(&mut self, percent: f64) {
+    pub fn set_opacity_percent(&mut self, percent: f64) {
         if percent.is_finite() {
             self.working.background_opacity =
                 percent.clamp(MIN_OPACITY_PERCENT, MAX_OPACITY_PERCENT) / 100.0;
         }
     }
 
-    pub(super) fn set_index(&mut self, field: Field, index: usize) {
+    pub fn set_index(&mut self, field: Field, index: usize) {
         match field {
             Field::ViewModeDefault => {
                 self.working.view_mode_default = if index == 0 {
@@ -264,13 +271,13 @@ impl SettingsDraft {
         }
     }
 
-    pub(super) fn set_check(&mut self, field: Field, value: bool) {
+    pub fn set_check(&mut self, field: Field, value: bool) {
         if field == Field::ShowAppInTaskbar {
             self.working.show_app_in_taskbar = value;
         }
     }
 
-    pub(super) fn set_color(&mut self, field: Field, argb: u32) {
+    pub fn set_color(&mut self, field: Field, argb: u32) {
         match field {
             Field::DesktopBackgroundColor => self.working.desktop_background_color = argb,
             Field::DesktopBorderColor => self.working.desktop_border_color = argb,
@@ -286,7 +293,7 @@ impl SettingsDraft {
     }
 
     /// Smallest pager height that still leaves room below the icon padding.
-    pub(super) fn min_pager_height(&self) -> i32 {
+    pub fn min_pager_height(&self) -> i32 {
         self.working
             .icon_padding_y
             .saturating_add(MIN_PAGER_HEIGHT)

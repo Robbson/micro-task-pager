@@ -6,10 +6,9 @@
 //! code writes (mostly `REG_DWORD`, but `BackgroundOpacity` is a `REG_SZ`) and
 //! falls back to the defaults when a value is missing or malformed.
 //!
-//! The `Vec<ViewMode>` list is still flat because the registry stores one byte
-//! per renderer. `App::normalize_view_modes` maps it to the
-//! `desktop * screen_count + screen` order once monitor enumeration is
-//! available.
+//! The `Vec<ViewMode>` list is flat because the registry stores one byte per
+//! renderer. Each front end maps it to the `desktop * screen_count + screen`
+//! order once monitor enumeration is available.
 
 use windows_registry::{CURRENT_USER, Key, Type};
 

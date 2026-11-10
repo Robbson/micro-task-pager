@@ -184,19 +184,28 @@ dotnet build csharp-winforms/MicroTaskPager.csproj
 
 Alternatively, open `MicroTaskPager.sln` in Visual Studio and build the solution.
 
-Build the Rust implementations (from their own directories):
+Build the Rust implementations from the repository root. The two front ends and
+the shared [`micro-task-pager-core`](crates/micro-task-pager-core/README.md)
+platform crate are one Cargo workspace:
 
 ```powershell
-cd rust-winui
-cargo build --release
+cargo build --release -p micro-task-pager-winui
+cargo build --release -p micro-task-pager-winsafe
+```
 
-cd ../rust-winsafe
-cargo build --release
+Workspace-wide checks are available too:
+
+```powershell
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace
 ```
 
 See [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md) for the WinUI build prerequisites, which
 include the MSVC build tools, the Windows SDK, and the Windows App Runtime 2.4 or later framework
 package. The winsafe build needs only the MSVC build tools and Windows SDK.
+[`crates/micro-task-pager-core/README.md`](crates/micro-task-pager-core/README.md) explains the shared
+module boundaries and how to add another UI front end.
 
 ### Run from source
 

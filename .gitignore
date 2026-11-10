@@ -3,3 +3,5 @@ obj/
 prod/
 .vs/
 *.csproj.user
+# Shared Cargo workspace output.
+/target/

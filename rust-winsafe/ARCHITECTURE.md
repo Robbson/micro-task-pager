@@ -158,7 +158,7 @@ COM objects.
 | Windows version detection | `windows-version` crate or `RtlGetVersion` | candidate |
 | Logging | In-house file logger, daily file, 14-day retention | decided |
 | Build system | Cargo | decided |
-| Testing | `cargo test` for pure logic, `examples/probe` for COM | decided |
+| Testing | `cargo test` for pure logic, shared `probe` example for COM | decided |
 | About dialog | Native modal Win32 dialog with standard controls and a WIC-decoded PNG | decided |
 | WinUI evaluation | `examples/reactor_about.rs`, dev-dependency only | experimental |
 
@@ -170,42 +170,52 @@ startup cost against the native dialog.
 
 ## 4. Repository Structure
 
-The Rust implementation lives in `rust/` inside the existing Git repository. The C# implementation
-remains available during migration and is the reference for behavior.
+The stable front end lives in `rust-winsafe/`, next to the experimental `rust-winui/` and the shared
+`crates/micro-task-pager-core/` platform crate. The three form one Cargo workspace rooted at the
+repository `Cargo.toml`; the shared module contract is documented in
+`crates/micro-task-pager-core/README.md`. The C# implementation remains available and is the
+reference for behavior.
 
-Start with a single Cargo crate. Split it into multiple crates only when there is a concrete
-architectural benefit (for example, if the COM probe becomes reusable). Suggested module layout:
+The core crate owns the toolkit-independent modules (`com`, `single_instance`, `foreground`,
+`settings`, `logging`, `desktop/`, `windows/`, monitor tracking, and the pure dialog helpers). The
+winsafe crate owns the coordinator, the winsafe window host, the GDI renderer, and the dialogs:
 
 ```
-rust/
-  Cargo.toml
-  Cargo.lock                    # committed: this is a binary crate
-  rust-toolchain.toml           # toolchain channel + rustfmt/clippy
-  MIGRATION.md                  # phase status, verification log, open questions
+Cargo.toml                    # workspace root, members, release profile
+Cargo.lock                    # committed: this is a binary workspace
+.cargo/config.toml            # static MSVC runtime
+rust-toolchain.toml
+crates/micro-task-pager-core/
   src/
-    main.rs                     # process setup, single instance, message loop
-    app.rs                      # application state and state transitions
-    com.rs                      # COM apartment guard
-    single_instance.rs          # mutex acquisition and second-instance handling
-    foreground.rs               # foreground hook and last-active-window tracking
-    window.rs                   # Win32 window, wndproc, context menu
-    input.rs                    # hit testing, drag handling
-    settings.rs                 # model, defaults, registry import/export
+    com.rs
+    single_instance.rs
+    foreground.rs
+    settings.rs
     logging.rs
+    monitors.rs
     desktop/
-      mod.rs                    # safe virtual-desktop API and restart supervisor
-      com/mod.rs                # layout selection by build number
-      com/core.rs               # shared interfaces and generic backend
+      mod.rs                  # safe virtual-desktop API and restart supervisor
+      com/mod.rs              # layout selection by build number
+      com/core.rs             # shared interfaces and generic backend
       com/win10.rs
       com/win11.rs
     windows/
-      mod.rs                    # window enumeration and snapshot
-      icons.rs
-    render/
-      mod.rs                    # Painter trait and layout model
-      gdi.rs
+      mod.rs                  # window enumeration and snapshot
+      icons.rs                # borrowed HICON handle cache
+    dialogs/
+      placement.rs            # pure Settings window placement
+      settings_draft.rs       # pure settings working copy
   examples/
-    probe/                      # standalone COM verification binary
+    probe/                    # standalone COM verification binary
+rust-winsafe/
+  Cargo.toml                  # package micro-task-pager-winsafe
+  MIGRATION.md
+  src/
+    main.rs                   # process setup, single instance, message loop
+    app.rs                    # application state and state transitions
+    window.rs                 # winsafe window host and context menu
+    render/                   # layout, paint instructions, GDI backend
+    dialogs/                  # winsafe About and .rc-backed Settings
 ```
 
 ## 5. Windows API Integration
@@ -592,7 +602,8 @@ Do not rewrite the entire application at once. Use an incremental migration.
 Prioritize the technically most challenging component.
 
 - Port the internal COM interfaces and the `QueryService` wiring.
-- Build the `examples/probe` binary: count, current, index of window, switch, move, pin.
+- Use the shared `probe` example in `crates/micro-task-pager-core/examples/probe`: count, current,
+  index of window, switch, move, pin.
 - Verify each supported Windows build and record the matrix.
 - Implement the supervisor and error model.
 - Do not build the UI before this works reliably.
@@ -649,17 +660,17 @@ There is no test project in the C# repository. The Rust port should not repeat t
 
 - x64 MSVC build; no .NET runtime, no installer.
 - `#![windows_subsystem = "windows"]` so no console window appears.
-- Statically link the MSVC runtime (`rust/.cargo/config.toml`) so the executable does not require the
-  Visual C++ redistributable.
+- Statically link the MSVC runtime (`.cargo/config.toml` at the workspace root) so the executable
+  does not require the Visual C++ redistributable.
 - Embed the icon and a version resource.
 - Keep the application manifest with `asInvoker` and system DPI awareness.
 - Keep the C# mutex name (`micro-task-pager-win-app`) for release builds so the two implementations
   cannot run simultaneously and fight over topmost/pinning. Use a different name for development
   builds if side-by-side comparison is needed.
 - Log to `%LOCALAPPDATA%\MicroTaskPager\logs`.
-- The release artifact is `rust/target/release/micro-task-pager.exe`. A distribution folder may rename
-  it to `MicroTaskPager.exe` as a drop-in replacement. The C# implementation stays in the repository
-  until older-build and multi-monitor parity are verified.
+- The release artifact is `target/release/micro-task-pager-winsafe.exe`. A distribution folder may
+  rename it to `MicroTaskPager.exe` as a drop-in replacement. The C# implementation stays in the
+  repository until older-build and multi-monitor parity are verified.
 
 ## 14. General Rust Development Guidelines
 

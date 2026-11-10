@@ -16,7 +16,7 @@
 //! Reactor runs the pager component on this same thread, so every COM call the
 //! pager makes stays inside the apartment.
 
-use micro_task_pager::{com, logging, pager, single_instance};
+use micro_task_pager_winui::{com, logging, pager, single_instance};
 
 use single_instance::Acquisition;
 

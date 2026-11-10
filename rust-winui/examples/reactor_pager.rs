@@ -6,7 +6,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use micro_task_pager::{com, logging, pager, single_instance};
+use micro_task_pager_winui::{com, logging, pager, single_instance};
 use single_instance::Acquisition;
 
 fn main() {
