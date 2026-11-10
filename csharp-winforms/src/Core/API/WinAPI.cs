@@ -89,6 +89,9 @@ namespace MicroTaskPager.Core.API
         public static extern bool EnumWindows(EnumWindowsProc enumFunc, int lParam);
 
         [DllImport("user32.dll")]
+        public static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc enumFunc, int lParam);
+
+        [DllImport("user32.dll")]
         public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll")]
@@ -134,6 +137,10 @@ namespace MicroTaskPager.Core.API
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool DestroyIcon(IntPtr hIcon);
+
+        [DllImport("gdi32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DeleteObject(IntPtr hObject);
 
         [DllImport("user32.dll", EntryPoint = "GetClassLong")]
         public static extern uint GetClassLong32(IntPtr hWnd, int nIndex);

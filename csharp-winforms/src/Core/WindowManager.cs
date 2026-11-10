@@ -19,6 +19,12 @@ namespace MicroTaskPager.Core
         // High resolution icon preferred for the pager; smaller sources are only used as a fallback
         private const int IconExtractionSize = 256;
 
+        // A newly started packaged app may need a moment before its app identity and icon are
+        // available, so an unresolved fallback icon is retried periodically for a short while.
+        private const int MaxIconResolutionRetries = 30;
+
+        private static readonly TimeSpan IconResolutionRetryDelay = TimeSpan.FromSeconds(1);
+
         private static readonly ILogger _logger = Log.ForContext<WindowManager>();
         private static readonly uint _currentProcessId = (uint)Process.GetCurrentProcess().Id;
         private static readonly List<IntPtr> _hWndBlacklist = new List<IntPtr>();
@@ -31,8 +37,14 @@ namespace MicroTaskPager.Core
 
         // Icons are expensive GDI+ objects and GetOpenWindows runs several times per second,
         // so they are cached per window handle and shared between snapshots instead of recreated on every poll
-        private static readonly Dictionary<IntPtr, (IntPtr Source, bool Small, Bitmap Bitmap)> IconCache =
-            new Dictionary<IntPtr, (IntPtr Source, bool Small, Bitmap Bitmap)>();
+        private static readonly Dictionary<IntPtr, IconCacheEntry> IconCache =
+            new Dictionary<IntPtr, IconCacheEntry>();
+
+        // Incremented whenever an icon is rebuilt, so the pager can repaint when a deferred icon
+        // lookup (e.g. a freshly started packaged app) finally resolves.
+        private static int _iconRevision;
+
+        public static int IconRevision => _iconRevision;
 
         public static List<Window> GetOpenWindows(bool useSmallIcon = false)
         {
@@ -149,7 +161,13 @@ namespace MicroTaskPager.Core
                     ProcessID = pid,
                     Class = className.ToString(),
                     ZOrder = GetWindowZOrder(hWnd),
-                    Icon = GetWindowIcon(hWnd, pid, hIcon, useSmallIcon, useDefaultIcon),
+                    Icon = GetWindowIcon(
+                        hWnd,
+                        pid,
+                        hIcon,
+                        useSmallIcon,
+                        useDefaultIcon,
+                        className.ToString() == "ApplicationFrameWindow"),
                     IsActive = hWnd == WinAPI.GetForegroundWindow(),
                     Dimensions = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top),
                     VirtualDesktopIndex = index,
@@ -212,52 +230,95 @@ namespace MicroTaskPager.Core
             return zOrder;
         }
 
-        private static Bitmap GetWindowIcon(IntPtr hWnd, uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon)
+        private static Bitmap GetWindowIcon(
+            IntPtr hWnd, uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon, bool retryUnresolved)
         {
             lock (IconCache)
             {
-                if (IconCache.TryGetValue(hWnd, out var cached))
+                int retriesLeft = 0;
+                if (IconCache.TryGetValue(hWnd, out IconCacheEntry cached))
                 {
-                    if (cached.Source == hIcon && cached.Small == useSmallIcon)
+                    bool sameIcon = cached.Source == hIcon && cached.Small == useSmallIcon;
+                    bool waitingForRetry = cached.RetriesLeft > 0 && DateTime.UtcNow < cached.RetryAfterUtc;
+                    if (sameIcon && (cached.RetriesLeft == 0 || waitingForRetry))
                     {
                         return cached.Bitmap;
                     }
 
+                    retriesLeft = cached.RetriesLeft;
                     cached.Bitmap?.Dispose();
                     IconCache.Remove(hWnd);
                 }
 
-                var bitmap = CreateWindowIcon(processId, hIcon, useSmallIcon, useDefaultIcon);
-                IconCache[hWnd] = (hIcon, useSmallIcon, bitmap);
-                return bitmap;
+                var result = CreateWindowIcon(hWnd, processId, hIcon, useSmallIcon, useDefaultIcon);
+                if (result.Unresolved && retryUnresolved)
+                {
+                    retriesLeft = retriesLeft > 0 ? retriesLeft - 1 : MaxIconResolutionRetries;
+                }
+                else
+                {
+                    retriesLeft = 0;
+                }
+
+                IconCache[hWnd] = new IconCacheEntry
+                {
+                    Source = hIcon,
+                    Small = useSmallIcon,
+                    Bitmap = result.Bitmap,
+                    RetriesLeft = retriesLeft,
+                    RetryAfterUtc = DateTime.UtcNow.Add(IconResolutionRetryDelay),
+                };
+
+                // Only a resolved icon changes what is drawn, so unresolved retries do not
+                // force the pager to repaint on every poll.
+                if (!result.Unresolved)
+                {
+                    _iconRevision++;
+                }
+
+                return result.Bitmap;
             }
         }
 
         // The window's own icon is the one the taskbar displays, so it is preferred for every
         // size. Only when an application exposes no usable icon at all is the executable
-        // inspected for a higher resolution replacement.
-        private static Bitmap CreateWindowIcon(uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon)
+        // inspected for a higher resolution replacement. Packaged (UWP) apps are resolved
+        // through their shell app identity instead, because their icon is part of the package.
+        private static (Bitmap Bitmap, bool Unresolved) CreateWindowIcon(
+            IntPtr hWnd, uint processId, IntPtr hIcon, bool useSmallIcon, bool useDefaultIcon)
         {
             Bitmap windowIcon = CreateBitmapFromIcon(hIcon);
+
+            if (useDefaultIcon)
+            {
+                Bitmap shellIcon = ShellIcon.TryGetWindowIcon(
+                    hWnd, useSmallIcon ? Dpi.Scale(16) : IconExtractionSize, !useSmallIcon);
+                if (shellIcon != null)
+                {
+                    windowIcon?.Dispose();
+                    return (shellIcon, false);
+                }
+            }
+
             if (useSmallIcon || !useDefaultIcon)
             {
-                return windowIcon;
+                return (windowIcon, useDefaultIcon);
             }
 
             Bitmap executableIcon = TryExtractExecutableIcon(processId, IconExtractionSize);
             if (executableIcon == null)
             {
-                return windowIcon;
+                return (windowIcon, true);
             }
 
             if (windowIcon == null || executableIcon.Width >= windowIcon.Width)
             {
                 windowIcon?.Dispose();
-                return executableIcon;
+                return (executableIcon, false);
             }
 
             executableIcon.Dispose();
-            return windowIcon;
+            return (windowIcon, false);
         }
 
         private static Bitmap TryExtractExecutableIcon(uint processId, int size)
@@ -328,6 +389,19 @@ namespace MicroTaskPager.Core
             {
                 _desktopIndexFailures.Remove(handle);
             }
+        }
+
+        private sealed class IconCacheEntry
+        {
+            public IntPtr Source { get; set; }
+
+            public bool Small { get; set; }
+
+            public Bitmap Bitmap { get; set; }
+
+            public int RetriesLeft { get; set; }
+
+            public DateTime RetryAfterUtc { get; set; }
         }
     }
 }

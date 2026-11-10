@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Controls;
@@ -67,6 +68,36 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             }
         }
 
+        private static void DrawIcon(Graphics g, Bitmap icon, Rectangle destination)
+        {
+            if (icon == null)
+            {
+                return;
+            }
+
+            // Without an explicit high quality mode, GDI+ resamples the large shell icons of
+            // packaged apps with visible aliasing. Exact-size draws stay crisp.
+            if (icon.Width == destination.Width && icon.Height == destination.Height)
+            {
+                g.DrawImageUnscaled(icon, destination.Location);
+                return;
+            }
+
+            InterpolationMode interpolationMode = g.InterpolationMode;
+            PixelOffsetMode pixelOffsetMode = g.PixelOffsetMode;
+            try
+            {
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.DrawImage(icon, destination);
+            }
+            finally
+            {
+                g.InterpolationMode = interpolationMode;
+                g.PixelOffsetMode = pixelOffsetMode;
+            }
+        }
+
         private void RenderPreview(Graphics g, Window[] windows)
         {
             int iconSize = Dpi.Scale(Form.Options.IconSize);
@@ -115,7 +146,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 try
                 {
                     g.SetClip(area);
-                    g.DrawImage(wnd.Icon, new Rectangle(
+                    DrawIcon(g, wnd.Icon, new Rectangle(
                         (area.X + area.Width / 2) - iconSize / 2,
                         (area.Y + area.Height / 2) - iconSize / 2,
                         iconSize,
@@ -227,7 +258,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     }
 
                     // Place the icon in the selection area's center
-                    g.DrawImage(wnd.Icon, new Rectangle(areaCenterOffsetX, areaCenterOffsetY, iconSize, iconSize));
+                    DrawIcon(g, wnd.Icon, new Rectangle(areaCenterOffsetX, areaCenterOffsetY, iconSize, iconSize));
 
                     // Make the window selectable
                     WindowAreas[wnd.Handle] = selectionArea;

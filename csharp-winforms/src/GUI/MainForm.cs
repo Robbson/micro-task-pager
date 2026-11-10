@@ -363,7 +363,8 @@ namespace MicroTaskPager.GUI
                             $"{Windows.Sum(x => x.Dimensions.Height)}" +
                             $"{string.Join(string.Empty, Windows.Select(x => x.IsActive ? 1 : 0))}" +
                             $"{string.Join(string.Empty, Windows.Select(x => WinAPI.GetForegroundWindow() == x.Handle ? 1 : 0))}" +
-                            $"{string.Join(string.Empty, Windows.Select(x => x.VirtualDesktopIndex))}";
+                            $"{string.Join(string.Empty, Windows.Select(x => x.VirtualDesktopIndex))}" +
+                            $"{WindowManager.IconRevision}";
 
                             if (hash != _windowsHash)
                             {
