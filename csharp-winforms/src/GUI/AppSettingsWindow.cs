@@ -86,9 +86,14 @@ namespace MicroTaskPager.GUI
         }
 
         // ------------------------------------------------------------------------------------
-        // Row plumbing
+        // Static helpers
         // ------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// Appends an auto-sized row to a table and returns its index.
+        /// </summary>
+        /// <param name="table">The table whose row count is extended.</param>
+        /// <returns>The zero-based index of the new row.</returns>
         private static int AddTableRow(TableLayoutPanel table)
         {
             table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -137,378 +142,263 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        private void AddRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string labelText,
-            string toolTipText,
-            Control editor,
-            Action<AppSettings> load,
-            Func<bool> isModified)
-        {
-            int row = AddTableRow(table);
+        // ------------------------------------------------------------------------------------
+        // UI construction
+        // ------------------------------------------------------------------------------------
 
-            var label = new Label
+        private void InitializeComponent()
+        {
+            SuspendLayout();
+
+            // Pixel layout is authored at 96 DPI; let WinForms scale it like AboutDialog does.
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+
+            Text = "Micro Task Pager Settings";
+            ClientSize = new Size(520, 570);
+            StartPosition = FormStartPosition.Manual;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+
+            // The pager itself is topmost. Keeping the modal settings dialog topmost as well
+            // prevents the pager from being raised above it and stealing the foreground while
+            // the preview is updated.
+            TopMost = true;
+            Padding = new Padding(10, 10, 10, 0);
+
+            // ---- Add tabs and their pages ----
+            _tabs = new TabControl
             {
-                Text = labelText,
+                Dock = DockStyle.Fill,
+            };
+
+            _tabs.TabPages.Add(CreateLayoutTab());
+            _tabs.TabPages.Add(CreateThemeTab());
+            _tabs.TabPages.Add(CreateMiscTab());
+
+            // ---- Add generic dialog buttons at bottom ----
+            var buttons = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Bottom,
+                FlowDirection = FlowDirection.RightToLeft,
                 AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Margin = new Padding(6, 9, 6, 6),
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Padding = new Padding(0, 4, 0, 4),
             };
 
-            if (!string.IsNullOrEmpty(toolTipText))
-            {
-                _toolTip.SetToolTip(label, toolTipText);
-            }
+            var cancel = new Button { Text = "Cancel", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
+            cancel.Click += Cancel_Click;
 
-            editor.Anchor = AnchorStyles.Left;
-            editor.Margin = new Padding(3, 5, 3, 5);
+            var save = new Button { Text = "Save", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
+            save.Click += Save_Click;
 
-            var revert = new Button
-            {
-                Text = "\u21BA",
-                Size = new Size(28, 24),
-                Location = new Point(0, 2),
-                Visible = isModified(),
-            };
-            _toolTip.SetToolTip(revert, "Revert to default");
-            revert.Click += (s, e) =>
-            {
-                Suppress(() => load(_settingsBefore));
-                RefreshRevertButtons();
-                RequestPreview();
-            };
+            var defaults = new Button { Text = "Defaults", Width = 100, Height = 28, Margin = new Padding(0) };
+            _toolTip.SetToolTip(defaults, "Reset for current tab only");
+            defaults.Click += Defaults_Click;
 
-            // The host keeps the revert slot reserved even while the button is hidden,
-            // otherwise WinForms would reflow the whole row on every visibility change.
-            var revertHost = new Panel
-            {
-                Size = new Size(32, 28),
-                Margin = new Padding(4, 4, 0, 4),
-                Anchor = AnchorStyles.Left,
-            };
-            revertHost.Controls.Add(revert);
+            buttons.Controls.Add(cancel);
+            buttons.Controls.Add(save);
+            buttons.Controls.Add(defaults);
 
-            table.Controls.Add(label, 0, row);
-            table.Controls.Add(editor, 1, row);
-            table.Controls.Add(revertHost, 2, row);
+            AcceptButton = save;
+            CancelButton = cancel;
 
-            _rows.Add(new RowBinding(page, revert, load, isModified));
+            Controls.Add(_tabs);
+            Controls.Add(buttons);
+
+            ResumeLayout(false);
         }
 
-        private void AddSpanningControl(TableLayoutPanel table, Control control)
+        private TabPage CreateLayoutTab()
         {
-            int row = AddTableRow(table);
-            control.Dock = DockStyle.Fill;
-            table.Controls.Add(control, 0, row);
-            table.SetColumnSpan(control, 3);
-        }
+            TabPage page = CreateTabPage("Layout");
 
-        private void AddComboRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string label,
-            string toolTip,
-            string[] items,
-            Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
-        {
-            var editor = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 180,
-            };
-            editor.Items.AddRange(items);
-            editor.SelectedIndex = get(_working);
-            editor.SelectedIndexChanged += (s, e) =>
-            {
-                set(_working, editor.SelectedIndex);
-                OnEditorChanged();
-            };
-
-            AddRow(
-                table,
+            Render(
+                BeginGroup(page, "Rendering"),
                 page,
-                label,
-                toolTip,
-                editor,
-                s => editor.SelectedIndex = get(s),
-                () => editor.SelectedIndex != get(_settingsBefore));
-        }
+                ComboSpec(
+                    "View Mode Default",
+                    "Only affects newly created desktops and their screens.",
+                    new[] { "Preview", "MicroTaskbar" },
+                    s => (int)s.ViewModeDefault,
+                    (s, v) => s.ViewModeDefault = (ViewMode)v),
+                PagerHeightSpec());
 
-        private void AddNumericRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string label,
-            string toolTip,
-            int min,
-            int max,
-            Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
-        {
-            var editor = new NumericUpDown
-            {
-                Minimum = min,
-                Maximum = max,
-                Width = 150,
-                TextAlign = HorizontalAlignment.Right,
-                Value = Math.Max(min, Math.Min(max, get(_working))),
-            };
-            editor.ValueChanged += (s, e) =>
-            {
-                set(_working, (int)editor.Value);
-                OnEditorChanged();
-            };
+            Render(BeginGroup(page, "Icons Settings"), page, IconSizeSpec());
 
-            AddRow(
-                table,
+            Render(
+                BeginGroup(page, "MicroTaskbar"),
                 page,
-                label,
-                toolTip,
-                editor,
-                s => editor.Value = Math.Max(min, Math.Min(max, get(s))),
-                () => (int)editor.Value != get(_settingsBefore));
+                NumericSpec(
+                    "Icon Padding X",
+                    "Negative values are supported as well so less space is taken and the icons look stacked.",
+                    -9999,
+                    9999,
+                    s => s.IconPaddingX,
+                    (s, v) => s.IconPaddingX = v),
+                NumericSpec(
+                    "Icon Padding Y",
+                    "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar.",
+                    -9999,
+                    9999,
+                    s => s.IconPaddingY,
+                    (s, v) => s.IconPaddingY = v),
+                ComboSpec(
+                    "Show When Minimized",
+                    "Defines whether minimized windows are shown in the Micro Taskbar view mode.\n\nYes: Minimized windows are shown in their normal order.\n\nYes, after the others: Minimized windows are shown after all normal windows.\n\nNo: Minimized windows are hidden.\n\nMinimized windows are painted darker to tell them apart from normal windows.",
+                    new[] { "Yes", "Yes, after the others", "No" },
+                    s => MinimizedVisibilityIndex(s.ShowWhenMinimized),
+                    (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v)));
+
+            return page;
         }
 
-        private TextBox AddTextRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string label,
-            string toolTip,
-            Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
+        private TabPage CreateThemeTab()
         {
-            var editor = new TextBox
-            {
-                Width = 150,
-                TextAlign = HorizontalAlignment.Right,
-            };
-            editor.Text = get(_working).ToString(CultureInfo.InvariantCulture);
-            editor.TextChanged += (s, e) =>
-            {
-                if (int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
-                {
-                    set(_working, value);
-                }
+            TabPage page = CreateTabPage("Theme");
 
-                OnEditorChanged();
-            };
+            Render(BeginGroup(page, "General"), page, OpacitySpec());
 
-            AddRow(
-                table,
+            Render(
+                BeginGroup(page, "Desktops"),
                 page,
-                label,
-                toolTip,
-                editor,
-                s => editor.Text = get(s).ToString(CultureInfo.InvariantCulture),
-                () => !int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
-                    || value != get(_settingsBefore));
+                ComboSpec(
+                    "Border Style",
+                    null,
+                    new[] { "Box", "Underline" },
+                    s => (int)s.DesktopBorderStyle,
+                    (s, v) => s.DesktopBorderStyle = (Config.DesktopBorderStyle)v),
+                ColorSpec("Background Color", s => s.DesktopBackgroundColor,
+                    (s, c) => s.DesktopBackgroundColor = c),
+                ColorSpec("Border Color", s => s.DesktopBorderColor,
+                    (s, c) => s.DesktopBorderColor = c),
+                ColorSpec("Border Color (Active)", s => s.ActiveDesktopBorderColor,
+                    (s, c) => s.ActiveDesktopBorderColor = c));
 
-            return editor;
+            Render(
+                BeginGroup(page, "Preview Windows"),
+                page,
+                ColorSpec("Background Color", s => s.WindowBackgroundColor,
+                    (s, c) => s.WindowBackgroundColor = c),
+                ColorSpec("Border Color", s => s.WindowBorderColor,
+                    (s, c) => s.WindowBorderColor = c),
+                ColorSpec("Border Color (Active)", s => s.ActiveWindowBorderColor,
+                    (s, c) => s.ActiveWindowBorderColor = c),
+                ColorSpec("Background Color (Active)", s => s.ActiveWindowBackgroundColor,
+                    (s, c) => s.ActiveWindowBackgroundColor = c));
+
+            return page;
         }
 
-        private void AddCheckBoxRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string label,
-            string toolTip,
-            Func<AppSettings, bool> get,
-            Action<AppSettings, bool> set)
+        private TabPage CreateMiscTab()
         {
-            var editor = new CheckBox
+            TabPage page = CreateTabPage("Misc");
+
+            Render(
+                BeginGroup(page, "Behaviour"),
+                page,
+                ComboSpec(
+                    "Desktop Change: Window Activation",
+                    "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged.",
+                    new[] { "Desktop's last window", "Window under cursor", "None" },
+                    s => (int)s.DesktopChangeActivation,
+                    (s, v) => s.DesktopChangeActivation = (DesktopChangeActivationMode)v));
+
+            RowSpec primaryDelay = TextSpec(
+                "Primary Update Delay (ms)",
+                "Delay for the main refresh cycle. Affects how often the currently opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.",
+                s => s.PrimaryUpdateDelay,
+                (s, v) => s.PrimaryUpdateDelay = v);
+
+            RowSpec secondaryDelay = TextSpec(
+                "Secondary Update Delay (ms)",
+                "Delay for background/secondary updates. Affects how often the app window is checked for being covered by another one, this includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing, that's why this delay should be higher than the primary one.",
+                s => s.SecondaryUpdateDelay,
+                (s, v) => s.SecondaryUpdateDelay = v);
+
+            _primaryDelayBox = (TextBox)primaryDelay.Editor;
+            _secondaryDelayBox = (TextBox)secondaryDelay.Editor;
+
+            Render(BeginGroup(page, "Performance"), page, primaryDelay, secondaryDelay);
+
+            TableLayoutPanel pinning = BeginGroup(page, "App Pinning");
+
+            Render(
+                pinning,
+                page,
+                CheckBoxSpec(
+                    "Show App In Taskbar",
+                    null,
+                    s => s.ShowAppInTaskbar,
+                    (s, v) => s.ShowAppInTaskbar = v));
+
+            var note = new Label
+            {
+                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
+                AutoSize = true,
+                MaximumSize = new Size(420, 0),
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(8, 4, 8, 4),
+            };
+
+            var noteBox = new Panel
             {
                 AutoSize = true,
-                Checked = get(_working),
-            };
-            editor.CheckedChanged += (s, e) =>
-            {
-                set(_working, editor.Checked);
-                OnEditorChanged();
-            };
-
-            AddRow(
-                table,
-                page,
-                label,
-                toolTip,
-                editor,
-                s => editor.Checked = get(s),
-                () => editor.Checked != get(_settingsBefore));
-        }
-
-        private void AddColorRow(
-            TableLayoutPanel table,
-            TabPage page,
-            string label,
-            Func<AppSettings, Color> get,
-            Action<AppSettings, Color> set)
-        {
-            var preview = new Panel
-            {
-                Size = new Size(32, 24),
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 BorderStyle = BorderStyle.FixedSingle,
-                BackColor = get(_working),
-                Margin = new Padding(0, 4, 6, 0),
+                Padding = new Padding(8),
+                Margin = new Padding(6, 12, 6, 4),
             };
+            noteBox.Controls.Add(note);
 
-            var choose = new Button
-            {
-                Text = "Choose...",
-                Size = new Size(80, 24),
-                Margin = new Padding(0, 4, 0, 0),
-            };
-            choose.Click += (s, e) =>
-            {
-                Color picked = PickColor(get(_working));
-                if (picked.ToArgb() == get(_working).ToArgb())
-                {
-                    return;
-                }
+            AddSpanningControl(pinning, noteBox);
 
-                set(_working, picked);
-                preview.BackColor = picked;
-                OnEditorChanged();
-            };
-
-            var host = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Margin = new Padding(0),
-            };
-            host.Controls.Add(preview);
-            host.Controls.Add(choose);
-
-            AddRow(
-                table,
-                page,
-                label,
-                null,
-                host,
-                s =>
-                {
-                    set(_working, get(s));
-                    preview.BackColor = get(s);
-                },
-                () => get(_working).ToArgb() != get(_settingsBefore).ToArgb());
-        }
-
-        private void AddOpacityRow(TableLayoutPanel table, TabPage page)
-        {
-            var trackBar = new TrackBar
-            {
-                Minimum = 25,
-                Maximum = 100,
-                TickFrequency = 5,
-                LargeChange = 10,
-                SmallChange = 1,
-                Value = Math.Max(25, Math.Min(100, (int)Math.Round(_working.BackgroundOpacity * 100))),
-                AutoSize = false,
-                Width = 140,
-                Height = 32,
-                Margin = new Padding(0, 6, 4, 0),
-            };
-
-            var valueLabel = new Label
-            {
-                AutoSize = true,
-                Text = FormatOpacity(trackBar.Value / 100.0),
-                Margin = new Padding(4, 14, 0, 0),
-            };
-
-            var host = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Margin = new Padding(0),
-            };
-            host.Controls.Add(trackBar);
-            host.Controls.Add(valueLabel);
-
-            trackBar.ValueChanged += (s, e) =>
-            {
-                _working.BackgroundOpacity = trackBar.Value / 100.0;
-                valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
-                OnEditorChanged();
-            };
-
-            AddRow(
-                table,
-                page,
-                "App Background Opacity",
-                null,
-                host,
-                s =>
-                {
-                    trackBar.Value = Math.Max(25, Math.Min(100, (int)Math.Round(s.BackgroundOpacity * 100)));
-                    valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
-                    _working.BackgroundOpacity = trackBar.Value / 100.0;
-                },
-                () => Math.Abs((trackBar.Value / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001);
-        }
-
-        private void AddIconSizeRow(TableLayoutPanel table, TabPage page)
-        {
-            int initialIndex = IconSizeIndex(_working.IconSize);
-            _working.IconSize = _iconSizes[initialIndex];
-
-            var trackBar = new TrackBar
-            {
-                Minimum = 0,
-                Maximum = _iconSizes.Length - 1,
-                TickFrequency = 1,
-                LargeChange = 1,
-                SmallChange = 1,
-                Value = initialIndex,
-                AutoSize = false,
-                Width = 140,
-                Height = 32,
-                Margin = new Padding(0, 6, 4, 0),
-            };
-
-            var valueLabel = new Label
-            {
-                AutoSize = true,
-                Text = $"{_iconSizes[trackBar.Value]} px",
-                Margin = new Padding(4, 14, 0, 0),
-            };
-
-            var host = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Margin = new Padding(0),
-            };
-            host.Controls.Add(trackBar);
-            host.Controls.Add(valueLabel);
-
-            trackBar.ValueChanged += (s, e) =>
-            {
-                _working.IconSize = _iconSizes[trackBar.Value];
-                valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
-                OnEditorChanged();
-            };
-
-            AddRow(
-                table,
-                page,
-                "Icon Size",
-                "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
-                host,
-                s =>
-                {
-                    trackBar.Value = IconSizeIndex(s.IconSize);
-                    valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
-                    _working.IconSize = _iconSizes[trackBar.Value];
-                },
-                () => _iconSizes[trackBar.Value] != _settingsBefore.IconSize);
+            return page;
         }
 
         // ------------------------------------------------------------------------------------
-        // State changes
+        // Commands
+        // ------------------------------------------------------------------------------------
+
+        private void Save_Click(object sender, EventArgs e)
+        {
+            AppSettings settings = TryBuildSettings(true);
+            if (settings == null)
+            {
+                return;
+            }
+
+            Settings = settings;
+            DialogResult = DialogResult.OK;
+            Close();
+        }
+
+        private void Cancel_Click(object sender, EventArgs e)
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        }
+
+        private void Defaults_Click(object sender, EventArgs e)
+        {
+            TabPage page = _tabs.SelectedTab;
+            foreach (RowBinding row in _rows)
+            {
+                if (row.Page == page)
+                {
+                    Suppress(() => row.Load(_defaults));
+                }
+            }
+
+            RefreshRevertButtons();
+            RequestPreview();
+        }
+
+        // ------------------------------------------------------------------------------------
+        // Editing state
         // ------------------------------------------------------------------------------------
 
         private void OnEditorChanged()
@@ -633,117 +523,505 @@ namespace MicroTaskPager.GUI
             }
         }
 
-        private void Save_Click(object sender, EventArgs e)
+        // ------------------------------------------------------------------------------------
+        // Row rendering
+        // ------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Materializes row specs into a group table. Every row is wired here exactly once, so
+        /// change, revert/default and "is modified" behavior cannot drift between editors.
+        /// </summary>
+        /// <param name="table">The three-column group table that receives label, editor and revert slot.</param>
+        /// <param name="page">The tab page a row belongs to, used for the per-tab Defaults button.</param>
+        /// <param name="specs">The rows to render, in display order.</param>
+        private void Render(TableLayoutPanel table, TabPage page, params RowSpec[] specs)
         {
-            AppSettings settings = TryBuildSettings(true);
-            if (settings == null)
+            foreach (RowSpec spec in specs)
             {
-                return;
-            }
+                int row = AddTableRow(table);
 
-            Settings = settings;
-            DialogResult = DialogResult.OK;
-            Close();
-        }
-
-        private void Cancel_Click(object sender, EventArgs e)
-        {
-            DialogResult = DialogResult.Cancel;
-            Close();
-        }
-
-        private void Defaults_Click(object sender, EventArgs e)
-        {
-            TabPage page = _tabs.SelectedTab;
-            foreach (RowBinding row in _rows)
-            {
-                if (row.Page == page)
+                var label = new Label
                 {
-                    Suppress(() => row.Load(_defaults));
-                }
-            }
+                    Text = spec.Label,
+                    AutoSize = true,
+                    Anchor = AnchorStyles.Left,
+                    Margin = new Padding(6, 9, 6, 6),
+                };
 
-            RefreshRevertButtons();
-            RequestPreview();
+                if (!string.IsNullOrEmpty(spec.ToolTip))
+                {
+                    _toolTip.SetToolTip(label, spec.ToolTip);
+                }
+
+                spec.Editor.Anchor = AnchorStyles.Left;
+                spec.Editor.Margin = new Padding(3, 5, 3, 5);
+
+                var revert = new Button
+                {
+                    Text = "\u21BA",
+                    Size = new Size(28, 24),
+                    Location = new Point(0, 2),
+                    Visible = spec.IsModified(),
+                };
+                _toolTip.SetToolTip(revert, "Revert to default");
+                revert.Click += (s, e) =>
+                {
+                    Suppress(() => spec.Load(_settingsBefore));
+                    RefreshRevertButtons();
+                    RequestPreview();
+                };
+
+                // The host keeps the revert slot reserved even while the button is hidden,
+                // otherwise WinForms would reflow the whole row on every visibility change.
+                var revertHost = new Panel
+                {
+                    Size = new Size(32, 28),
+                    Margin = new Padding(4, 4, 0, 4),
+                    Anchor = AnchorStyles.Left,
+                };
+                revertHost.Controls.Add(revert);
+
+                table.Controls.Add(label, 0, row);
+                table.Controls.Add(spec.Editor, 1, row);
+                table.Controls.Add(revertHost, 2, row);
+
+                _rows.Add(new RowBinding(page, revert, spec.Load, spec.IsModified));
+            }
         }
 
-        // ------------------------------------------------------------------------------------
-        // UI construction
-        // ------------------------------------------------------------------------------------
-
-        private void InitializeComponent()
+        /// <summary>
+        /// Bridges a single int-valued editor (combo selection, numeric value) to a settings
+        /// property. Read/show connect the control, get/set connect the settings object.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="toolTip">Hover text for the label; may be null.</param>
+        /// <param name="editor">The control placed in the middle column.</param>
+        /// <param name="read">Reads the current value from the editor.</param>
+        /// <param name="show">Applies a value to the editor without raising the changed event.</param>
+        /// <param name="subscribe">Registers the editor's change event and forwards it as a callback.</param>
+        /// <param name="get">Reads the value from a settings snapshot.</param>
+        /// <param name="set">Writes the value into the working settings.</param>
+        /// <returns>A row spec that also loads revert/default values and tracks modification state.</returns>
+        private RowSpec LinkedSpec(
+            string label,
+            string toolTip,
+            Control editor,
+            Func<int> read,
+            Action<int> show,
+            Action<Action> subscribe,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
         {
-            SuspendLayout();
-
-            // Pixel layout is authored at 96 DPI; let WinForms scale it like AboutDialog does.
-            AutoScaleDimensions = new SizeF(96F, 96F);
-            AutoScaleMode = AutoScaleMode.Dpi;
-
-            Text = "Micro Task Pager Settings";
-            ClientSize = new Size(520, 570);
-            StartPosition = FormStartPosition.Manual;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ShowInTaskbar = false;
-
-            // The pager itself is topmost. Keeping the modal settings dialog topmost as well
-            // prevents the pager from being raised above it and stealing the foreground while
-            // the preview is updated.
-            TopMost = true;
-            Padding = new Padding(10, 10, 10, 0);
-
-            _tabs = new TabControl
+            subscribe(() =>
             {
-                Dock = DockStyle.Fill,
+                set(_working, read());
+                OnEditorChanged();
+            });
+
+            return new RowSpec(
+                label,
+                toolTip,
+                editor,
+                s =>
+                {
+                    int value = get(s);
+                    show(value);
+                    set(_working, value);
+                },
+                () => read() != get(_settingsBefore));
+        }
+
+        /// <summary>
+        /// Creates a drop-down row. The selected index maps directly to the settings value.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="toolTip">Hover text for the label; may be null.</param>
+        /// <param name="items">Drop-down entries; their order defines the stored index.</param>
+        /// <param name="get">Reads the selected index from a settings snapshot.</param>
+        /// <param name="set">Writes the selected index into the working settings.</param>
+        /// <returns>The row spec for the drop-down.</returns>
+        private RowSpec ComboSpec(
+            string label,
+            string toolTip,
+            string[] items,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 180,
+            };
+            editor.Items.AddRange(items);
+            editor.SelectedIndex = get(_working);
+
+            return LinkedSpec(
+                label,
+                toolTip,
+                editor,
+                () => editor.SelectedIndex,
+                index => editor.SelectedIndex = index,
+                handler => editor.SelectedIndexChanged += (s, e) => handler(),
+                get,
+                set);
+        }
+
+        /// <summary>
+        /// Creates a numeric row clamped to the given range.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="toolTip">Hover text for the label; may be null.</param>
+        /// <param name="min">Smallest value the editor accepts.</param>
+        /// <param name="max">Largest value the editor accepts.</param>
+        /// <param name="get">Reads the value from a settings snapshot.</param>
+        /// <param name="set">Writes the value into the working settings.</param>
+        /// <returns>The row spec for the numeric editor.</returns>
+        private RowSpec NumericSpec(
+            string label,
+            string toolTip,
+            int min,
+            int max,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new NumericUpDown
+            {
+                Minimum = min,
+                Maximum = max,
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+                Value = Math.Max(min, Math.Min(max, get(_working))),
             };
 
-            TabPage layoutPage = CreatePage("Layout");
-            TabPage themePage = CreatePage("Theme");
-            TabPage miscPage = CreatePage("Misc");
+            return LinkedSpec(
+                label,
+                toolTip,
+                editor,
+                () => (int)editor.Value,
+                value => editor.Value = Math.Max(min, Math.Min(max, value)),
+                handler => editor.ValueChanged += (s, e) => handler(),
+                get,
+                set);
+        }
 
-            _tabs.TabPages.Add(layoutPage);
-            _tabs.TabPages.Add(themePage);
-            _tabs.TabPages.Add(miscPage);
-
-            BuildLayoutPage(layoutPage);
-            BuildThemePage(themePage);
-            BuildMiscPage(miscPage);
-
-            var buttons = new FlowLayoutPanel
+        /// <summary>
+        /// Creates the pager height row. The value is raised to the current icon padding plus the
+        /// minimum content height so the pager cannot become too small for its icons.
+        /// </summary>
+        /// <returns>The row spec for the pager height editor.</returns>
+        private RowSpec PagerHeightSpec()
+        {
+            var editor = new NumericUpDown
             {
-                Dock = DockStyle.Bottom,
-                FlowDirection = FlowDirection.RightToLeft,
+                Minimum = MinPagerContentHeight,
+                Maximum = 9999,
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+            };
+            editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, _working.PagerHeight));
+
+            editor.ValueChanged += (s, e) =>
+            {
+                int value = (int)editor.Value;
+                int minimum = _working.IconPaddingY + MinPagerContentHeight;
+                if (value < minimum)
+                {
+                    value = (int)Math.Min(editor.Maximum, minimum);
+                    Suppress(() => editor.Value = value);
+                }
+
+                _working.PagerHeight = value;
+                OnEditorChanged();
+            };
+
+            return new RowSpec(
+                "Pager Height",
+                "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
+                editor,
+                s => editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, s.PagerHeight)),
+                () => (int)editor.Value != _settingsBefore.PagerHeight);
+        }
+
+        /// <summary>
+        /// Creates the icon size row. The track bar selects one of the fixed icon sizes and the
+        /// working setting snaps to that entry immediately.
+        /// </summary>
+        /// <returns>The row spec for the icon size slider.</returns>
+        private RowSpec IconSizeSpec()
+        {
+            int initialIndex = IconSizeIndex(_working.IconSize);
+            _working.IconSize = _iconSizes[initialIndex];
+
+            var trackBar = new TrackBar
+            {
+                Minimum = 0,
+                Maximum = _iconSizes.Length - 1,
+                TickFrequency = 1,
+                LargeChange = 1,
+                SmallChange = 1,
+                Value = initialIndex,
+                AutoSize = false,
+                Width = 140,
+                Height = 32,
+                Margin = new Padding(0, 6, 4, 0),
+            };
+
+            var valueLabel = new Label
+            {
+                AutoSize = true,
+                Text = $"{_iconSizes[trackBar.Value]} px",
+                Margin = new Padding(4, 14, 0, 0),
+            };
+
+            var host = new FlowLayoutPanel
+            {
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 WrapContents = false,
-                Padding = new Padding(0, 4, 0, 4),
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(trackBar);
+            host.Controls.Add(valueLabel);
+
+            trackBar.ValueChanged += (s, e) =>
+            {
+                _working.IconSize = _iconSizes[trackBar.Value];
+                valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
+                OnEditorChanged();
             };
 
-            var cancel = new Button { Text = "Cancel", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
-            cancel.Click += Cancel_Click;
-
-            var save = new Button { Text = "Save", Width = 100, Height = 28, Margin = new Padding(8, 0, 0, 0) };
-            save.Click += Save_Click;
-
-            var defaults = new Button { Text = "Defaults", Width = 100, Height = 28, Margin = new Padding(0) };
-            _toolTip.SetToolTip(defaults, "Reset for current tab only");
-            defaults.Click += Defaults_Click;
-
-            buttons.Controls.Add(cancel);
-            buttons.Controls.Add(save);
-            buttons.Controls.Add(defaults);
-
-            AcceptButton = save;
-            CancelButton = cancel;
-
-            Controls.Add(_tabs);
-            Controls.Add(buttons);
-
-            ResumeLayout(false);
+            return new RowSpec(
+                "Icon Size",
+                "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
+                host,
+                s =>
+                {
+                    trackBar.Value = IconSizeIndex(s.IconSize);
+                    valueLabel.Text = $"{_iconSizes[trackBar.Value]} px";
+                    _working.IconSize = _iconSizes[trackBar.Value];
+                },
+                () => _iconSizes[trackBar.Value] != _settingsBefore.IconSize);
         }
 
-        private TabPage CreatePage(string title)
+        /// <summary>
+        /// Creates a boolean row backed by a check box.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="toolTip">Hover text for the label; may be null.</param>
+        /// <param name="get">Reads the flag from a settings snapshot.</param>
+        /// <param name="set">Writes the flag into the working settings.</param>
+        /// <returns>The row spec for the check box.</returns>
+        private RowSpec CheckBoxSpec(
+            string label,
+            string toolTip,
+            Func<AppSettings, bool> get,
+            Action<AppSettings, bool> set)
+        {
+            var editor = new CheckBox
+            {
+                AutoSize = true,
+                Checked = get(_working),
+            };
+            editor.CheckedChanged += (s, e) =>
+            {
+                set(_working, editor.Checked);
+                OnEditorChanged();
+            };
+
+            return new RowSpec(
+                label,
+                toolTip,
+                editor,
+                s =>
+                {
+                    editor.Checked = get(s);
+                    set(_working, editor.Checked);
+                },
+                () => editor.Checked != get(_settingsBefore));
+        }
+
+        /// <summary>
+        /// Creates a text row for an integer value. Unparsable text leaves the working setting
+        /// unchanged and marks the row as modified so Save reports a validation error.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="toolTip">Hover text for the label; may be null.</param>
+        /// <param name="get">Reads the value from a settings snapshot.</param>
+        /// <param name="set">Writes the parsed value into the working settings.</param>
+        /// <returns>The row spec for the text box.</returns>
+        private RowSpec TextSpec(
+            string label,
+            string toolTip,
+            Func<AppSettings, int> get,
+            Action<AppSettings, int> set)
+        {
+            var editor = new TextBox
+            {
+                Width = 150,
+                TextAlign = HorizontalAlignment.Right,
+            };
+            editor.Text = get(_working).ToString(CultureInfo.InvariantCulture);
+            editor.TextChanged += (s, e) =>
+            {
+                if (int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value))
+                {
+                    set(_working, value);
+                }
+
+                OnEditorChanged();
+            };
+
+            return new RowSpec(
+                label,
+                toolTip,
+                editor,
+                s => editor.Text = get(s).ToString(CultureInfo.InvariantCulture),
+                () => !int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+                    || value != get(_settingsBefore));
+        }
+
+        /// <summary>
+        /// Creates a color row with a swatch and a picker button.
+        /// </summary>
+        /// <param name="label">Row label shown in the left column.</param>
+        /// <param name="get">Reads the color from a settings snapshot.</param>
+        /// <param name="set">Writes the color into the working settings.</param>
+        /// <returns>The row spec for the color swatch and picker.</returns>
+        private RowSpec ColorSpec(
+            string label,
+            Func<AppSettings, Color> get,
+            Action<AppSettings, Color> set)
+        {
+            var preview = new Panel
+            {
+                Size = new Size(32, 24),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = get(_working),
+                Margin = new Padding(0, 4, 6, 0),
+            };
+
+            var choose = new Button
+            {
+                Text = "Choose...",
+                Size = new Size(80, 24),
+                Margin = new Padding(0, 4, 0, 0),
+            };
+            choose.Click += (s, e) =>
+            {
+                Color picked = PickColor(get(_working));
+                if (picked.ToArgb() == get(_working).ToArgb())
+                {
+                    return;
+                }
+
+                set(_working, picked);
+                preview.BackColor = picked;
+                OnEditorChanged();
+            };
+
+            var host = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(preview);
+            host.Controls.Add(choose);
+
+            return new RowSpec(
+                label,
+                null,
+                host,
+                s =>
+                {
+                    set(_working, get(s));
+                    preview.BackColor = get(s);
+                },
+                () => get(_working).ToArgb() != get(_settingsBefore).ToArgb());
+        }
+
+        /// <summary>
+        /// Creates the pager background opacity row, expressed as a percentage with two decimals.
+        /// </summary>
+        /// <returns>The row spec for the opacity slider.</returns>
+        private RowSpec OpacitySpec()
+        {
+            var trackBar = new TrackBar
+            {
+                Minimum = 25,
+                Maximum = 100,
+                TickFrequency = 5,
+                LargeChange = 10,
+                SmallChange = 1,
+                Value = Math.Max(25, Math.Min(100, (int)Math.Round(_working.BackgroundOpacity * 100))),
+                AutoSize = false,
+                Width = 140,
+                Height = 32,
+                Margin = new Padding(0, 6, 4, 0),
+            };
+
+            var valueLabel = new Label
+            {
+                AutoSize = true,
+                Text = FormatOpacity(trackBar.Value / 100.0),
+                Margin = new Padding(4, 14, 0, 0),
+            };
+
+            var host = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                WrapContents = false,
+                Margin = new Padding(0),
+            };
+            host.Controls.Add(trackBar);
+            host.Controls.Add(valueLabel);
+
+            trackBar.ValueChanged += (s, e) =>
+            {
+                _working.BackgroundOpacity = trackBar.Value / 100.0;
+                valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
+                OnEditorChanged();
+            };
+
+            return new RowSpec(
+                "App Background Opacity",
+                null,
+                host,
+                s =>
+                {
+                    trackBar.Value = Math.Max(25, Math.Min(100, (int)Math.Round(s.BackgroundOpacity * 100)));
+                    valueLabel.Text = FormatOpacity(trackBar.Value / 100.0);
+                    _working.BackgroundOpacity = trackBar.Value / 100.0;
+                },
+                () => Math.Abs((trackBar.Value / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001);
+        }
+
+        // ------------------------------------------------------------------------------------
+        // Layout helpers
+        // ------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Appends a row whose single control spans all three columns, e.g. the pinning note box.
+        /// </summary>
+        /// <param name="table">The table that receives the row.</param>
+        /// <param name="control">The control to stretch across label, editor and revert columns.</param>
+        private void AddSpanningControl(TableLayoutPanel table, Control control)
+        {
+            int row = AddTableRow(table);
+            control.Dock = DockStyle.Fill;
+            table.Controls.Add(control, 0, row);
+            table.SetColumnSpan(control, 3);
+        }
+
+        /// <summary>
+        /// Creates the empty shell of a settings tab: a scrolling page with a one-column stack.
+        /// The stack is kept in the page tag for <see cref="BeginGroup"/>.
+        /// </summary>
+        /// <param name="title">Caption shown on the tab.</param>
+        /// <returns>The prepared tab page.</returns>
+        private TabPage CreateTabPage(string title)
         {
             var page = new TabPage(title);
             var scroll = new Panel
@@ -768,6 +1046,13 @@ namespace MicroTaskPager.GUI
             return page;
         }
 
+        /// <summary>
+        /// Adds a titled group box to the tab's vertical stack and returns the three-column table
+        /// inside it, which is the target for <see cref="Render"/>.
+        /// </summary>
+        /// <param name="page">The tab page created by <see cref="CreateTabPage"/>.</param>
+        /// <param name="title">Caption shown on the group box.</param>
+        /// <returns>The table that receives the group's rows.</returns>
         private TableLayoutPanel BeginGroup(TabPage page, string title)
         {
             var stack = (TableLayoutPanel)page.Tag;
@@ -800,181 +1085,18 @@ namespace MicroTaskPager.GUI
             return table;
         }
 
-        private void BuildLayoutPage(TabPage page)
-        {
-            TableLayoutPanel rendering = BeginGroup(page, "Rendering");
-
-            AddComboRow(
-                rendering,
-                page,
-                "View Mode Default",
-                "Only affects newly created desktops and their screens.",
-                new[] { "Preview", "MicroTaskbar" },
-                s => (int)s.ViewModeDefault,
-                (s, v) => s.ViewModeDefault = (ViewMode)v);
-
-            AddPagerHeightRow(rendering, page);
-
-            TableLayoutPanel icons = BeginGroup(page, "Icons Settings");
-
-            AddIconSizeRow(icons, page);
-
-            TableLayoutPanel microTaskbar = BeginGroup(page, "MicroTaskbar");
-
-            AddNumericRow(
-                microTaskbar,
-                page,
-                "Icon Padding X",
-                "Negative values are supported as well so less space is taken and the icons look stacked.",
-                -9999,
-                9999,
-                s => s.IconPaddingX,
-                (s, v) => s.IconPaddingX = v);
-
-            AddNumericRow(
-                microTaskbar,
-                page,
-                "Icon Padding Y",
-                "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar.",
-                -9999,
-                9999,
-                s => s.IconPaddingY,
-                (s, v) => s.IconPaddingY = v);
-
-            AddComboRow(
-                microTaskbar,
-                page,
-                "Show When Minimized",
-                "Defines whether minimized windows are shown in the Micro Taskbar view mode.\n\nYes: Minimized windows are shown in their normal order.\n\nYes, after the others: Minimized windows are shown after all normal windows.\n\nNo: Minimized windows are hidden.\n\nMinimized windows are painted darker to tell them apart from normal windows.",
-                new[] { "Yes", "Yes, after the others", "No" },
-                s => MinimizedVisibilityIndex(s.ShowWhenMinimized),
-                (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v));
-        }
-
-        private void AddPagerHeightRow(TableLayoutPanel table, TabPage page)
-        {
-            var editor = new NumericUpDown
-            {
-                Minimum = MinPagerContentHeight,
-                Maximum = 9999,
-                Width = 150,
-                TextAlign = HorizontalAlignment.Right,
-            };
-            editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, _working.PagerHeight));
-
-            editor.ValueChanged += (s, e) =>
-            {
-                int value = (int)editor.Value;
-                int minimum = _working.IconPaddingY + MinPagerContentHeight;
-                if (value < minimum)
-                {
-                    value = (int)Math.Min(editor.Maximum, minimum);
-                    Suppress(() => editor.Value = value);
-                }
-
-                _working.PagerHeight = value;
-                OnEditorChanged();
-            };
-
-            AddRow(
-                table,
-                page,
-                "Pager Height",
-                "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
-                editor,
-                s => editor.Value = Math.Max(editor.Minimum, Math.Min(editor.Maximum, s.PagerHeight)),
-                () => (int)editor.Value != _settingsBefore.PagerHeight);
-        }
-
-        private void BuildThemePage(TabPage page)
-        {
-            TableLayoutPanel general = BeginGroup(page, "General");
-            AddOpacityRow(general, page);
-
-            TableLayoutPanel desktops = BeginGroup(page, "Desktops");
-            AddComboRow(desktops, page, "Border Style", null, new[] { "Box", "Underline" }, s => (int)s.DesktopBorderStyle,
-                (s, v) => s.DesktopBorderStyle = (Config.DesktopBorderStyle)v);
-            AddColorRow(desktops, page, "Background Color", s => s.DesktopBackgroundColor,
-                (s, c) => s.DesktopBackgroundColor = c);
-            AddColorRow(desktops, page, "Border Color", s => s.DesktopBorderColor,
-                (s, c) => s.DesktopBorderColor = c);
-            AddColorRow(desktops, page, "Border Color (Active)", s => s.ActiveDesktopBorderColor,
-                (s, c) => s.ActiveDesktopBorderColor = c);
-
-            TableLayoutPanel windows = BeginGroup(page, "Preview Windows");
-            AddColorRow(windows, page, "Background Color", s => s.WindowBackgroundColor, (s, c) => s.WindowBackgroundColor = c);
-            AddColorRow(windows, page, "Border Color", s => s.WindowBorderColor, (s, c) => s.WindowBorderColor = c);
-            AddColorRow(windows, page, "Border Color (Active)", s => s.ActiveWindowBorderColor, (s, c) => s.ActiveWindowBorderColor = c);
-            AddColorRow(windows, page, "Background Color (Active)", s => s.ActiveWindowBackgroundColor, (s, c) => s.ActiveWindowBackgroundColor = c);
-        }
-
-        private void BuildMiscPage(TabPage page)
-        {
-            TableLayoutPanel behaviour = BeginGroup(page, "Behaviour");
-
-            AddComboRow(
-                behaviour,
-                page,
-                "Desktop Change: Window Activation",
-                "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged.",
-                new[] { "Desktop's last window", "Window under cursor", "None" },
-                s => (int)s.DesktopChangeActivation,
-                (s, v) => s.DesktopChangeActivation = (DesktopChangeActivationMode)v);
-
-            TableLayoutPanel performance = BeginGroup(page, "Performance");
-
-            _primaryDelayBox = AddTextRow(
-                performance,
-                page,
-                "Primary Update Delay (ms)",
-                "Delay for the main refresh cycle. Affects how often the currently opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.",
-                s => s.PrimaryUpdateDelay,
-                (s, v) => s.PrimaryUpdateDelay = v);
-
-            _secondaryDelayBox = AddTextRow(
-                performance,
-                page,
-                "Secondary Update Delay (ms)",
-                "Delay for background/secondary updates. Affects how often the app window is checked for being covered by another one, this includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing, that's why this delay should be higher than the primary one.",
-                s => s.SecondaryUpdateDelay,
-                (s, v) => s.SecondaryUpdateDelay = v);
-
-            TableLayoutPanel pinning = BeginGroup(page, "App Pinning");
-
-            AddCheckBoxRow(
-                pinning,
-                page,
-                "Show App In Taskbar",
-                null,
-                s => s.ShowAppInTaskbar,
-                (s, v) => s.ShowAppInTaskbar = v);
-
-            var note = new Label
-            {
-                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
-                AutoSize = true,
-                MaximumSize = new Size(420, 0),
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(8, 4, 8, 4),
-            };
-
-            var noteBox = new Panel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(8),
-                Margin = new Padding(6, 12, 6, 4),
-            };
-            noteBox.Controls.Add(note);
-
-            AddSpanningControl(pinning, noteBox);
-        }
-
         // ------------------------------------------------------------------------------------
         // Placement helpers
         // ------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// Chooses a location for the dialog relative to the pager: right, left, below, above,
+        /// then centered as a last resort. Every candidate must fit fully inside one screen's
+        /// working area.
+        /// </summary>
+        /// <param name="owner">Bounds of the pager window in screen coordinates.</param>
+        /// <param name="size">Size of the settings dialog.</param>
+        /// <returns>The preferred top-left position.</returns>
         private Point FindPlacement(Rectangle owner, Size size)
         {
             return TryPlaceRight(owner, size)
@@ -1055,8 +1177,62 @@ namespace MicroTaskPager.GUI
                 owner.Top + ((owner.Height - size.Height) / 2));
         }
 
+        // ------------------------------------------------------------------------------------
+        // Row model
+        // ------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// A single settings row in declarative form: what to show plus how to reset and detect it.
+        /// Created by the spec factories, consumed by <see cref="Render"/>.
+        /// </summary>
+        private sealed class RowSpec
+        {
+            /// <summary>
+            /// Initializes a row description.
+            /// </summary>
+            /// <param name="label">Row label shown in the left column.</param>
+            /// <param name="toolTip">Hover text for the label; may be null.</param>
+            /// <param name="editor">The control placed in the middle column.</param>
+            /// <param name="load">Applies a settings snapshot to the editor and working state.</param>
+            /// <param name="isModified">Reports whether the row differs from the initial settings.</param>
+            public RowSpec(
+                string label,
+                string toolTip,
+                Control editor,
+                Action<AppSettings> load,
+                Func<bool> isModified)
+            {
+                Label = label;
+                ToolTip = toolTip;
+                Editor = editor;
+                Load = load;
+                IsModified = isModified;
+            }
+
+            public string Label { get; }
+
+            public string ToolTip { get; }
+
+            public Control Editor { get; }
+
+            public Action<AppSettings> Load { get; }
+
+            public Func<bool> IsModified { get; }
+        }
+
+        /// <summary>
+        /// A rendered row, remembered so the revert buttons and the per-tab Defaults action can
+        /// reach it after construction.
+        /// </summary>
         private sealed class RowBinding
         {
+            /// <summary>
+            /// Initializes a rendered-row binding.
+            /// </summary>
+            /// <param name="page">The tab the row belongs to.</param>
+            /// <param name="revert">The row's revert button.</param>
+            /// <param name="load">Applies a settings snapshot to the row.</param>
+            /// <param name="isModified">Reports whether the row differs from the initial settings.</param>
             public RowBinding(TabPage page, Button revert, Action<AppSettings> load, Func<bool> isModified)
             {
                 Page = page;
