@@ -558,7 +558,7 @@ namespace MicroTaskPager.GUI
         private void OpenSettingsDialog()
         {
             var originalSettings = AppSettings.Clone(Options);
-            var settingsWindow = new AppSettingsWindow(Options, Bounds);
+            var settingsWindow = new SettingsDialog(Options, Bounds);
 
             settingsWindow.PreviewChanged += s => PreviewSettings(s);
 
