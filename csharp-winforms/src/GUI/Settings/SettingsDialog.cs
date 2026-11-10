@@ -56,6 +56,18 @@ namespace MicroTaskPager.GUI
 
         public AppSettings Settings { get; private set; }
 
+        // WS_EX_COMPOSITED makes Windows paint the dialog bottom-up, which removes the flicker when
+        // TabControl swaps the visible page in and out.
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams cp = base.CreateParams;
+                cp.ExStyle |= 0x02000000;
+                return cp;
+            }
+        }
+
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -137,6 +149,10 @@ namespace MicroTaskPager.GUI
         private void InitializeComponent()
         {
             SuspendLayout();
+
+            // Composite the dialog and its children so switching tabs does not show the page being
+            // laid out/painted. The pages themselves are built once in this method.
+            DoubleBuffered = true;
 
             // Pixel layout is authored at 96 DPI; let WinForms scale it like AboutDialog does.
             AutoScaleDimensions = new SizeF(96F, 96F);
