@@ -219,18 +219,18 @@ namespace MicroTaskPager.GUI
                 BeginGroup(layoutPage, "Rendering"),
                 ComboRow(
                     "View Mode Default",
-                    "Only affects newly created desktops and their screens.",
                     new[] { "Preview", "MicroTaskbar" },
                     s => (int)s.ViewModeDefault,
-                    (s, v) => s.ViewModeDefault = (ViewMode)v),
+                    (s, v) => s.ViewModeDefault = (ViewMode)v,
+                    toolTip: "Only affects newly created desktops and their screens."),
                 NumericRow(
                     "Pager Height",
-                    "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
                     MinPagerContentHeight,
                     9999,
                     s => s.PagerHeight,
                     (s, v) => s.PagerHeight = v,
-                    value => Math.Max(value, _working.IconPaddingY + MinPagerContentHeight)));
+                    toolTip: "The pager's width is automatically calculated from this value and from the size of all available screen space as well as the amount of virtual desktops.",
+                    normalize: value => Math.Max(value, _working.IconPaddingY + MinPagerContentHeight)));
 
             // Snap the working icon size to the nearest entry the slider can represent.
             _working.IconSize = _iconSizes[IconSizeIndex(_working.IconSize)];
@@ -239,38 +239,36 @@ namespace MicroTaskPager.GUI
                 BeginGroup(layoutPage, "Icons Settings"),
                 SliderRow(
                     "Icon Size",
-                    "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar.",
                     0,
                     _iconSizes.Length - 1,
-                    1,
-                    1,
                     s => IconSizeIndex(s.IconSize),
                     (s, p) => s.IconSize = _iconSizes[p],
                     p => $"{_iconSizes[p]} px",
-                    p => _iconSizes[p] != _settingsBefore.IconSize));
+                    p => _iconSizes[p] != _settingsBefore.IconSize,
+                    toolTip: "Size of an icon in both Preview and Micro Taskbar view modes. Icons are drawn as squares, so a single value is enough.\n\n16 uses the small window icon. Larger values use the window's large icon, so the shown logo matches the one in the Windows taskbar."));
 
             Render(
                 BeginGroup(layoutPage, "MicroTaskbar"),
                 NumericRow(
                     "Icon Padding X",
-                    "Negative values are supported as well so less space is taken and the icons look stacked.",
                     -9999,
                     9999,
                     s => s.IconPaddingX,
-                    (s, v) => s.IconPaddingX = v),
+                    (s, v) => s.IconPaddingX = v,
+                    toolTip: "Negative values are supported as well so less space is taken and the icons look stacked."),
                 NumericRow(
                     "Icon Padding Y",
-                    "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar.",
                     -9999,
                     9999,
                     s => s.IconPaddingY,
-                    (s, v) => s.IconPaddingY = v),
+                    (s, v) => s.IconPaddingY = v,
+                    toolTip: "Negative values are supported as well in case of a very small pager height, like 40px which is usually the size of the Windows Taskbar."),
                 ComboRow(
                     "Show When Minimized",
-                    "Defines whether minimized windows are shown in the Micro Taskbar view mode.\n\nYes: Minimized windows are shown in their normal order.\n\nYes, after the others: Minimized windows are shown after all normal windows.\n\nNo: Minimized windows are hidden.\n\nMinimized windows are painted darker to tell them apart from normal windows.",
                     new[] { "Yes", "Yes, after the others", "No" },
                     s => MinimizedVisibilityIndex(s.ShowWhenMinimized),
-                    (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v)));
+                    (s, v) => s.ShowWhenMinimized = MinimizedVisibilityFromIndex(v),
+                    toolTip: "Defines whether minimized windows are shown in the Micro Taskbar view mode.\n\nYes: Minimized windows are shown in their normal order.\n\nYes, after the others: Minimized windows are shown after all normal windows.\n\nNo: Minimized windows are hidden.\n\nMinimized windows are painted darker to tell them apart from normal windows."));
 
             return layoutPage;
         }
@@ -283,21 +281,19 @@ namespace MicroTaskPager.GUI
                 BeginGroup(themePage, "General"),
                 SliderRow(
                     "App Background Opacity",
-                    null,
                     25,
                     100,
-                    5,
-                    10,
                     s => (int)Math.Round(s.BackgroundOpacity * 100),
                     (s, p) => s.BackgroundOpacity = p / 100.0,
                     p => FormatOpacity(p / 100.0),
-                    p => Math.Abs((p / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001));
+                    p => Math.Abs((p / 100.0) - _settingsBefore.BackgroundOpacity) > 0.0001,
+                    tickFrequency: 5,
+                    largeChange: 10));
 
             Render(
                 BeginGroup(themePage, "Desktops"),
                 ComboRow(
                     "Border Style",
-                    null,
                     new[] { "Box", "Underline" },
                     s => (int)s.DesktopBorderStyle,
                     (s, v) => s.DesktopBorderStyle = (Config.DesktopBorderStyle)v),
@@ -330,25 +326,25 @@ namespace MicroTaskPager.GUI
                 BeginGroup(miscPage, "Behaviour"),
                 ComboRow(
                     "Desktop Change: Window Activation",
-                    "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged.",
                     new[] { "Desktop's last window", "Window under cursor", "None" },
                     s => (int)s.DesktopChangeActivation,
-                    (s, v) => s.DesktopChangeActivation = (DesktopChangeActivationMode)v));
+                    (s, v) => s.DesktopChangeActivation = (DesktopChangeActivationMode)v,
+                    toolTip: "Defines which window gets activated when another desktop is selected in the pager.\n\nDesktop's last window: The last activated window on the selected desktop is reactivated automatically.\n\nWindow under cursor: The app (icon or window) that is under the mouse pointer when the desktop is selected is activated instead.\n\nNone: No window is activated, so the currently active window stays unchanged."));
 
             RowSpec primaryDelay = TextRow(
                 "Primary Update Delay (ms)",
-                "Delay for the main refresh cycle. Affects how often the currently opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.",
                 s => s.PrimaryUpdateDelay,
-                (s, v) => s.PrimaryUpdateDelay = v);
+                (s, v) => s.PrimaryUpdateDelay = v,
+                toolTip: "Delay for the main refresh cycle. Affects how often the currently opened windows (on all virtual desktops) are checked for changes.\n\nLower values update the pager faster, but can increase CPU usage.");
 
             RowSpec secondaryDelay = TextRow(
                 "Secondary Update Delay (ms)",
-                "Delay for background/secondary updates. Affects how often the app window is checked for being covered by another one, this includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing, that's why this delay should be higher than the primary one.",
                 s => s.SecondaryUpdateDelay,
-                (s, v) => s.SecondaryUpdateDelay = v);
+                (s, v) => s.SecondaryUpdateDelay = v,
+                toolTip: "Delay for background/secondary updates. Affects how often the app window is checked for being covered by another one, this includes the Windows Taskbar. Also (re-)pins the app to all virtual desktops.\n\nSome of those operations require more processing, that's why this delay should be higher than the primary one.");
 
-            _primaryDelayBox = (TextBox)primaryDelay.Editor;
-            _secondaryDelayBox = (TextBox)secondaryDelay.Editor;
+            _primaryDelayBox = (TextBox)primaryDelay.Host;
+            _secondaryDelayBox = (TextBox)secondaryDelay.Host;
 
             Render(BeginGroup(miscPage, "Performance"), primaryDelay, secondaryDelay);
 
@@ -358,7 +354,6 @@ namespace MicroTaskPager.GUI
                 pinningGroup,
                 CheckBoxRow(
                     "Show App In Taskbar",
-                    null,
                     s => s.ShowAppInTaskbar,
                     (s, v) => s.ShowAppInTaskbar = v));
 
@@ -551,10 +546,10 @@ namespace MicroTaskPager.GUI
         // ------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Renders the given rows into the group in order, adding a label, editor and revert slot
-        /// per row and registering each row against the group's page so revert and the per-tab
-        /// Defaults action can reach it. All change, load and modified wiring lives here, so rows
-        /// cannot drift apart.
+        /// Renders the given rows into the group in order, adding a label, the row's host control and
+        /// a revert slot per row, and registering each row against the group's page so revert and the
+        /// per-tab Defaults action can reach it. All change, load and modified wiring lives here, so
+        /// rows cannot drift apart.
         /// </summary>
         private void Render(RowGroup group, params RowSpec[] specs)
         {
@@ -578,8 +573,8 @@ namespace MicroTaskPager.GUI
                     _toolTip.SetToolTip(label, spec.ToolTip);
                 }
 
-                spec.Editor.Anchor = AnchorStyles.Left;
-                spec.Editor.Margin = new Padding(3, 5, 3, 5);
+                spec.Host.Anchor = AnchorStyles.Left;
+                spec.Host.Margin = new Padding(3, 5, 3, 5);
 
                 var revert = new Button
                 {
@@ -607,7 +602,7 @@ namespace MicroTaskPager.GUI
                 revertHost.Controls.Add(revert);
 
                 table.Controls.Add(label, 0, row);
-                table.Controls.Add(spec.Editor, 1, row);
+                table.Controls.Add(spec.Host, 1, row);
                 table.Controls.Add(revertHost, 2, row);
 
                 _rows.Add(new RowBinding(page, revert, spec.Load, spec.IsModified));
@@ -616,10 +611,10 @@ namespace MicroTaskPager.GUI
 
         /// <summary>
         /// Builds a row from a single int-valued editor such as a combo selection or numeric value.
-        /// Label and toolTip are the row caption and optional hover text; editor is placed in the
-        /// middle column. Read and show move the value between the editor and its stored form, get
-        /// and set move it between a settings snapshot and the working copy, and subscribe registers
-        /// the editor's change event so edits flow into the working settings.
+        /// Label and toolTip are the row caption and optional hover text; the host control is placed
+        /// in the middle column. Read and show move the value between the editor and its stored form,
+        /// get and set move it between a settings snapshot and the working copy, and subscribe
+        /// registers the editor's change event so edits flow into the working settings.
         /// </summary>
         /// <returns>A row spec that also loads revert/default values and tracks modification state.</returns>
         private RowSpec LinkedRow(
@@ -639,9 +634,9 @@ namespace MicroTaskPager.GUI
             });
 
             return new RowSpec(
+                editor,
                 label,
                 toolTip,
-                editor,
                 s =>
                 {
                     int value = get(s);
@@ -652,17 +647,17 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// Creates a drop-down row. Label and toolTip are the caption and optional hover text, items
-        /// define both the entries and the stored index order, and get/set map that index to and from
-        /// the settings.
+        /// Creates a drop-down row. Label is the caption, items define both the entries and the
+        /// stored index order, and get/set map that index to and from the settings. The optional
+        /// toolTip adds hover text to the label.
         /// </summary>
         /// <returns>The row spec for the drop-down.</returns>
         private RowSpec ComboRow(
             string label,
-            string toolTip,
             string[] items,
             Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
+            Action<AppSettings, int> set,
+            string toolTip = null)
         {
             var editor = new ComboBox
             {
@@ -684,19 +679,19 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// Creates a numeric row. Label and toolTip are the caption and optional hover text, min and
-        /// max clamp the editor, and get/set map the value to and from the settings. An optional
-        /// normalize callback adjusts a freshly entered value (for a dynamic lower bound) before it
-        /// is written back.
+        /// Creates a numeric row. Min and max clamp the editor, and get/set map the value to and from
+        /// the settings. The optional toolTip adds hover text to the label, and the optional normalize
+        /// callback adjusts a freshly entered value (for a dynamic lower bound) before it is written
+        /// back.
         /// </summary>
         /// <returns>The row spec for the numeric editor.</returns>
         private RowSpec NumericRow(
             string label,
-            string toolTip,
             int min,
             int max,
             Func<AppSettings, int> get,
             Action<AppSettings, int> set,
+            string toolTip = null,
             Func<int, int> normalize = null)
         {
             var editor = new NumericUpDown
@@ -725,9 +720,9 @@ namespace MicroTaskPager.GUI
             };
 
             return new RowSpec(
+                editor,
                 label,
                 toolTip,
-                editor,
                 s =>
                 {
                     editor.Value = Math.Max(min, Math.Min(max, get(s)));
@@ -738,22 +733,23 @@ namespace MicroTaskPager.GUI
 
         /// <summary>
         /// Creates a slider row with a companion value label. Min and max bound the slider position,
-        /// tickFrequency and largeChange tune its stepping, and getPosition/setPosition translate
-        /// between a settings value and that integer position. Label formats the position for the
-        /// value label, and isModified decides whether a position differs from the initial settings.
+        /// and getPosition/setPosition translate between a settings value and that integer position.
+        /// Format renders the position for the value label, and isModified decides whether a position
+        /// differs from the initial settings. The optional toolTip adds hover text to the label;
+        /// tickFrequency and largeChange default to single steps.
         /// </summary>
         /// <returns>The row spec for the slider.</returns>
         private RowSpec SliderRow(
             string label,
-            string toolTip,
             int min,
             int max,
-            int tickFrequency,
-            int largeChange,
             Func<AppSettings, int> getPosition,
             Action<AppSettings, int> setPosition,
             Func<int, string> format,
-            Func<int, bool> isModified)
+            Func<int, bool> isModified,
+            string toolTip = null,
+            int tickFrequency = 1,
+            int largeChange = 1)
         {
             var trackBar = new TrackBar
             {
@@ -794,9 +790,9 @@ namespace MicroTaskPager.GUI
             };
 
             return new RowSpec(
+                host,
                 label,
                 toolTip,
-                host,
                 s =>
                 {
                     int position = Math.Max(min, Math.Min(max, getPosition(s)));
@@ -808,15 +804,15 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// Creates a boolean row. Label and toolTip are the caption and optional hover text, and
-        /// get/set read and write the flag in the settings.
+        /// Creates a boolean row. Get and set read and write the flag in the settings, and the
+        /// optional toolTip adds hover text to the label.
         /// </summary>
         /// <returns>The row spec for the check box.</returns>
         private RowSpec CheckBoxRow(
             string label,
-            string toolTip,
             Func<AppSettings, bool> get,
-            Action<AppSettings, bool> set)
+            Action<AppSettings, bool> set,
+            string toolTip = null)
         {
             var editor = new CheckBox
             {
@@ -830,9 +826,9 @@ namespace MicroTaskPager.GUI
             };
 
             return new RowSpec(
+                editor,
                 label,
                 toolTip,
-                editor,
                 s =>
                 {
                     editor.Checked = get(s);
@@ -842,16 +838,16 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// Creates an integer text row. Label and toolTip are the caption and optional hover text,
-        /// and get/set read and write the value. Unparsable text leaves the working setting unchanged
+        /// Creates an integer text row. Get and set read and write the value, and the optional
+        /// toolTip adds hover text to the label. Unparsable text leaves the working setting unchanged
         /// and marks the row as modified so Save reports a validation error.
         /// </summary>
         /// <returns>The row spec for the text box.</returns>
         private RowSpec TextRow(
             string label,
-            string toolTip,
             Func<AppSettings, int> get,
-            Action<AppSettings, int> set)
+            Action<AppSettings, int> set,
+            string toolTip = null)
         {
             var editor = new TextBox
             {
@@ -870,23 +866,24 @@ namespace MicroTaskPager.GUI
             };
 
             return new RowSpec(
+                editor,
                 label,
                 toolTip,
-                editor,
                 s => editor.Text = get(s).ToString(CultureInfo.InvariantCulture),
                 () => !int.TryParse(editor.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
                     || value != get(_settingsBefore));
         }
 
         /// <summary>
-        /// Creates a color row with a swatch and a picker button. Label is the caption, and get/set
-        /// read and write the color in the settings.
+        /// Creates a color row with a swatch and a picker button. Get and set read and write the
+        /// color in the settings, and the optional toolTip adds hover text to the label.
         /// </summary>
         /// <returns>The row spec for the color swatch and picker.</returns>
         private RowSpec ColorRow(
             string label,
             Func<AppSettings, Color> get,
-            Action<AppSettings, Color> set)
+            Action<AppSettings, Color> set,
+            string toolTip = null)
         {
             var preview = new Panel
             {
@@ -926,9 +923,9 @@ namespace MicroTaskPager.GUI
             host.Controls.Add(choose);
 
             return new RowSpec(
-                label,
-                null,
                 host,
+                label,
+                toolTip,
                 s =>
                 {
                     set(_working, get(s));
@@ -1136,35 +1133,36 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
-        /// A single settings row in declarative form: the label, editor, reset behavior and
-        /// modification check that Render turns into controls. Created by the spec factories.
+        /// A single settings row in declarative form: the host control plus its label, reset behavior
+        /// and modification check that Render turns into a table row. Created by the row factories.
         /// </summary>
         private sealed class RowSpec
         {
             /// <summary>
-            /// Initializes a row description. Label is the caption, toolTip the optional hover text,
-            /// and editor the middle control. Load applies a settings snapshot to the editor and
-            /// working state, while isModified reports whether the row differs from the initial settings.
+            /// Initializes a row description. Host is the control placed in the middle column, label
+            /// the caption, and toolTip the optional hover text. Load applies a settings snapshot to
+            /// the host and working state, while isModified reports whether the row differs from the
+            /// initial settings.
             /// </summary>
             public RowSpec(
+                Control host,
                 string label,
                 string toolTip,
-                Control editor,
                 Action<AppSettings> load,
                 Func<bool> isModified)
             {
+                Host = host;
                 Label = label;
                 ToolTip = toolTip;
-                Editor = editor;
                 Load = load;
                 IsModified = isModified;
             }
 
+            public Control Host { get; }
+
             public string Label { get; }
 
             public string ToolTip { get; }
-
-            public Control Editor { get; }
 
             public Action<AppSettings> Load { get; }
 
