@@ -19,7 +19,7 @@
 
 **Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
 
-Unlike a simple desktop switcher, it can display each desktop in one of two ways:
+Unlike a simple desktop switcher, it can display each desktop in one of three ways:
 
 - **Preview** — a miniature of the real screen, including window positions and z-order.
 - **Micro Taskbar** — a compact strip of application icons, ideal for small screens and maximized windows.
