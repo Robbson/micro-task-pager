@@ -563,6 +563,7 @@ namespace MicroTaskPager.GUI
                             $"{string.Join(string.Empty, Windows.Select(x => x.IsActive ? 1 : 0))}" +
                             $"{string.Join(string.Empty, Windows.Select(x => WinAPI.GetForegroundWindow() == x.Handle ? 1 : 0))}" +
                             $"{string.Join(string.Empty, Windows.Select(x => x.VirtualDesktopIndex))}" +
+                            $"{string.Join(",", Windows.Select(x => x.ZOrder))}" +
                             $"{WindowManager.IconRevision}";
 
                             if (hash != _windowsHash)

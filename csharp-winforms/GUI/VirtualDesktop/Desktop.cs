@@ -308,23 +308,22 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
         private Window GetWindowUnderCursor(Point mousePosition)
         {
-            var coord = Form.PointToClient(mousePosition);
-            var visibleWindows = Form.Windows
-                .Where(x => x.VirtualDesktopIndex == VirtualDesktopIndex);
-
-            // For desktop preview mode, we search across all screens for the clicked window in z-order from front to back,
-            // otherwise order should stay the same (using process id & handle)
-            var windows = Form.Options.ViewModeDefault == ViewMode.Preview
-                ? visibleWindows.OrderByDescending(x => x.ZOrder)
-                : visibleWindows
-                    .OrderBy(x => x.ProcessID)
-                    .ThenBy(x => x.Handle.ToInt64());
-
-            foreach (var w in windows)
+            // Each screen renderer can show a different view mode. The hit test must use the
+            // renderer's actual mode: Preview stacks windows, so only there the z-order decides
+            // which overlapping window was clicked. Using the configured default mode instead
+            // picked the wrong window whenever the mode had been toggled at runtime.
+            foreach (var renderer in _screenRenderers)
             {
-                if (_screenRenderers.Any(x => x.WindowAreas.ContainsKey(w.Handle) && x.WindowAreas[w.Handle].Contains(mousePosition)))
+                var windows = Form.Windows
+                    .Where(x => renderer.WindowAreas.ContainsKey(x.Handle));
+
+                var orderedWindows = renderer.Mode == ViewMode.Preview
+                    ? windows.OrderByDescending(x => x.ZOrder)
+                    : windows.OrderBy(x => x.ProcessID).ThenBy(x => x.Handle.ToInt64());
+
+                foreach (var w in orderedWindows)
                 {
-                    if (_screenRenderers.Select(x => x.AttachedScreen.DeviceName).Contains(Screen.FromHandle(w.Handle).DeviceName))
+                    if (renderer.WindowAreas[w.Handle].Contains(mousePosition))
                     {
                         return w;
                     }
