@@ -374,19 +374,22 @@ namespace MicroTaskPager.GUI
 
         /// <summary>
         /// Creates a boolean row. Get and set read and write the flag in the settings, and the
-        /// optional toolTip adds hover text to the label.
+        /// optional toolTip adds hover text to the label. Set enabled to false for options that
+        /// are not available on the current Windows version.
         /// </summary>
         /// <returns>The row spec for the check box.</returns>
         private RowSpec CheckBoxRow(
             string label,
             Func<AppSettings, bool> get,
             Action<AppSettings, bool> set,
-            string toolTip = null)
+            string toolTip = null,
+            bool enabled = true)
         {
             var editor = new CheckBox
             {
                 AutoSize = true,
                 Checked = get(_working),
+                Enabled = enabled,
             };
             editor.CheckedChanged += (s, e) =>
             {

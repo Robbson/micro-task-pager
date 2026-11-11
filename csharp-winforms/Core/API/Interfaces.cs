@@ -24,7 +24,7 @@ namespace MicroTaskPager.Core.API
         IWindowsVirtualDesktop FromIndex(int index);
 
         void Restart();
-        void MakeVisible();
+        void MakeVisible(bool animate);
         void MoveWindow(IntPtr hWnd);
     }
 }

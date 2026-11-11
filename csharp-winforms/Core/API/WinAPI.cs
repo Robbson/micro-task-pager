@@ -128,6 +128,57 @@ namespace MicroTaskPager.Core.API
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetCurrentThreadId();
+
+        // Foregrounds the shell taskbar (or its XAML host on Windows 11) around a desktop switch.
+        // This is the workaround used by MScholtes' VirtualDesktop: it prevents taskbar icons from
+        // flashing while the old foreground window loses activation. Returns the shell window so
+        // the caller can release it after the switch.
+        public static IntPtr FocusTaskbarForDesktopSwitch(bool animate)
+        {
+            IntPtr hWnd = FindWindow(
+                animate ? "Shell_TrayWnd" : "XamlExplorerHostIslandWindow",
+                null);
+            if (hWnd == IntPtr.Zero)
+            {
+                hWnd = FindWindow("Shell_TrayWnd", null);
+            }
+
+            if (hWnd != IntPtr.Zero)
+            {
+                uint desktopThreadId = GetWindowThreadProcessId(hWnd, out uint dummy);
+                uint foregroundThreadId = GetWindowThreadProcessId(GetForegroundWindow(), out dummy);
+                uint currentThreadId = GetCurrentThreadId();
+
+                if (desktopThreadId != 0 && foregroundThreadId != 0 && foregroundThreadId != currentThreadId)
+                {
+                    AttachThreadInput(desktopThreadId, currentThreadId, true);
+                    AttachThreadInput(foregroundThreadId, currentThreadId, true);
+                    SetForegroundWindow(hWnd);
+                    AttachThreadInput(foregroundThreadId, currentThreadId, false);
+                    AttachThreadInput(desktopThreadId, currentThreadId, false);
+                }
+            }
+
+            return hWnd;
+        }
+
+        // Gives focus back after a desktop switch, matching the shell's own switch behavior.
+        public static void ReleaseTaskbarAfterDesktopSwitch(IntPtr hWnd)
+        {
+            if (hWnd != IntPtr.Zero)
+            {
+                ShowWindow(hWnd, SW_MINIMIZE);
+            }
+        }
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
 

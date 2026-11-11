@@ -43,6 +43,7 @@ namespace MicroTaskPager.Config
                     SecondaryUpdateDelay = ReadInt(key, "SecondaryUpdateDelay", defaults.SecondaryUpdateDelay),
                     ShowAppInTaskbar = ReadInt(key, "ShowAppInTaskbar", defaults.ShowAppInTaskbar ? 1 : 0) == 1,
                     DisableAlwaysOnTop = ReadInt(key, "DisableAlwaysOnTop", defaults.DisableAlwaysOnTop ? 1 : 0) == 1,
+                    AnimatedDesktopSwitch = ReadInt(key, "AnimatedDesktopSwitch", defaults.AnimatedDesktopSwitch ? 1 : 0) == 1,
                 };
             }
         }
@@ -86,6 +87,7 @@ namespace MicroTaskPager.Config
                 key.SetValue("SecondaryUpdateDelay", settings.SecondaryUpdateDelay, RegistryValueKind.DWord);
                 key.SetValue("ShowAppInTaskbar", settings.ShowAppInTaskbar ? 1 : 0, RegistryValueKind.DWord);
                 key.SetValue("DisableAlwaysOnTop", settings.DisableAlwaysOnTop ? 1 : 0, RegistryValueKind.DWord);
+                key.SetValue("AnimatedDesktopSwitch", settings.AnimatedDesktopSwitch ? 1 : 0, RegistryValueKind.DWord);
             }
         }
 

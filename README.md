@@ -151,7 +151,7 @@ Open **Settings** from the right-click menu. Changes are previewed live where po
 
 - **Layout** — default view mode for new desktops, pager height, and icon padding.
 - **Theme** — background opacity, desktop border style and colors, preview window colors, and active window highlighting.
-- **Misc** — refresh intervals for window tracking and background tasks, plus whether the app appears in the Windows taskbar.
+- **Misc** — refresh intervals for window tracking and background tasks, desktop switch behavior (window activation and the optional Windows 11 animation), plus whether the app appears in the Windows taskbar.
 
 Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`.
 

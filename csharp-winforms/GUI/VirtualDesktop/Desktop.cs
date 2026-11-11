@@ -167,7 +167,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     // app of the new desktop. Pin first so the pager is visible on the new desktop even when
                     // its taskbar button is hidden.
                     Form.EnsurePinnedToAllDesktops();
-                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible();
+                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MakeVisible(Form.Options.AnimatedDesktopSwitch);
 
                     switch (Form.Options.DesktopChangeActivation)
                     {

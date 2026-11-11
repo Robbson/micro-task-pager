@@ -301,12 +301,23 @@ namespace MicroTaskPager.GUI
         {
             TabPage miscPage = CreateTabPage("Misc");
 
+            bool animationAvailable = Program.WindowsVersion.IsWin11_21H2_OrLater();
+            string animationToolTip = animationAvailable
+                ? "Uses the native Windows 11 desktop switch animation. The animation hides the per-window repaint while a desktop is switched, so windows do not appear to build up from back to front.\n\nWhen disabled, the desktop is switched instantly and the pager briefly focuses the shell taskbar around the switch to reduce flashing artefacts."
+                : "Desktop switch animations are only available on Windows 11. On Windows 10 the pager always switches instantly with reduced flashing.";
+
             Render(
                 BeginGroup(miscPage, "Behaviour"),
                 CheckBoxRow(
                     "Show Pager In Taskbar",
                     s => s.ShowAppInTaskbar,
                     (s, v) => s.ShowAppInTaskbar = v),
+                CheckBoxRow(
+                    "Animated Desktop Switch",
+                    s => s.AnimatedDesktopSwitch,
+                    (s, v) => s.AnimatedDesktopSwitch = v,
+                    toolTip: animationToolTip,
+                    enabled: animationAvailable),
                 ComboRow(
                     "Desktop Change: Window Activation",
                     new[] { "Desktop's last window", "Window under cursor", "None" },

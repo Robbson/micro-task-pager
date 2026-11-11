@@ -5,10 +5,12 @@
 ### Pager
 - added a window title so screen capture tools which skip untitled windows (e.g. ShareX) can list and capture the pager window
 - fixed: hiding the app from the taskbar no longer disables automatic pinning to all virtual desktops; the taskbar button is now managed separately from the window style that pinning requires
+- added an optional Windows 11 animated desktop switch, which hides the per-window repaint while switching; the instant switch now briefly focuses the taskbar to reduce flashing artefacts
 
 ### Settings
 - added new "Debugging / Testing" group on the Misc tab with an option to temporarily disable the pager's always-on-top behavior (useful for screen capturing tools like ShareX)
 - added a button to open the application log folder in Windows Explorer
+- added "Animated Desktop Switch" to the Misc tab's Behaviour group; it is disabled on Windows 10 where the animation API is unavailable
 
 ## v1.6.0
 

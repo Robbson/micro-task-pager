@@ -206,7 +206,14 @@ namespace MicroTaskPager.Core.API.Win10LTSC
 
         public IIVirtualDesktop ivd { get; set; }
 
-        public void MakeVisible() => _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+        public void MakeVisible(bool animate)
+        {
+            // Windows 10 has no animated switch API. Always use the taskbar workaround, which
+            // reduces the flashing during the instant switch.
+            IntPtr shellWindow = WinAPI.FocusTaskbarForDesktopSwitch(false);
+            _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+            WinAPI.ReleaseTaskbarAfterDesktopSwitch(shellWindow);
+        }
         public IWindowsVirtualDesktop FromIndex(int index) => new WindowsVirtualDesktop(_windowsVirtualDesktopManager.GetDesktop(index));
 
         public int Count

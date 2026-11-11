@@ -219,7 +219,35 @@ namespace MicroTaskPager.Core.API.Win11
         public IIVirtualDesktop ivd { get; set; }
         public WindowsVirtualDesktop() { }
         public WindowsVirtualDesktop(IIVirtualDesktop desktop) { this.ivd = desktop; }
-        public void MakeVisible() => _windowsVirtualDesktopManager.VirtualDesktopManagerInternal.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+        public void MakeVisible(bool animate)
+        {
+            IntPtr shellWindow = WinAPI.FocusTaskbarForDesktopSwitch(animate);
+            var manager = _windowsVirtualDesktopManager.VirtualDesktopManagerInternal;
+
+            if (animate)
+            {
+                // The shell animation composites the whole desktop, which hides the per-window
+                // repaint that an instant switch exposes. Some Windows builds changed the COM
+                // vtable layout late in the interface, so fall back to the instant switch if the
+                // animated method is not available (or fails).
+                try
+                {
+                    manager.WaitForAnimationToComplete();
+                    manager.SwitchDesktopWithAnimation((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+                    manager.WaitForAnimationToComplete();
+                }
+                catch
+                {
+                    manager.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+                }
+            }
+            else
+            {
+                manager.SwitchDesktop((WindowsVirtualDesktopAPI.IVirtualDesktop)ivd);
+            }
+
+            WinAPI.ReleaseTaskbarAfterDesktopSwitch(shellWindow);
+        }
         public IWindowsVirtualDesktop FromIndex(int index) => new WindowsVirtualDesktop(_windowsVirtualDesktopManager.GetDesktop(index));
 
         public int Count
