@@ -4,9 +4,10 @@
 
 ### Pager
 - added a window title so screen capture tools which skip untitled windows (e.g. ShareX) can list and capture the pager window
+- fixed: hiding the app from the taskbar no longer disables automatic pinning to all virtual desktops; the taskbar button is now managed separately from the window style that pinning requires
 
 ### Settings
-- added new "Debugging / Testing" group on the Misc tab with an option to temporarily disable the pager's always-on-top behavior (for screen capture tools like ShareX)
+- added new "Debugging / Testing" group on the Misc tab with an option to temporarily disable the pager's always-on-top behavior (useful for screen capturing tools like ShareX)
 - added a button to open the application log folder in Windows Explorer
 
 ## v1.6.0

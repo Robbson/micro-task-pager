@@ -156,7 +156,7 @@ Open **Settings** from the right-click menu. Changes are previewed live where po
 Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`.
 
 > [!NOTE]
-> Automatic pinning of the pager to all virtual desktops requires **Show App In Taskbar** to be enabled. If you disable it, Windows limits what the app can do automatically, and you may need to pin it manually through Task View (`Win` + `Tab`).
+> The pager is pinned to all virtual desktops automatically, even when **Show App In Taskbar** is disabled. The taskbar button is removed with the shell taskbar API, while the underlying window keeps the application view that Windows pinning requires, so the pager stays visible after switching desktops.
 
 ## Known issues
 

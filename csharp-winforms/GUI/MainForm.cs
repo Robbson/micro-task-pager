@@ -42,6 +42,7 @@ namespace MicroTaskPager.GUI
         private bool _isDialogOpen = false;
         private bool _isContextMenuOpen = false;
         private IntPtr _toolTipWindow = IntPtr.Zero;
+        private ITaskbarList _taskbarList;
 
         private Point dragOffset;
 
@@ -80,6 +81,7 @@ namespace MicroTaskPager.GUI
             ControlBox = false;
             MaximizeBox = false;
             MinimizeBox = false;
+            ShowInTaskbar = true;
             TopMost = true;
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             Icon = new System.Drawing.Icon(
@@ -95,7 +97,11 @@ namespace MicroTaskPager.GUI
             // Form properties set to configurable options
             BackColor = Options.DesktopBackgroundColor;
             Opacity = Options.BackgroundOpacity;
-            ShowInTaskbar = Options.ShowAppInTaskbar;
+
+            // The taskbar button is managed with ITaskbarList (see ApplyTaskbarVisibility) instead
+            // of Form.ShowInTaskbar. The form deliberately stays a normal unowned window: Windows
+            // only creates the application view that virtual-desktop pinning works on for such a
+            // window. Toggling Form.ShowInTaskbar would recreate the handle and break pinning.
 
             // Collect all virtual desktops and add mouse event listeners to them (uses PagerHeight)
             GetVirtualDesktopsAndAddMouseHandlers(_virtualDesktops);
@@ -134,6 +140,28 @@ namespace MicroTaskPager.GUI
         public IntPtr GetLastActiveWindow(int desktopIndex) => _activeWindowTracker.GetLastActiveWindow(desktopIndex);
 
         public void RememberActiveWindow(IntPtr hwnd) => _activeWindowTracker.RememberWindow(hwnd);
+
+        // Pins the pager to all virtual desktops if that has not succeeded yet. Called on the
+        // secondary tick and before a desktop switch. The window keeps its application view even
+        // while it is hidden from the taskbar, so this works with "Show App In Taskbar" disabled.
+        public void EnsurePinnedToAllDesktops()
+        {
+            if (_isAppPinned)
+            {
+                return;
+            }
+
+            try
+            {
+                // Note: The internal Divided by Zero error happens here
+                WindowsVirtualDesktopManager.GetInstance().PinApplication(Handle);
+                _isAppPinned = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error while pinning application " + Handle);
+            }
+        }
 
         // Restores the last active window of the desktop the pager just switched to
         public void RestoreLastActiveWindow(int desktopIndex)
@@ -235,6 +263,15 @@ namespace MicroTaskPager.GUI
                 WindowsVirtualDesktop.Restart();
                 WindowsVirtualDesktopManager.Restart();
             }
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+
+            // Applied before the window becomes visible, so hiding the taskbar button does not
+            // flash a taskbar entry at startup.
+            ApplyTaskbarVisibility();
         }
 
         protected override void OnResize(EventArgs e)
@@ -621,6 +658,11 @@ namespace MicroTaskPager.GUI
 
         private void OnShown(object sender, EventArgs e)
         {
+            // The form is created as a normal taskbar window so it has an application view for
+            // virtual-desktop pinning. Remove the taskbar button immediately if the user disabled
+            // "Show App In Taskbar".
+            ApplyTaskbarVisibility();
+
             // Remember the window that was active before the pager got shown
             _activeWindowTracker.Start(Handle);
             _activeWindowTracker.RememberWindow(_foregroundWindowAtStartup);
@@ -705,23 +747,10 @@ namespace MicroTaskPager.GUI
                             ResetVirtualDesktops();
                         }
 
-                        // This works only when the pinning is manually done by the user after application has started
-                        // (because auto pinning will always fail)
-
-                        // This should only be the case at start up, right
-                        if (Options.ShowAppInTaskbar && !_isAppPinned)
-                        {
-                            try
-                            {
-                                // Note: The internal Divided by Zero error happens here
-                                WindowsVirtualDesktopManager.GetInstance().PinApplication(Handle);
-                                _isAppPinned = true;
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Error(ex, "Error while pinning application " + Handle);
-                            }
-                        }
+                        // Try to pin the pager to all virtual desktops. This is independent of the
+                        // taskbar button: the window keeps its application view, so pinning also
+                        // works while it is hidden from the taskbar.
+                        EnsurePinnedToAllDesktops();
 
                         try
                         {
@@ -904,10 +933,10 @@ namespace MicroTaskPager.GUI
             Options = settings;
 
             // Apply MainForm propertes
-            ShowInTaskbar = Options.ShowAppInTaskbar;
             TopMost = !Options.DisableAlwaysOnTop;
             BackColor = Options.DesktopBackgroundColor;
             Opacity = Math.Max(0.25, Math.Min(1.0, Options.BackgroundOpacity));
+            ApplyTaskbarVisibility();
 
             if (reloadIcons)
             {
@@ -925,6 +954,52 @@ namespace MicroTaskPager.GUI
             }
 
             Invalidate();
+        }
+
+        // Shows or hides the taskbar button without changing the form's window ownership. Keeping the
+        // window a normal top-level window preserves the application view that pinning needs, so the
+        // pager stays pinned to all virtual desktops even while it is hidden from the taskbar and
+        // Alt+Tab (WS_EX_TOOLWINDOW).
+        private void ApplyTaskbarVisibility()
+        {
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                long exStyle = WinAPI.GetWindowLongPtr(Handle, WinAPI.GWL_EXSTYLE).ToInt64();
+                long newExStyle = Options.ShowAppInTaskbar
+                    ? (exStyle | WinAPI.WS_EX_APPWINDOW) & ~WinAPI.WS_EX_TOOLWINDOW
+                    : (exStyle | WinAPI.WS_EX_TOOLWINDOW) & ~WinAPI.WS_EX_APPWINDOW;
+
+                if (newExStyle != exStyle)
+                {
+                    WinAPI.SetWindowLongPtr(Handle, WinAPI.GWL_EXSTYLE, new IntPtr(newExStyle));
+                    uint flags = WinAPI.SWP_NOMOVE | WinAPI.SWP_NOSIZE | WinAPI.SWP_NOZORDER
+                        | WinAPI.SWP_NOACTIVATE | WinAPI.SWP_FRAMECHANGED;
+                    WinAPI.SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, flags);
+                }
+
+                if (_taskbarList == null)
+                {
+                    _taskbarList = TaskbarList.Create();
+                }
+
+                if (Options.ShowAppInTaskbar)
+                {
+                    _taskbarList.AddTab(Handle);
+                }
+                else
+                {
+                    _taskbarList.DeleteTab(Handle);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error while updating the taskbar button");
+            }
         }
 
         private void OpenAboutDialog()

@@ -303,6 +303,10 @@ namespace MicroTaskPager.GUI
 
             Render(
                 BeginGroup(miscPage, "Behaviour"),
+                CheckBoxRow(
+                    "Show Pager In Taskbar",
+                    s => s.ShowAppInTaskbar,
+                    (s, v) => s.ShowAppInTaskbar = v),
                 ComboRow(
                     "Desktop Change: Window Activation",
                     new[] { "Desktop's last window", "Window under cursor", "None" },
@@ -326,36 +330,6 @@ namespace MicroTaskPager.GUI
             _secondaryDelayBox = (TextBox)secondaryDelay.Host;
 
             Render(BeginGroup(miscPage, "Performance"), primaryDelay, secondaryDelay);
-
-            RowGroup pinningGroup = BeginGroup(miscPage, "App Pinning");
-
-            Render(
-                pinningGroup,
-                CheckBoxRow(
-                    "Show App In Taskbar",
-                    s => s.ShowAppInTaskbar,
-                    (s, v) => s.ShowAppInTaskbar = v));
-
-            var noteBox = new Panel
-            {
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(8),
-                Margin = new Padding(6, 12, 6, 4),
-            };
-
-            var note = new Label
-            {
-                Text = "Important: When deactivated, the automatic pinning of the app (to be visible on all virtual desktops) can't work anymore because of a limitation of the Windows OS. So the pinning has to be done manually after every application start using the \"Active Applications\" screen (Win + Tab).",
-                AutoSize = true,
-                MaximumSize = new Size(420, 0),
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(8, 4, 8, 4),
-            };
-            noteBox.Controls.Add(note);
-
-            AddSpanningControl(pinningGroup.Table, noteBox);
 
             Render(
                 BeginGroup(miscPage, "Debugging / Testing"),
