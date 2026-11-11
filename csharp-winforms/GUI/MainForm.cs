@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -40,6 +42,14 @@ namespace MicroTaskPager.GUI
 
         private Point dragOffset;
 
+        // Manual window drag between desktops, with a common-controls drag image.
+        private Window _dragCandidate;
+        private int _dragOriginDesktopIndex = -1;
+        private Rectangle _windowDragThreshold;
+        private bool _windowDragActive;
+        private ImageList _dragImageList;
+        private Bitmap _dragIcon;
+
         public MainForm()
         {
             // Capture the window that was active before the pager shows up (the pager isn't shown yet)
@@ -63,7 +73,6 @@ namespace MicroTaskPager.GUI
             MaximizeBox = false;
             MinimizeBox = false;
             TopMost = true;
-            AllowDrop = true;
             FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             Icon = new System.Drawing.Icon(
                 new MemoryStream(Helpers.GetResourceFromAssembly(typeof(Program), "MicroTaskPager.Resources.icon.ico")));
@@ -100,6 +109,10 @@ namespace MicroTaskPager.GUI
         }
 
         public bool IsDraggingWindow { get; set; }
+
+        // True once a window tile press has moved past the drag threshold. Desktop mouse-up
+        // handling checks this so a drop does not also switch or activate the desktop.
+        public bool IsWindowDragActive => _windowDragActive;
 
         // Why property?
         public int BorderSize { get; } = Dpi.Scale(1);
@@ -158,6 +171,28 @@ namespace MicroTaskPager.GUI
             });
         }
 
+        // Arms a window drag. The drag image and threshold activation are handled here because
+        // a drop can target any desktop, not only the one where the press happened.
+        public void StartWindowDrag(Window window, int originDesktopIndex, Point start)
+        {
+            CancelWindowDrag();
+            if (window == null)
+            {
+                return;
+            }
+
+            _dragCandidate = window;
+            _dragOriginDesktopIndex = originDesktopIndex;
+
+            Size dragSize = SystemInformation.DragSize;
+            _windowDragThreshold = new Rectangle(
+                new Point(start.X - (dragSize.Width / 2), start.Y - (dragSize.Height / 2)),
+                dragSize);
+
+            // Keep receiving mouse moves and the release if the cursor leaves the pager.
+            Capture = true;
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
@@ -181,6 +216,7 @@ namespace MicroTaskPager.GUI
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             // Stop the background polling loops before the window handle gets destroyed
+            CancelWindowDrag();
             _activeWindowTracker.Dispose();
             Program.ApplicationClosing.Cancel();
             base.OnFormClosing(e);
@@ -229,6 +265,168 @@ namespace MicroTaskPager.GUI
                 _logger.Debug(ex, "Could not determine the active desktop");
                 return -1;
             }
+        }
+
+        private static Bitmap CreateTranslucentIcon(Bitmap icon, int size)
+        {
+            var result = new Bitmap(size, size, PixelFormat.Format32bppArgb);
+            using (var graphics = Graphics.FromImage(result))
+            using (var attributes = new ImageAttributes())
+            {
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+                // 75% opacity keeps the ghost readable without looking like a solid icon.
+                var matrix = new ColorMatrix { Matrix33 = 0.85f };
+                attributes.SetColorMatrix(matrix, ColorMatrixFlag.Default, ColorAdjustType.Bitmap);
+                graphics.DrawImage(
+                    icon,
+                    new Rectangle(0, 0, size, size),
+                    0,
+                    0,
+                    icon.Width,
+                    icon.Height,
+                    GraphicsUnit.Pixel,
+                    attributes);
+            }
+
+            return result;
+        }
+
+        private void UpdateWindowDrag(Point point, bool leftDown)
+        {
+            if (_dragCandidate == null)
+            {
+                return;
+            }
+
+            if (!_windowDragActive)
+            {
+                if (!leftDown)
+                {
+                    CancelWindowDrag();
+                    return;
+                }
+
+                if (_windowDragThreshold.Contains(point))
+                {
+                    return;
+                }
+
+                _windowDragActive = true;
+                StartWindowDragImage(_dragCandidate, point);
+            }
+
+            if (_dragImageList != null)
+            {
+                WinAPI.ImageList_DragMove(point.X, point.Y);
+            }
+        }
+
+        private void CompleteWindowDrag(Point point)
+        {
+            Window dragged = _dragCandidate;
+            int originDesktopIndex = _dragOriginDesktopIndex;
+            bool wasActive = _windowDragActive;
+
+            EndWindowDragImage();
+            _dragCandidate = null;
+            _windowDragActive = false;
+            _dragOriginDesktopIndex = -1;
+            if (Capture)
+            {
+                Capture = false;
+            }
+
+            if (!wasActive || dragged == null)
+            {
+                return;
+            }
+
+            Desktop target = _virtualDesktops.FirstOrDefault(d =>
+                point.X >= d.Location.X && point.X < d.Location.X + d.Size.Width
+                && point.Y >= d.Location.Y && point.Y < d.Location.Y + d.Size.Height);
+            if (target == null || target.VirtualDesktopIndex == originDesktopIndex)
+            {
+                return;
+            }
+
+            try
+            {
+                WindowsVirtualDesktop.GetInstance().FromIndex(target.VirtualDesktopIndex).MoveWindow(dragged.Handle);
+                Invalidate();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(
+                    ex,
+                    "Error while moving window {Handle} to desktop {DesktopIndex}",
+                    dragged.Handle,
+                    target.VirtualDesktopIndex);
+            }
+        }
+
+        private void CancelWindowDrag()
+        {
+            EndWindowDragImage();
+            _dragCandidate = null;
+            _windowDragActive = false;
+            _dragOriginDesktopIndex = -1;
+            if (Capture)
+            {
+                Capture = false;
+            }
+        }
+
+        private void StartWindowDragImage(Window window, Point point)
+        {
+            Bitmap icon = window?.Icon;
+            if (icon == null)
+            {
+                return;
+            }
+
+            // Match the icon size used by the pager itself, so large application icons
+            // (for example Chrome's) don't produce an oversized drag ghost.
+            int iconSize = Math.Max(1, Dpi.Scale(Options.IconSize));
+            var imageSize = new Size(iconSize, iconSize);
+            var imageList = new ImageList
+            {
+                ColorDepth = ColorDepth.Depth32Bit,
+                ImageSize = imageSize,
+            };
+
+            _dragIcon = CreateTranslucentIcon(icon, iconSize);
+            imageList.Images.Add(_dragIcon);
+
+            if (!WinAPI.ImageList_BeginDrag(imageList.Handle, 0, imageSize.Width / 2, imageSize.Height / 2))
+            {
+                imageList.Dispose();
+                return;
+            }
+
+            if (!WinAPI.ImageList_DragEnter(Handle, point.X, point.Y))
+            {
+                WinAPI.ImageList_EndDrag();
+                imageList.Dispose();
+                return;
+            }
+
+            _dragImageList = imageList;
+        }
+
+        private void EndWindowDragImage()
+        {
+            if (_dragImageList != null)
+            {
+                WinAPI.ImageList_DragLeave(Handle);
+                WinAPI.ImageList_EndDrag();
+                _dragImageList.Dispose();
+                _dragImageList = null;
+            }
+
+            _dragIcon?.Dispose();
+            _dragIcon = null;
         }
 
         // Safe Invoke for the background loops: during shutdown the handle can disappear between
@@ -291,15 +489,15 @@ namespace MicroTaskPager.GUI
 
         private void ResetVirtualDesktops()
         {
+            // A drag references the old desktop list, so it cannot survive a reset.
+            CancelWindowDrag();
+
             // Remove mouse listeners for all existing desktops first before removing them
             _virtualDesktops.ForEach((desktop) =>
             {
                 MouseUp -= desktop.OnMouseUp;
                 MouseDown -= desktop.OnMouseDown;
                 MouseWheel -= desktop.OnMouseWheel;
-                MouseMove -= desktop.OnMouseMove;
-                DragOver -= desktop.OnDragOver;
-                DragDrop -= desktop.OnDragDrop;
             });
 
             WindowsVirtualDesktop.Restart();
@@ -335,9 +533,6 @@ namespace MicroTaskPager.GUI
                 MouseUp += desktop.OnMouseUp;
                 MouseDown += desktop.OnMouseDown;
                 MouseWheel += desktop.OnMouseWheel;
-                MouseMove += desktop.OnMouseMove;
-                DragOver += desktop.OnDragOver;
-                DragDrop += desktop.OnDragDrop;
                 virtualDesktops.Add(desktop);
             });
         }
@@ -463,6 +658,9 @@ namespace MicroTaskPager.GUI
             bool wasDraggingWindow = IsDraggingWindow;
             IsDraggingWindow = false;
             Cursor = Cursors.Default;
+
+            CompleteWindowDrag(e.Location);
+
             if ((e.Button & MouseButtons.Right) == MouseButtons.Right)
             {
                 ShowContextMenu(e.X, e.Y);
@@ -496,7 +694,10 @@ namespace MicroTaskPager.GUI
             if (IsDraggingWindow)
             {
                 Location = new Point(e.X + Location.X - dragOffset.X, e.Y + Location.Y - dragOffset.Y);
+                return;
             }
+
+            UpdateWindowDrag(e.Location, (e.Button & MouseButtons.Left) == MouseButtons.Left);
         }
 
         private void ShowContextMenu(int mouseX, int mouseY)

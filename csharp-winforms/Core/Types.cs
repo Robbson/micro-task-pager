@@ -25,11 +25,4 @@ namespace MicroTaskPager.Core
 
         public Bitmap Icon { get; set; }
     }
-
-    public class DragDropData
-    {
-        public int OriginDesktopIndex { get; set; }
-
-        public Window DraggedWindow { get; set; }
-    }
 }

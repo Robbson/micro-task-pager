@@ -20,8 +20,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
     {
         private readonly List<ScreenRenderer> _screenRenderers = new List<ScreenRenderer>();
         private readonly int _numScreens;
-        private DragDropData _dragDropData;
-        private Rectangle dragBoxFromMouseDown;
         private bool _pagerDragGesture;
 
         // Used only in MainFrame when ResetVirtualDesktops() ist called (for each desktop)
@@ -89,10 +87,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
             if (_pagerDragGesture)
             {
-                // Drop any armed window drag: after Ctrl is released mid-drag, the mouse-move
-                // handler must not turn the remaining pager movement into a window drag.
-                dragBoxFromMouseDown = Rectangle.Empty;
-                _dragDropData = null;
                 return;
             }
 
@@ -141,19 +135,9 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                         }
                     }
 
-                    // Prepare drag & drop for the selected window (even if it's not in the users mind)
-                    _dragDropData = new DragDropData()
-                    {
-                        OriginDesktopIndex = VirtualDesktopIndex,
-                        DraggedWindow = w,
-                    };
-                    Size dragSize = SystemInformation.DragSize;
-                    dragBoxFromMouseDown = new Rectangle(
-                        new Point(e.X - (dragSize.Width / 2), e.Y - (dragSize.Height / 2)), dragSize);
-                }
-                else
-                {
-                    dragBoxFromMouseDown = Rectangle.Empty;
+                    // Arm a potential window drag. MainForm activates it after the system drag
+                    // threshold and draws the semi-transparent icon while dragging.
+                    Form.StartWindowDrag(w, VirtualDesktopIndex, e.Location);
                 }
             }
         }
@@ -165,6 +149,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             bool pagerDragGesture = _pagerDragGesture;
             _pagerDragGesture = false;
 
+            if (Form.IsWindowDragActive) return;
             if (!IsInsideBounds(e.X, e.Y)) return;
             if (pagerDragGesture) return;
             if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
@@ -233,47 +218,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             }
         }
 
-        public void OnMouseMove(object sender, MouseEventArgs e)
-        {
-            if (!IsInsideBounds(e.X, e.Y)) return;
-            if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
-
-            if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
-            {
-                // The previously prepared drag & drop gets activated
-                if (dragBoxFromMouseDown != Rectangle.Empty && !dragBoxFromMouseDown.Contains(e.X, e.Y))
-                    Form.DoDragDrop(_dragDropData, DragDropEffects.Move);
-            }
-        }
-
-        // While Dragging...
-        public void OnDragOver(object sender, DragEventArgs e)
-        {
-            if (!e.Data.GetDataPresent(typeof(DragDropData)))
-            {
-                e.Effect = DragDropEffects.None;
-                return;
-            }
-
-            if ((e.AllowedEffect & DragDropEffects.Move) == DragDropEffects.Move)
-                e.Effect = DragDropEffects.Move;
-        }
-
-        // Move window to another desktop when dropped
-        public void OnDragDrop(object sender, DragEventArgs e)
-        {
-            if (!IsInsideBounds(Form.PointToClient(new Point(e.X, e.Y)))) return;
-            if (e.Data.GetDataPresent(typeof(DragDropData)))
-            {
-                var ddd = (DragDropData)e.Data.GetData(typeof(DragDropData));
-                if (e.Effect == DragDropEffects.Move)
-                {
-                    WindowsVirtualDesktop.GetInstance().FromIndex(VirtualDesktopIndex).MoveWindow(ddd.DraggedWindow.Handle);
-                    Form.Invalidate();
-                }
-            }
-        }
-
         public void Render(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
@@ -293,7 +237,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                         selectedDesktopBackgroundColor,
                         new Rectangle(Location.X, Location.Y, Size.Width, Size.Height));
                 }
-
             }
 
             // TODO: Make color and maybe alpha value a settings parameter
