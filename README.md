@@ -23,6 +23,7 @@ Unlike a simple desktop switcher, it can display each desktop in one of two ways
 
 - **Preview** — a miniature of the real screen, including window positions and z-order.
 - **Micro Taskbar** — a compact strip of application icons, ideal for small screens and maximized windows.
+- **Micro Taskbar Light** - same as above but without showing minimized windows. 
 
 Each desktop screen can use its own view, so you can mix both styles however you like.
 
@@ -47,20 +48,18 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 ## Features
 
 - Switch to any virtual desktop with a single mouse click.
-- See all desktops at once, with a near real-time view of their windows.
-- Choose **Preview** or **Micro Taskbar** rendering independently for each desktop screen.
-- Drag and drop windows between virtual desktops.
-- Click a window in the current desktop to bring it to the front.
-- Return to the last active window automatically when switching back to a desktop.
-- Reposition the pager by dragging it, and save, restore, or reset its position from the context menu.
-- Keep the pager visible on every virtual desktop and above other windows; it restores itself when covered.
-- Use multiple monitors; screen changes are detected while the app is running. High-DPI displays are supported through DPI-aware rendering.
-- Customize pager height, icon padding, colors, border style, opacity, and update intervals.
-- Automatically follows the number of virtual desktops, including desktops added or removed at runtime.
-- Prevents multiple instances from running at the same time.
+- Move the pager anywhere you want, it always stays in front.
+- See all desktops at once, with a real-time* view of their windows.
+- Choose a view mode for each desktop independently: **Preview**,  **Micro Taskbar** or **Micro Taskbar Light**.
+- Drag and drop windows between desktops.
+- Use multiple monitors including High-DPI displays.
+- Customize nearly everything like icon sizes, coloring and application behaviour.
 - Runs without administrator rights and stores its settings per user.
-- Writes diagnostic logs to `%LOCALAPPDATA%\MicroTaskPager\logs`.
 - Free and open source, with no Windows patches or shell extensions required.
+- Implemented in C#/.NET as well as in Rust: Choose the implementation which fits your needs best.
+
+> [!NOTE]
+> *the app intentionally uses a lower update frequency to limit CPU usage but a faster or real-time update can be enforced by the user in the settings 
 
 ## Getting started
 
@@ -128,8 +127,8 @@ On first launch, the pager appears at the bottom center of the primary screen's 
 | Switch to a desktop                | Left-click anywhere on that desktop's area.                                                |
 | Bring a window to the front        | Left-click its miniature or icon while its desktop is active.                              |
 | Move a window to another desktop   | Drag its miniature or icon onto the target desktop.                                        |
-| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**.            |
-| Move the pager                     | Drag it with the middle mouse button, or hold `Shift` and drag with the left mouse button. |
+| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**. Alternatively hold `Shift` and use the mosue wheel           |
+| Move the pager                     | Drag it with the middle mouse button, or hold `Ctrl` and drag with the left mouse button. |
 | Open the menu                      | Right-click the pager.                                                                     |
 | Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**.         |
 | Open settings                      | Right-click the pager and choose **Settings**.                                             |
@@ -141,7 +140,10 @@ The **Preview** view draws a scaled representation of each desktop, including th
 
 ### Micro Taskbar view
 
-The **Micro Taskbar** view replaces the miniature layout with a compact strip of application icons, adding a second row when space is tight. It is especially useful on laptops and small displays where windows are usually maximized and stacked on top of each other. Icons are easier to recognize than overlapping preview rectangles, and the view remains readable even when the pager is only as tall as the Windows taskbar.
+The **Micro Taskbar** view replaces the miniature layout with a compact strip of application icons, adding a second row when space is tight. It is especially useful on laptops and small displays where windows are usually maximized and stacked on top of each other. Icons are easier to recognize than overlapping preview rectangles, and the view remains readable even when the pager is only as tall as the Windows taskbar. Use `Shift` + Left-Click to minimize a window. 
+
+### Micro Taskbar Light view
+Same as **Micro Taskbar** but without minimized windows.
 
 Each desktop's screen remembers its own view mode. Use **Toggle View Mode** on the desktop under the cursor to switch it.
 
@@ -155,16 +157,14 @@ Open **Settings** from the right-click menu. Changes are previewed live where po
 
 Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`.
 
-> [!NOTE]
-> The pager is pinned to all virtual desktops automatically, even when **Show App In Taskbar** is disabled. The taskbar button is removed with the shell taskbar API, while the underlying window keeps the application view that Windows pinning requires, so the pager stays visible after switching desktops.
 
 ## Known issues
 
 - Not every visual parameter is configurable yet.
 - Newly opened windows are occasionally not detected immediately.
-- In **Micro Taskbar** view, the order of icons follows the window order and cannot be rearranged manually.
+- In **Micro Taskbar (Light)** views, the order of icons follows the window order and cannot be rearranged manually.
 - The application is not code-signed, so SmartScreen warnings are expected.
-- The project still targets .NET Framework 4.8, so there is no optimized native ARM64 build.
+- The C# implementation intenionally targets the old .NET Framework 4.8, so there is no optimized native ARM64 build.
 
 ## Building from source
 
