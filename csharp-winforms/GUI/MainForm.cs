@@ -460,11 +460,24 @@ namespace MicroTaskPager.GUI
 
         private void OnMouseUp(object sender, MouseEventArgs e)
         {
+            bool wasDraggingWindow = IsDraggingWindow;
             IsDraggingWindow = false;
             Cursor = Cursors.Default;
             if ((e.Button & MouseButtons.Right) == MouseButtons.Right)
             {
                 ShowContextMenu(e.X, e.Y);
+                return;
+            }
+
+            if (wasDraggingWindow)
+            {
+                // Dragging the pager activated it. Return the foreground to the last active
+                // application window of the current desktop, like a desktop selection does.
+                int desktopIndex = GetActiveDesktopIndex();
+                if (desktopIndex >= 0)
+                {
+                    RestoreLastActiveWindow(desktopIndex);
+                }
             }
         }
 

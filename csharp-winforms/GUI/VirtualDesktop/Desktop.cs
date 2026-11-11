@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
@@ -23,6 +22,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         private readonly int _numScreens;
         private DragDropData _dragDropData;
         private Rectangle dragBoxFromMouseDown;
+        private bool _pagerDragGesture;
 
         // Used only in MainFrame when ResetVirtualDesktops() ist called (for each desktop)
         public Desktop(int virtualDesktopIndex, MainForm form, Point location)
@@ -82,8 +82,21 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
         public void OnMouseDown(object sender, MouseEventArgs e)
         {
+            // Ctrl+left starts a pager drag in MainForm instead of a desktop interaction.
+            // Remember that at press time: the user may release Ctrl before the mouse button,
+            // and the mouse-up must not select or activate this desktop in that case.
+            _pagerDragGesture = (Control.ModifierKeys & Keys.Control) != Keys.None;
+
+            if (_pagerDragGesture)
+            {
+                // Drop any armed window drag: after Ctrl is released mid-drag, the mouse-move
+                // handler must not turn the remaining pager movement into a window drag.
+                dragBoxFromMouseDown = Rectangle.Empty;
+                _dragDropData = null;
+                return;
+            }
+
             if (!IsInsideBounds(e.X, e.Y)) return;
-            if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
                 var w = GetWindowUnderCursor(e.Location);
@@ -96,28 +109,24 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     //    the Pager window doesn't get activated too long (leads to nervousness in the Taskbar)
                     if (IsCurrentActiveDesktop)
                     {
-                        // A second click on the already selected window minimizes it. The first
-                        // click still only selects a window, so selecting never minimizes by accident.
-                        // -> This hase to be done in Mouse-Up, otherwise we would minimize windows during a drag & drop operation
+                        // Shift-clicking a window tile in the full Micro Taskbar minimizes it.
+                        // The light mode and preview don't show minimized windows, so minimizing
+                        // is limited to the full mode. An already minimized window is never
+                        // minimized again; clicking it restores it as usual.
+                        bool minimizeWindow =
+                            (Control.ModifierKeys & Keys.Shift) != Keys.None
+                            && !w.IsMinimized
+                            && IsMicroTaskbarAt(e.X);
 
-                        // Also doesn't work with modifier key not as expected
-                        /*if ((Control.ModifierKeys & Keys.Shift) != Keys.None)
+                        if (minimizeWindow)
                         {
-                            //IntPtr selectedWindow = Form.GetLastActiveWindow(VirtualDesktopIndex);
-                            if (!w.IsMinimized)
-                                //&& (w.Handle == selectedWindow || WinAPI.GetForegroundWindow() == w.Handle))
-                            {
-                                Debug.WriteLine("Clicked!");
-                                // But we allow this only for the MicroTaskbar, not its light version
-                                var screenIndex = _screenRenderers.FindIndex(s => e.X >= s.Location.X && e.X <= (s.Location.X + s.Size.Width));
-                                int mode = (int)_screenRenderers[screenIndex].Mode;
-                                if (mode == (int)ViewMode.MicroTaskbar)
-                                {
-                                    WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
-                                }
-                            }
+                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
 
-                        }*/
+                            // Never fall through here: the window is iconic now, so the restore
+                            // branch below would bring it back immediately. Minimizing also must
+                            // not focus the window or start a drag & drop operation.
+                            return;
+                        }
 
                         if (WinAPI.IsIconic(w.Handle))
                         {
@@ -151,36 +160,18 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
         public void OnMouseUp(object sender, MouseEventArgs e)
         {
-            if (!IsInsideBounds(e.X, e.Y)) return;
+            // The gesture was a pager drag (Ctrl was held at press time). Even if Ctrl has
+            // already been released, this must not select or activate the desktop.
+            bool pagerDragGesture = _pagerDragGesture;
+            _pagerDragGesture = false;
 
-            // TODO: This line only prevents desktop selection when mouse key is released before the Control-Key is released
+            if (!IsInsideBounds(e.X, e.Y)) return;
+            if (pagerDragGesture) return;
             if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
 
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
-                if (IsCurrentActiveDesktop)
-                {
-                    /*var w = GetWindowUnderCursor(e.Location);
-                    if (w != null)
-                    {
-                        // A second click on the already selected window minimizes it. The first
-                        // click still only selects a window, so selecting never minimizes by accident.
-                        // -> This hase to be done in Mouse-Up, otherwise we would minimize windows during a drag & drop operation
-                        IntPtr selectedWindow = Form.GetLastActiveWindow(VirtualDesktopIndex);
-                        if (!w.IsMinimized
-                            && (w.Handle == selectedWindow || WinAPI.GetForegroundWindow() == w.Handle))
-                        {
-                            // But we allow this only for the MicroTaskbar, not its light version
-                            var screenIndex = _screenRenderers.FindIndex(s => e.X >= s.Location.X && e.X <= (s.Location.X + s.Size.Width));
-                            int mode = (int)_screenRenderers[screenIndex].Mode;
-                            if (mode == (int)ViewMode.MicroTaskbar)
-                            {
-                                WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
-                            }
-                        }
-                    }*/
-                }
-                else
+                if (!IsCurrentActiveDesktop)
                 {
                     // Resolve the window under the cursor before switching, the preview data may change afterwards
                     Window windowUnderCursor = Form.Options.DesktopChangeActivation == DesktopChangeActivationMode.WindowUnderCursor
@@ -363,6 +354,14 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
         private bool IsInsideBounds(int x, int y)
             => x >= Location.X && x < (Location.X + Size.Width) && y >= Location.Y && y < (Location.Y + Size.Height);
+
+        // Resolves which view mode the screen at the given x coordinate currently shows
+        private bool IsMicroTaskbarAt(int x)
+        {
+            int screenIndex = _screenRenderers.FindIndex(
+                s => x >= s.Location.X && x < (s.Location.X + s.Size.Width));
+            return screenIndex >= 0 && _screenRenderers[screenIndex].Mode == ViewMode.MicroTaskbar;
+        }
 
         private Window GetWindowUnderCursor(Point mousePosition)
         {
