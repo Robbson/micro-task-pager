@@ -16,10 +16,12 @@
     -Architecture to restrict a build to one architecture.
 
     The WinForms build increments the build number in version.txt on every run.
+    A version without a build component (Major.Minor.Patch) starts at build 0.
     The Rust builds use the version from their Cargo.toml.
 
 .PARAMETER Target
-    Which implementation to build: all (default), winforms, winui, or winsafe.
+    Which implementation to build: all, winforms, winui, or winsafe. Required.
+    Pass all to build every implementation. When omitted, this help is shown.
 
 .PARAMETER Architecture
     Which Rust architecture to build: all (default), x64, or arm64. The WinForms
@@ -30,6 +32,10 @@
 
 .EXAMPLE
     pwsh .\build.ps1
+    Shows this help.
+
+.EXAMPLE
+    pwsh .\build.ps1 -Target all
     Builds all production releases.
 
 .EXAMPLE
@@ -51,7 +57,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('all', 'winforms', 'winui', 'rust-winui', 'winsafe', 'rust-winsafe')]
-    [string]$Target = 'all',
+    [string]$Target,
 
     [ValidateSet('all', 'x64', 'arm64')]
     [string]$Architecture = 'all',
@@ -62,6 +68,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+
+if (-not $PSBoundParameters.ContainsKey('Target')) {
+    $previousWasBlank = $false
+    Get-Help -Name $PSCommandPath -Detailed |
+        Out-String -Stream |
+        ForEach-Object {
+            $isBlank = [string]::IsNullOrWhiteSpace($_)
+            if (-not ($isBlank -and $previousWasBlank)) {
+                $previousWasBlank = $isBlank
+                $_
+            }
+        } |
+        Out-Host
+    return
+}
 
 $root = $PSScriptRoot
 $prodRoot = Join-Path $root 'prod'

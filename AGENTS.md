@@ -86,7 +86,8 @@ Installed command-line tools:
 Build one or more production releases from the repository root with PowerShell 7:
 
 ```powershell
-pwsh ./build.ps1                    # all three implementations
+pwsh ./build.ps1                    # show usage help
+pwsh ./build.ps1 -Target all        # all three implementations
 pwsh ./build.ps1 -Target winforms   # C# WinForms only
 pwsh ./build.ps1 -Target winui      # Rust WinUI 3 only
 pwsh ./build.ps1 -Target winsafe    # native winsafe only

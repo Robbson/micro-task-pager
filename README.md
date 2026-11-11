@@ -231,7 +231,8 @@ a single-instance mutex and the topmost/pinning state.
 Build one or more production releases from the repository root:
 
 ```powershell
-pwsh .\build.ps1                    # all three implementations
+pwsh .\build.ps1                    # show usage help
+pwsh .\build.ps1 -Target all        # all three implementations
 pwsh .\build.ps1 -Target winforms   # C# WinForms only
 pwsh .\build.ps1 -Target winui      # Rust WinUI 3 only
 pwsh .\build.ps1 -Target winsafe    # native winsafe only
@@ -239,7 +240,8 @@ pwsh .\build.ps1 -Target winsafe    # native winsafe only
 
 The script writes each release to its own folder under `prod\` (`prod\winforms`, `prod\winui`, and
 `prod\winsafe`) and creates a versioned ZIP archive there. The C# build automatically increments the
-version in `csharp-winforms\version.txt`; the Rust archives use the version from their `Cargo.toml`.
+version in `csharp-winforms\version.txt`; a version without a build component (for example `1.6.0`)
+starts at build 0 and produces `1.6.0.0`. The Rust archives use the version from their `Cargo.toml`.
 
 `csharp-winforms\Publish.cmd` remains as a thin wrapper for building only the WinForms release.
 

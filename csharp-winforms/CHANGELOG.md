@@ -1,19 +1,34 @@
 # Changelog
 
-## unreleased
+## v1.6.0
 
-- fixed painting artefacts in the settings window by enabling double buffering 
-- updated: Allow minimizing of a window in the pager itself by clicking on an already selected window
-- PLANNED: New view mode for MicroTaskbar Light
-- added visualization of minimized windows in MicroTaskbar view mode, including a setting related their order in the pager
+### Pager
+- added tooltip to show the current view mode of desktop after it has been changed
+- added tooltips for showing window names (when pressing Ctrl and mouse hover)
+- fixed preview bug where the wrong window has been dragged
+- added new drag & drop handling which is using the same technique as the Rust versions
+- added background color for selected desktop
+- updated: Moving the pager window is now done using Ctrl key + Mouse instead of Shift
+- fixed accidental desktop switch when moving the pager
+- MicroTaskbar view allows now minimizing of windows by using Shift + Click
+- updated: Allow minimizing of a window in the pager itself by clicking on an already selected window 
+- added visualization of minimized windows in a new variation of the MicroTaskbar (new vied mode), including a setting related to their order in the pager
 - added support for icons of UWP applications
 - added support for bicubic interpolation of icon images when size is not their native size
+- pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
+
+### Settings
+- fixed painting artefacts in the settings window by enabling double buffering 
 - added new settings parameter for icon size
 - added new settings parameter for desktop change behaviour 
 - settings dialog now sticks to the system colors
-- pager reasserts topmost on every watchdog tick, so partial overlaps are recovered like in the Rust versions
-- added `run.ps1` to build and start any implementation from the repository root
+
+### Internal
+- updated docs, separated changelogs for each implementation
+- reverted changed project folder structure which led to issues
 - refactored settings window
+- updated `build.ps1` script
+- added `run.ps1` to build and start any implementation from the repository root
 
 ## v1.5.1
 
@@ -22,7 +37,6 @@
 ## v1.5.0
 
 ### General
-
 - project decoupled from the long abandoned Switchie project, rebranded to _Micro Task Pager_ with a different developing focus
 - all new icon and logo, updated about dialog
 - added file logging for easier support in case of errors
@@ -31,7 +45,6 @@
 - improved application exit
 
 ### Pager
-
 - support of high-DPI screens
 - added individual view modes for each desktop's screen
 - added pager movement with shift + left mouse button as an alternative to mouse middle-button dragging
@@ -48,7 +61,6 @@
 - optimized redraws
 
 ### Settings Dialog
-
 - better organization of all changeable parameters
 - updated settings dialog positioning next to the pager instead of over it
 - allow revert single parameters to previous values instead of defaults
@@ -60,7 +72,6 @@
 - fixed out of bounds exception when opening settings window
 
 ### Internal
-
 - added automatic build versions
 - added StyleCop.Analyzer width customized settings
 - improved exception handling;
