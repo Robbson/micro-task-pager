@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Windows.Forms;
 using MicroTaskPager.Config;
 
@@ -355,6 +357,19 @@ namespace MicroTaskPager.GUI
 
             AddSpanningControl(pinningGroup.Table, noteBox);
 
+            Render(
+                BeginGroup(miscPage, "Debugging / Testing"),
+                CheckBoxRow(
+                    "Disable Always On Top",
+                    s => s.DisableAlwaysOnTop,
+                    (s, v) => s.DisableAlwaysOnTop = v,
+                    toolTip: "Temporarily disables the pager's topmost behavior. This lets screen capture tools like ShareX list and capture the pager window, and avoids region selection problems caused by the pager staying above other windows.\n\nWhile enabled, the pager is no longer kept above other windows and is not brought back when it gets covered. Meant for debugging and testing."),
+                ButtonRow(
+                    "Application Logs",
+                    "Open Log Folder",
+                    OpenLogFolder,
+                    toolTip: "Opens the folder that contains the application log files in Windows Explorer."));
+
             return miscPage;
         }
 
@@ -394,6 +409,29 @@ namespace MicroTaskPager.GUI
 
             RefreshRevertButtons();
             RequestPreview();
+        }
+
+        private void OpenLogFolder()
+        {
+            try
+            {
+                // Create it first so the button also works before the first log file was written.
+                Directory.CreateDirectory(Program.LogFolder);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = Program.LogFolder,
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    this,
+                    "Could not open the log folder:" + Environment.NewLine + ex.Message,
+                    "Log Folder",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
 
         // ------------------------------------------------------------------------------------

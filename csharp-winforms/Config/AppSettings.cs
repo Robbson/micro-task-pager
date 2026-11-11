@@ -53,6 +53,7 @@ namespace MicroTaskPager.Config
         public int PrimaryUpdateDelay { get; set; } = 200;
         public int SecondaryUpdateDelay { get; set; } = 500;
         public bool ShowAppInTaskbar { get; set; } = true;
+        public bool DisableAlwaysOnTop { get; set; } = false;
 
         public static AppSettings Clone(AppSettings source)
         {
@@ -80,6 +81,7 @@ namespace MicroTaskPager.Config
                 PrimaryUpdateDelay = source.PrimaryUpdateDelay,
                 SecondaryUpdateDelay = source.SecondaryUpdateDelay,
                 ShowAppInTaskbar = source.ShowAppInTaskbar,
+                DisableAlwaysOnTop = source.DisableAlwaysOnTop,
             };
         }
     }

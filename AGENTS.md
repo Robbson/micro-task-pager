@@ -253,7 +253,7 @@ dotnet build csharp-winforms/MicroTaskPager.csproj -c Debug
 The following files are generated automatically by the build:
 
 - `csharp-winforms/version.txt`
-- `csharp-winforms/src/GeneratedVersion.cs`
+- `csharp-winforms/GeneratedVersion.cs`
 
 `csharp-winforms/MicroTaskPager.csproj` runs `csharp-winforms/IncrementVersion.ps1` before every build. The script increments
 the fourth version component (`Major.Minor.Patch.Build`) and rewrites both files.
@@ -269,15 +269,15 @@ Guidance:
 
 ## Repository layout
 
-- `csharp-winforms/src/` - C# source root (`Program.cs`, `Config`, `Core`, `GUI`).
-- `csharp-winforms/src/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
+- `csharp-winforms/` - C# source root (`Program.cs`, `Config`, `Core`, `GUI`).
+- `csharp-winforms/Core/API/` - virtual-desktop COM interop. There are four platform-specific variants:
   `Win10`, `Win10LTSC`, `Win11`, and `Win11_`. The current selector uses `Win11_` for build 22621 and
   later; `crates/micro-task-pager-core/ARCHITECTURE.md` §4.2 flags that the real boundary still
   needs verification.
   Keep shared changes in sync across all four files.
-- `csharp-winforms/src/Core/` - window enumeration, types, DPI helpers.
-- `csharp-winforms/src/GUI/` - pager, desktops, settings dialog, about dialog.
-- `csharp-winforms/src/Config/` - settings model, registry storage, saved pager position.
+- `csharp-winforms/Core/` - window enumeration, types, DPI helpers.
+- `csharp-winforms/GUI/` - pager, desktops, settings dialog, about dialog.
+- `csharp-winforms/Config/` - settings model, registry storage, saved pager position.
 - `csharp-winforms/Resources/` - icon and logo assets shared with the Rust resource files.
 - `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` - workspace membership, static-runtime
   flags, and the toolchain.

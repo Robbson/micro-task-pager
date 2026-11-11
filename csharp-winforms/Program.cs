@@ -19,6 +19,12 @@ namespace MicroTaskPager
 
         private static Mutex mutex = null;
 
+        // Shared so the Settings dialog can open the same folder that Serilog writes to.
+        public static string LogFolder => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MicroTaskPager",
+            "logs");
+
         [STAThread]
         private static void Main()
         {
@@ -61,9 +67,7 @@ namespace MicroTaskPager
 
         private static void SetupLogging()
         {
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string logFolder = Path.Combine(appDataPath, "MicroTaskPager", "logs");
-            string logFile = Path.Combine(logFolder, "log-.txt"); // "-" for date rolling
+            string logFile = Path.Combine(LogFolder, "log-.txt"); // "-" for date rolling
 
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Information()

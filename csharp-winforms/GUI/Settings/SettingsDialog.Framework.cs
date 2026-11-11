@@ -444,6 +444,29 @@ namespace MicroTaskPager.GUI
         }
 
         /// <summary>
+        /// Creates a row whose editor is a button that runs the given action. The row never counts
+        /// as modified, so it has no revert behavior.
+        /// </summary>
+        /// <returns>The row spec for the button.</returns>
+        private RowSpec ButtonRow(
+            string label,
+            string text,
+            Action onClick,
+            string toolTip = null)
+        {
+            var editor = new Button
+            {
+                Text = text,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(8, 2, 8, 2),
+            };
+            editor.Click += (s, e) => onClick();
+
+            return new RowSpec(editor, label, toolTip, s => { }, () => false);
+        }
+
+        /// <summary>
         /// Creates a color row with a swatch and a picker button. Get and set read and write the
         /// color in the settings, and the optional toolTip adds hover text to the label.
         /// </summary>

@@ -66,6 +66,11 @@ namespace MicroTaskPager.GUI
 
             // Form properties set to defaults
             Name = "frmMain";
+
+            // The window is borderless, so the title is not visible. Capture tools like ShareX
+            // only list visible windows with a non-empty title, so this is required to make the
+            // pager selectable there (and it also fixes Process.MainWindowHandle being zero).
+            Text = "Micro Task Pager";
             DoubleBuffered = true;
 
             // The pager is laid out in physical pixels and handles its own DPI scaling (see Dpi class),
@@ -678,8 +683,10 @@ namespace MicroTaskPager.GUI
                         // Reassert topmost on every tick, like the Rust implementations. This also
                         // recovers partial overlaps that do not cover the center of the pager.
                         // Skip while one of our own dialogs, the context menu, or a hint is open
-                        // so the pager cannot cover them.
-                        if (!_isDialogOpen
+                        // so the pager cannot cover them. The debug option turns the whole
+                        // topmost behavior off so screen capture tools can handle the window.
+                        if (!Options.DisableAlwaysOnTop
+                            && !_isDialogOpen
                             && !_isContextMenuOpen
                             && !_viewModeHint.Visible
                             && !_windowTitleHint.Visible)
@@ -898,6 +905,7 @@ namespace MicroTaskPager.GUI
 
             // Apply MainForm propertes
             ShowInTaskbar = Options.ShowAppInTaskbar;
+            TopMost = !Options.DisableAlwaysOnTop;
             BackColor = Options.DesktopBackgroundColor;
             Opacity = Math.Max(0.25, Math.Min(1.0, Options.BackgroundOpacity));
 

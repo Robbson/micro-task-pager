@@ -1,5 +1,14 @@
 # Changelog
 
+## unreleased
+
+### Pager
+- added a window title so screen capture tools which skip untitled windows (e.g. ShareX) can list and capture the pager window
+
+### Settings
+- added new "Debugging / Testing" group on the Misc tab with an option to temporarily disable the pager's always-on-top behavior (for screen capture tools like ShareX)
+- added a button to open the application log folder in Windows Explorer
+
 ## v1.6.0
 
 ### Pager
