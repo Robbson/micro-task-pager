@@ -69,7 +69,7 @@ Three implementations are available from the same repository, with different mat
 
 - **C# WinForms** has the latest features. It is less tested in production than the stable build,
   and some features may be experimental and change or disappear.
-- **Rust winsafe** is the stable build. It has fewer features than the C# build, and new features
+- **Rust Winsafe** is the stable build. It has fewer features than the C# build, and new features
   reach it only after a delay.
 - **Rust WinUI 3** is experimental. It currently matches the winsafe feature set, but it is not
   planned to receive updates in the near future because its `windows-reactor` foundation is not
@@ -77,15 +77,16 @@ Three implementations are available from the same repository, with different mat
 
 The table compares them by requirements, app footprint, performance, runtime memory, and look.
 
-| Aspect                         | C# WinForms                                        | Rust WinUI 3                                                       | Rust winsafe                                |
-| ------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------- |
-| Status                         | Latest features; lightly tested, some experimental | Experimental; frozen feature set, not actively updated             | Stable; fewer features, updates arrive later |
-| Runtime requirement            | Windows 10/11 x64; .NET Framework 4.8 (inbox 1903+) | Windows 10 1809+ x64; Windows App Runtime 2.4+ (~111-119 MiB, install) | Windows 10/11 x64; no extra runtime         |
-| App footprint                  | 1.49 MiB in 13 files                               | 3.37 MiB in 1 file                                                 | 1.06 MiB in 1 file                          |
-| Idle CPU                       | 7.2% of one core / 0.30% total                     | 5.9% of one core / 0.25% total                                     | 3.7-4.1% of one core / 0.155-0.170% total   |
-| Warm startup                   | 220 ms                                             | 236 ms                                                             | 144 ms                                      |
-| Runtime memory                 | 59-62 MiB working set, 33-37 MiB private            | 99 MiB working set, 63-64 MiB private                              | 23.1 MiB working set, 3.1 MiB private       |
-| Look                           | Native WinForms; functional                        | Modern Fluent/WinUI 3; the only genuinely polished one             | Native Win32 controls; functional, plain    |
+
+| Aspect               | C# WinForms                                          | Rust Winsafe                                  | Rust WinUI 3                                                            |
+| -------------------- | ---------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------- |
+| Status               | Latest features; lightly tested, some experimental   | Stable; fewer features, updates arrive later  | Experimental; frozen feature set, not actively updated                  |
+| Runtime requirement  | Windows 10/11 x64; .NET Framework 4.8 (inbox 1903+)  | Windows 10/11 x64; no extra runtime           | Windows 10 1809+ x64; Windows App Runtime 2.4+ (~111-119 MiB, install)  |
+| App footprint        | 1.49 MiB in 13 files                                 | 1.06 MiB in 1 file                            | 3.37 MiB in 1 file                                                      |
+| Idle CPU             | 7.2% of one core / 0.30% total                       | 3.7-4.1% of one core / 0.155-0.170% total     | 5.9% of one core / 0.25% total                                          |
+| Warm startup         | 220 ms                                               | 144 ms                                        | 236 ms                                                                  |
+| Runtime memory       | 59-62 MiB working set, 33-37 MiB private             | 23.1 MiB working set, 3.1 MiB private         | 99 MiB working set, 63-64 MiB private                                   |
+| Look                 | Native WinForms; functional                          | Native Win32 controls; functional, plain      | Modern Fluent/WinUI 3; the only genuinely polished one                  |
 
 Details: [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
 [`rust-winui/MIGRATION.md`](rust-winui/MIGRATION.md),
@@ -122,17 +123,17 @@ On first launch, the pager appears at the bottom center of the primary screen's 
 
 ## Using the pager
 
-| Action                             | How                                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| Switch to a desktop                | Left-click anywhere on that desktop's area.                                                |
-| Bring a window to the front        | Left-click its miniature or icon while its desktop is active.                              |
-| Move a window to another desktop   | Drag its miniature or icon onto the target desktop.                                        |
-| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**. Alternatively hold `Shift` and use the mosue wheel           |
-| Move the pager                     | Drag it with the middle mouse button, or hold `Ctrl` and drag with the left mouse button. |
-| Open the menu                      | Right-click the pager.                                                                     |
-| Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**.         |
-| Open settings                      | Right-click the pager and choose **Settings**.                                             |
-| Exit                               | Right-click the pager and choose **Exit**.                                                 |
+| Action                             | How                                                                                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Switch to a desktop                | Left-click anywhere on that desktop's area.                                                                                        |
+| Bring a window to the front        | Left-click its miniature or icon while its desktop is active.                                                                      |
+| Move a window to another desktop   | Drag its miniature or icon onto the target desktop.                                                                                |
+| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**. Alternatively hold `Shift` and use the mosue wheel |
+| Move the pager                     | Drag it with the middle mouse button, or hold `Ctrl` and drag with the left mouse button.                                          |
+| Open the menu                      | Right-click the pager.                                                                                                             |
+| Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**.                                                 |
+| Open settings                      | Right-click the pager and choose **Settings**.                                                                                     |
+| Exit                               | Right-click the pager and choose **Exit**.                                                                                         |
 
 ### Preview view
 
