@@ -26,14 +26,6 @@ namespace MicroTaskPager.Config
         None,
     }
 
-    // Defines whether minimized windows are shown in the Micro Taskbar view mode
-    public enum MinimizedWindowVisibility
-    {
-        No = 0,
-        Yes = 1,
-        AfterOthers = 2,
-    }
-
     public class AppSettings
     {
         // ViewModeDefault: Only changeable in the settings window, defines the default for newly created desktop's screens
@@ -44,7 +36,7 @@ namespace MicroTaskPager.Config
         public int IconSize { get; set; } = 16;
         public int IconPaddingX { get; set; } = 0;
         public int IconPaddingY { get; set; } = 0;
-        public MinimizedWindowVisibility ShowWhenMinimized { get; set; } = MinimizedWindowVisibility.No;
+        public bool ShowMinimizedWindowsLast { get; set; } = false;
 
         public double BackgroundOpacity { get; set; } = 1.0;
 
@@ -72,7 +64,7 @@ namespace MicroTaskPager.Config
                 IconSize = source.IconSize,
                 IconPaddingX = source.IconPaddingX,
                 IconPaddingY = source.IconPaddingY,
-                ShowWhenMinimized = source.ShowWhenMinimized,
+                ShowMinimizedWindowsLast = source.ShowMinimizedWindowsLast,
 
                 BackgroundOpacity = source.BackgroundOpacity,
                 DesktopBorderStyle = source.DesktopBorderStyle,

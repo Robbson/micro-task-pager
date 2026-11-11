@@ -83,12 +83,55 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseDown(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
-            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
+            if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
                 var w = GetWindowUnderCursor(e.Location);
                 if (w != null)
                 {
+                    // Bring a window into front by clicking on its miniature / icon
+                    // -> only when it's already the active desktop, which makes desktop switches smoother
+                    //    without touching the last window z-order
+                    // -> Now this is done in MouseDown again so the app seems more responsive and more importantly,
+                    //    the Pager window doesn't get activated too long (leads to nervousness in the Taskbar)
+                    if (IsCurrentActiveDesktop)
+                    {
+                        // A second click on the already selected window minimizes it. The first
+                        // click still only selects a window, so selecting never minimizes by accident.
+                        // -> This hase to be done in Mouse-Up, otherwise we would minimize windows during a drag & drop operation
+
+                        // Also doesn't work with modifier key not as expected
+                        /*if ((Control.ModifierKeys & Keys.Shift) != Keys.None)
+                        {
+                            //IntPtr selectedWindow = Form.GetLastActiveWindow(VirtualDesktopIndex);
+                            if (!w.IsMinimized)
+                                //&& (w.Handle == selectedWindow || WinAPI.GetForegroundWindow() == w.Handle))
+                            {
+                                Debug.WriteLine("Clicked!");
+                                // But we allow this only for the MicroTaskbar, not its light version
+                                var screenIndex = _screenRenderers.FindIndex(s => e.X >= s.Location.X && e.X <= (s.Location.X + s.Size.Width));
+                                int mode = (int)_screenRenderers[screenIndex].Mode;
+                                if (mode == (int)ViewMode.MicroTaskbar)
+                                {
+                                    WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
+                                }
+                            }
+
+                        }*/
+
+                        if (WinAPI.IsIconic(w.Handle))
+                        {
+                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_RESTORE);
+                        }
+
+                        if (WinAPI.SetForegroundWindow(w.Handle))
+                        {
+                            // Update the selection immediately instead of waiting for the
+                            // foreground WinEvent, so a fast second click still minimizes.
+                            Form.RememberActiveWindow(w.Handle);
+                        }
+                    }
+
                     // Prepare drag & drop for the selected window (even if it's not in the users mind)
                     _dragDropData = new DragDropData()
                     {
@@ -109,40 +152,33 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseUp(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
-            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
+
+            // TODO: This line only prevents desktop selection when mouse key is released before the Control-Key is released
+            if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
+
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
-                // Bring a window into front by clicking on its miniature / icon
-                // -> only when it's already the active desktop, which makes desktop switches smoother
-                //    without touching the last window z-order
                 if (IsCurrentActiveDesktop)
                 {
-                    var w = GetWindowUnderCursor(e.Location);
+                    /*var w = GetWindowUnderCursor(e.Location);
                     if (w != null)
                     {
                         // A second click on the already selected window minimizes it. The first
                         // click still only selects a window, so selecting never minimizes by accident.
+                        // -> This hase to be done in Mouse-Up, otherwise we would minimize windows during a drag & drop operation
                         IntPtr selectedWindow = Form.GetLastActiveWindow(VirtualDesktopIndex);
                         if (!w.IsMinimized
                             && (w.Handle == selectedWindow || WinAPI.GetForegroundWindow() == w.Handle))
                         {
-                            WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
-                        }
-                        else
-                        {
-                            if (WinAPI.IsIconic(w.Handle))
+                            // But we allow this only for the MicroTaskbar, not its light version
+                            var screenIndex = _screenRenderers.FindIndex(s => e.X >= s.Location.X && e.X <= (s.Location.X + s.Size.Width));
+                            int mode = (int)_screenRenderers[screenIndex].Mode;
+                            if (mode == (int)ViewMode.MicroTaskbar)
                             {
-                                WinAPI.ShowWindow(w.Handle, WinAPI.SW_RESTORE);
-                            }
-
-                            if (WinAPI.SetForegroundWindow(w.Handle))
-                            {
-                                // Update the selection immediately instead of waiting for the
-                                // foreground WinEvent, so a fast second click still minimizes.
-                                Form.RememberActiveWindow(w.Handle);
+                                WinAPI.ShowWindow(w.Handle, WinAPI.SW_MINIMIZE);
                             }
                         }
-                    }
+                    }*/
                 }
                 else
                 {
@@ -188,9 +224,11 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 int mode = (int)Form.Options.RendererViewModes[VirtualDesktopIndex + screenIndex];
 
                 // Change value according wheel direction and trim it to bounds
-                mode = e.Delta > 0 ? mode + 1 : mode - 1;
+                mode = e.Delta <= 0 ? mode + 1 : mode - 1;
                 int maxValue = Enum.GetValues(typeof(ViewMode)).Length - 1;
                 if (mode < 0) mode = maxValue; else if (mode > maxValue) mode = 0;
+
+                //Debug.WriteLine("Changed Mode to: " + mode + " " + (ViewMode)mode);
 
                 // Store the result in the array as well as in the renderer directly
                 Form.Options.RendererViewModes[VirtualDesktopIndex + screenIndex] = (ViewMode)mode;
@@ -207,7 +245,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void OnMouseMove(object sender, MouseEventArgs e)
         {
             if (!IsInsideBounds(e.X, e.Y)) return;
-            if ((Control.ModifierKeys & Keys.Shift) != Keys.None) return;
+            if ((Control.ModifierKeys & Keys.Control) != Keys.None) return;
 
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
@@ -248,7 +286,27 @@ namespace MicroTaskPager.GUI.VirtualDesktop
         public void Render(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
-            var separaterColor = Color.FromArgb(64, Color.LightBlue); // TODO: Make color and maybe alpha value a settings parameter
+
+            // N:The Background Color is rendered in the MainForm, so this should be by default darker
+            // while the desktop gets another background here
+            Color desktopBorderColor = Form.Options.DesktopBorderColor;
+            if (IsCurrentActiveDesktop)
+            {
+                // TODO: Make color and alpha value a settings parameter
+                desktopBorderColor = Form.Options.ActiveDesktopBorderColor;
+
+                var background = Color.FromArgb(16, Color.LightBlue);
+                using (var selectedDesktopBackgroundColor = new SolidBrush(background))
+                {
+                    g.FillRectangle(
+                        selectedDesktopBackgroundColor,
+                        new Rectangle(Location.X, Location.Y, Size.Width, Size.Height));
+                }
+
+            }
+
+            // TODO: Make color and maybe alpha value a settings parameter
+            var separaterColor = Color.FromArgb(64, Color.LightBlue);
 
             using (var separatorBrush = new SolidBrush(separaterColor))
             {
@@ -268,8 +326,6 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                     }
                 });
             }
-
-            Color desktopBorderColor = IsCurrentActiveDesktop ? Form.Options.ActiveDesktopBorderColor : Form.Options.DesktopBorderColor;
 
             using (var desktopBorderBrush = new SolidBrush(desktopBorderColor))
             {

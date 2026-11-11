@@ -51,7 +51,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             var candidateWindows = Form.Windows.Where(x =>
                 x.VirtualDesktopIndex == VirtualDesktop.VirtualDesktopIndex
                 && (
-                    (Mode == ViewMode.MicroTaskbarLight) || !x.IsMinimized)
+                    (Mode == ViewMode.MicroTaskbar) || !x.IsMinimized)
                 && Screen.FromHandle(x.Handle).DeviceName == AttachedScreen.DeviceName);
 
             Window[] windows;
@@ -60,7 +60,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 // For preview view mode, all windows have to be sorted in z-order to draw from back to front
                 windows = candidateWindows.OrderBy(x => x.ZOrder).ToArray();
             }
-            else if (Form.Options.ShowWhenMinimized == MinimizedWindowVisibility.AfterOthers)
+            else if (Form.Options.ShowMinimizedWindowsLast)
             {
                 // Keep the normal order but append minimized windows after all others.
                 windows = candidateWindows
@@ -84,6 +84,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             switch (Mode)
             {
                 case ViewMode.MicroTaskbar:
+                case ViewMode.MicroTaskbarLight:
                     RenderMicroTaskbar(g, windows);
                     break;
                 default:

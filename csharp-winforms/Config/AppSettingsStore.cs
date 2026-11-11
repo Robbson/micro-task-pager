@@ -27,7 +27,7 @@ namespace MicroTaskPager.Config
                     IconSize = ReadInt(key, "IconSize", defaults.IconSize),
                     IconPaddingX = ReadInt(key, "IconPaddingX", defaults.IconPaddingX),
                     IconPaddingY = ReadInt(key, "IconPaddingY", defaults.IconPaddingY),
-                    ShowWhenMinimized = (MinimizedWindowVisibility)ReadInt(key, "ShowWhenMinimized", (int)defaults.ShowWhenMinimized),
+                    ShowMinimizedWindowsLast = ReadInt(key, "ShowMinimizedWindowsLast", defaults.ShowMinimizedWindowsLast ? 1 : 0) == 1,
 
                     DesktopBackgroundColor = ReadColor(key, "DesktopBackgroundColor", defaults.DesktopBackgroundColor),
 
@@ -69,7 +69,7 @@ namespace MicroTaskPager.Config
                 key.SetValue("IconSize", settings.IconSize, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingX", settings.IconPaddingX, RegistryValueKind.DWord);
                 key.SetValue("IconPaddingY", settings.IconPaddingY, RegistryValueKind.DWord);
-                key.SetValue("ShowWhenMinimized", settings.ShowWhenMinimized, RegistryValueKind.DWord);
+                key.SetValue("ShowMinimizedWindowsLast", settings.ShowMinimizedWindowsLast ? 1 : 0, RegistryValueKind.DWord);
 
                 key.SetValue("DesktopBackgroundColor", settings.DesktopBackgroundColor.ToArgb(), RegistryValueKind.DWord);
 
