@@ -30,6 +30,8 @@ namespace MicroTaskPager.GUI
         // --- Internal Application State ---
         private readonly List<Desktop> _virtualDesktops = new List<Desktop>();
         private readonly ActiveWindowTracker _activeWindowTracker = new ActiveWindowTracker();
+        private readonly HintForm _viewModeHint = new HintForm();
+        private readonly HintForm _windowTitleHint = new HintForm();
         private readonly IntPtr _foregroundWindowAtStartup;
         private bool _isAppPinned = false;
         private int _activeDesktopIndex = 0;
@@ -39,6 +41,7 @@ namespace MicroTaskPager.GUI
         private string _windowsHash = string.Empty;
         private bool _isDialogOpen = false;
         private bool _isContextMenuOpen = false;
+        private IntPtr _toolTipWindow = IntPtr.Zero;
 
         private Point dragOffset;
 
@@ -176,6 +179,7 @@ namespace MicroTaskPager.GUI
         public void StartWindowDrag(Window window, int originDesktopIndex, Point start)
         {
             CancelWindowDrag();
+            HideWindowToolTip();
             if (window == null)
             {
                 return;
@@ -191,6 +195,27 @@ namespace MicroTaskPager.GUI
 
             // Keep receiving mouse moves and the release if the cursor leaves the pager.
             Capture = true;
+        }
+
+        // Shows the current view mode briefly above (or below) the affected pager screen.
+        public void ShowViewModeHint(ScreenRenderer renderer, ViewMode mode)
+        {
+            string modeName;
+            switch (mode)
+            {
+                case ViewMode.Preview:
+                    modeName = "Preview";
+                    break;
+                case ViewMode.MicroTaskbar:
+                    modeName = "MicroTaskbar";
+                    break;
+                default:
+                    modeName = "MicroTaskbar Light";
+                    break;
+            }
+
+            Rectangle anchor = RectangleToScreen(new Rectangle(renderer.Location, renderer.Size));
+            _viewModeHint.ShowAbove(modeName, anchor);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -217,6 +242,11 @@ namespace MicroTaskPager.GUI
         {
             // Stop the background polling loops before the window handle gets destroyed
             CancelWindowDrag();
+            // Only hide the hint windows here. Disposing a shown form removes it from
+            // Application.OpenForms while Application.Exit is enumerating that collection,
+            // which throws "Collection was modified". The hints are closed with the other forms.
+            _viewModeHint.HideHint();
+            _windowTitleHint.HideHint();
             _activeWindowTracker.Dispose();
             Program.ApplicationClosing.Cancel();
             base.OnFormClosing(e);
@@ -291,6 +321,53 @@ namespace MicroTaskPager.GUI
             }
 
             return result;
+        }
+
+        // Shows the window title next to the cursor while Ctrl is held over a pager tile.
+        private void RefreshWindowToolTip()
+        {
+            if (IsDraggingWindow
+                || _windowDragActive
+                || _dragCandidate != null
+                || _isDialogOpen
+                || _isContextMenuOpen
+                || (Control.ModifierKeys & Keys.Control) == Keys.None)
+            {
+                HideWindowToolTip();
+                return;
+            }
+
+            Point clientPoint = PointToClient(Cursor.Position);
+            Desktop desktop = _virtualDesktops.FirstOrDefault(d =>
+                clientPoint.X >= d.Location.X && clientPoint.X < d.Location.X + d.Size.Width
+                && clientPoint.Y >= d.Location.Y && clientPoint.Y < d.Location.Y + d.Size.Height);
+            Window window = desktop?.GetWindowAt(clientPoint);
+            if (window == null || string.IsNullOrEmpty(window.Title))
+            {
+                HideWindowToolTip();
+                return;
+            }
+
+            if (window.Handle == _toolTipWindow)
+            {
+                return;
+            }
+
+            HideWindowToolTip();
+            _toolTipWindow = window.Handle;
+
+            _windowTitleHint.ShowNearCursor(window.Title, Cursor.Position);
+        }
+
+        private void HideWindowToolTip()
+        {
+            if (_toolTipWindow == IntPtr.Zero)
+            {
+                return;
+            }
+
+            _toolTipWindow = IntPtr.Zero;
+            _windowTitleHint.HideHint();
         }
 
         private void UpdateWindowDrag(Point point, bool leftDown)
@@ -576,6 +653,9 @@ namespace MicroTaskPager.GUI
                         {
                             _logger.Error(ex, "Error while building change detection hash");
                         }
+
+                        // Polling also catches Shift being pressed or released without mouse movement.
+                        RefreshWindowToolTip();
                     }))
                     {
                         break;
@@ -597,9 +677,12 @@ namespace MicroTaskPager.GUI
                     {
                         // Reassert topmost on every tick, like the Rust implementations. This also
                         // recovers partial overlaps that do not cover the center of the pager.
-                        // Skip while one of our own dialogs or the context menu is open so the
-                        // pager cannot cover them.
-                        if (!_isDialogOpen && !_isContextMenuOpen)
+                        // Skip while one of our own dialogs, the context menu, or a hint is open
+                        // so the pager cannot cover them.
+                        if (!_isDialogOpen
+                            && !_isContextMenuOpen
+                            && !_viewModeHint.Visible
+                            && !_windowTitleHint.Visible)
                         {
                             // Check if window is covered should be fine with every 500ms
                             if (IsCovered())
@@ -687,11 +770,14 @@ namespace MicroTaskPager.GUI
                 IsDraggingWindow = true;
                 dragOffset = e.Location;
                 Cursor = Cursors.SizeAll;
+                HideWindowToolTip();
             }
         }
 
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
+            RefreshWindowToolTip();
+
             if (IsDraggingWindow)
             {
                 Location = new Point(e.X + Location.X - dragOffset.X, e.Y + Location.Y - dragOffset.Y);

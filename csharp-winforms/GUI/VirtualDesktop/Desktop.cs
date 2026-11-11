@@ -93,7 +93,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             if (!IsInsideBounds(e.X, e.Y)) return;
             if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
             {
-                var w = GetWindowUnderCursor(e.Location);
+                var w = GetWindowAt(e.Location);
                 if (w != null)
                 {
                     // Bring a window into front by clicking on its miniature / icon
@@ -160,7 +160,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 {
                     // Resolve the window under the cursor before switching, the preview data may change afterwards
                     Window windowUnderCursor = Form.Options.DesktopChangeActivation == DesktopChangeActivationMode.WindowUnderCursor
-                        ? GetWindowUnderCursor(e.Location)
+                        ? GetWindowAt(e.Location)
                         : null;
 
                     // Changing Desktop has to be done when mouse gets up, otherwise we instantly select and focus an
@@ -209,6 +209,9 @@ namespace MicroTaskPager.GUI.VirtualDesktop
                 // Store the result in the array as well as in the renderer directly
                 Form.Options.RendererViewModes[VirtualDesktopIndex + screenIndex] = (ViewMode)mode;
                 _screenRenderers[screenIndex].Mode = (ViewMode)mode;
+
+                // Briefly show the new mode above (or below) the affected pager screen
+                Form.ShowViewModeHint(_screenRenderers[screenIndex], (ViewMode)mode);
 
                 // Store to registry
                 AppSettingsStore.Save(Form.Options);
@@ -293,20 +296,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             }
         }
 
-        private bool IsInsideBounds(Point p) => IsInsideBounds(p.X, p.Y);
-
-        private bool IsInsideBounds(int x, int y)
-            => x >= Location.X && x < (Location.X + Size.Width) && y >= Location.Y && y < (Location.Y + Size.Height);
-
-        // Resolves which view mode the screen at the given x coordinate currently shows
-        private bool IsMicroTaskbarAt(int x)
-        {
-            int screenIndex = _screenRenderers.FindIndex(
-                s => x >= s.Location.X && x < (s.Location.X + s.Size.Width));
-            return screenIndex >= 0 && _screenRenderers[screenIndex].Mode == ViewMode.MicroTaskbar;
-        }
-
-        private Window GetWindowUnderCursor(Point mousePosition)
+        public Window GetWindowAt(Point clientPoint)
         {
             // Each screen renderer can show a different view mode. The hit test must use the
             // renderer's actual mode: Preview stacks windows, so only there the z-order decides
@@ -323,7 +313,7 @@ namespace MicroTaskPager.GUI.VirtualDesktop
 
                 foreach (var w in orderedWindows)
                 {
-                    if (renderer.WindowAreas[w.Handle].Contains(mousePosition))
+                    if (renderer.WindowAreas[w.Handle].Contains(clientPoint))
                     {
                         return w;
                     }
@@ -331,6 +321,19 @@ namespace MicroTaskPager.GUI.VirtualDesktop
             }
 
             return null;
+        }
+
+        private bool IsInsideBounds(Point p) => IsInsideBounds(p.X, p.Y);
+
+        private bool IsInsideBounds(int x, int y)
+            => x >= Location.X && x < (Location.X + Size.Width) && y >= Location.Y && y < (Location.Y + Size.Height);
+
+        // Resolves which view mode the screen at the given x coordinate currently shows
+        private bool IsMicroTaskbarAt(int x)
+        {
+            int screenIndex = _screenRenderers.FindIndex(
+                s => x >= s.Location.X && x < (s.Location.X + s.Size.Width));
+            return screenIndex >= 0 && _screenRenderers[screenIndex].Mode == ViewMode.MicroTaskbar;
         }
     }
 }
