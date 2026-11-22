@@ -17,19 +17,19 @@
 
 ## Preview view
 
-![Preview View Mode](/images/mode-preview.png)
+![Preview View Mode](images/mode-preview.png)
 
 The **Preview** view draws a scaled representation of each desktop, including the position, size, and stacking order of its windows. This is the closest equivalent to a traditional Linux-style pager and is useful when you want to understand the layout of a desktop at a glance.
 
 ## Micro Taskbar view
 
-![Micro Taskbar View Mode](/images/mode-micro-taskbar.png)
+![Micro Taskbar View Mode](images/mode-micro-taskbar.png)
 
 The **Micro Taskbar** view replaces the miniature layout with a compact strip of application icons, adding a second row when space is tight. It is especially useful on laptops and small displays where windows are usually maximized and stacked on top of each other. Icons are easier to recognize than overlapping preview rectangles, and the view remains readable even when the pager is only as tall as the Windows taskbar. Use `Shift` + Left-Click to minimize a window. 
 
 ## Micro Taskbar Light view
 
-![Micro Taskbar Light View Mode](/images/mode-micro-taskbar-light.png)
+![Micro Taskbar Light View Mode](images/mode-micro-taskbar-light.png)
 
 Same as **Micro Taskbar** but without minimized windows.
 

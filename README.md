@@ -123,7 +123,7 @@ No installer is required. Keep the extracted files together: the WinForms execut
 
 On first launch, the pager appears at the bottom center of the primary screen's working area, so it does not overlap the taskbar.
 
-> Read more about [how to use the pager](https://robbson.github.io/micro-task-pager/usage).
+> Read more about [how to use the pager](docs/usage.md).
 
 ## Known issues
 
