@@ -1,3 +1,4 @@
+
 # Micro Task Pager
 
 <p align="center">
@@ -17,7 +18,7 @@
   >
 </p>
 
-**Micro Task Pager** gives you a permanent overview of your Windows virtual desktops. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
+**Micro Task Pager** gives you a permanent overview of your virtual desktops in _Windows_. It shows what is open on every desktop, lets you switch with a single click, and lets you move windows between desktops with drag and drop.
 
 Unlike a simple desktop switcher, it can display each desktop in one of three ways:
 
@@ -49,6 +50,7 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 
 - Switch to any virtual desktop with a single mouse click.
 - Move the pager anywhere you want, it always stays in front.
+- Save your favorite pager position.
 - See all desktops at once, with a real-time* view of their windows.
 - Choose a view mode for each desktop independently: **Preview**,  **Micro Taskbar** or **Micro Taskbar Light**.
 - Drag and drop windows between desktops.
@@ -104,7 +106,7 @@ Details: [`rust-winui/ARCHITECTURE.md`](rust-winui/ARCHITECTURE.md),
 The three builds have different runtime prerequisites; the comparison table above lists them. The
 experimental WinUI build is framework-dependent and does not bundle the Windows App Runtime.
 
-### Installation
+### Installation & Start
 
 1. Download the release for the implementation you want: `MicroTaskPager-winforms-v*.zip` (C#),
    `MicroTaskPager-winsafe-v*.zip` (stable native Rust), or `MicroTaskPager-winui-v*.zip`
@@ -121,43 +123,7 @@ No installer is required. Keep the extracted files together: the WinForms execut
 
 On first launch, the pager appears at the bottom center of the primary screen's working area, so it does not overlap the taskbar.
 
-## Using the pager
-
-| Action                             | How                                                                                                                                |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Switch to a desktop                | Left-click anywhere on that desktop's area.                                                                                        |
-| Bring a window to the front        | Left-click its miniature or icon while its desktop is active.                                                                      |
-| Move a window to another desktop   | Drag its miniature or icon onto the target desktop.                                                                                |
-| Change a desktop's view            | Right-click with the pointer over that desktop and choose **Toggle View Mode**. Alternatively hold `Shift` and use the mosue wheel |
-| Move the pager                     | Drag it with the middle mouse button, or hold `Ctrl` and drag with the left mouse button.                                          |
-| Open the menu                      | Right-click the pager.                                                                                                             |
-| Save or restore the pager position | Right-click, open **Position**, then choose **Save**, **Restore**, or **Default**.                                                 |
-| Open settings                      | Right-click the pager and choose **Settings**.                                                                                     |
-| Exit                               | Right-click the pager and choose **Exit**.                                                                                         |
-
-### Preview view
-
-The **Preview** view draws a scaled representation of each desktop, including the position, size, and stacking order of its windows. This is the closest equivalent to a traditional Linux-style pager and is useful when you want to understand the layout of a desktop at a glance.
-
-### Micro Taskbar view
-
-The **Micro Taskbar** view replaces the miniature layout with a compact strip of application icons, adding a second row when space is tight. It is especially useful on laptops and small displays where windows are usually maximized and stacked on top of each other. Icons are easier to recognize than overlapping preview rectangles, and the view remains readable even when the pager is only as tall as the Windows taskbar. Use `Shift` + Left-Click to minimize a window. 
-
-### Micro Taskbar Light view
-Same as **Micro Taskbar** but without minimized windows.
-
-Each desktop's screen remembers its own view mode. Use **Toggle View Mode** on the desktop under the cursor to switch it.
-
-## Configuration
-
-Open **Settings** from the right-click menu. Changes are previewed live where possible and can be reverted per option or reset per tab.
-
-- **Layout** — default view mode for new desktops, pager height, and icon padding.
-- **Theme** — background opacity, desktop border style and colors, preview window colors, and active window highlighting.
-- **Misc** — refresh intervals for window tracking and background tasks, desktop switch behavior (window activation and the optional Windows 11 animation), plus whether the app appears in the Windows taskbar.
-
-Settings and the saved pager position are stored under `HKEY_CURRENT_USER\SOFTWARE\MicroTaskPager`.
-
+> Read more about [how to use the pager](https://robbson.github.io/micro-task-pager/usage).
 
 ## Known issues
 

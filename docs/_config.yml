@@ -1,10 +1,8 @@
 remote_theme: pages-themes/modernist@v0.2.0
 title: Micro-Task-Pager for Windows 10 & 11
-#description: Pager-style desktop switcher with thumbnail windows preview and Micro Taskbars view for Windows
+description: Pager-style desktop switcher with thumbnail windows preview and Micro Taskbars view for Windows
 show_downloads: true
 plugins:
 - jekyll-remote-theme
-
 github:
     zip_url: https://github.com/Robbson/micro-task-pager/releases/download/v1.6.0/MicroTaskPager-winforms-v1.6.0.zip
-    
