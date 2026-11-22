@@ -5,3 +5,6 @@ prod/
 *.csproj.user
 # Shared Cargo workspace output.
 /target/
+/docs/vendor/
+/docs/_site/
+/docs/.jekyll-cache/
