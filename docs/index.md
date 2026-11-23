@@ -56,7 +56,6 @@ Micro Task Pager fills that gap with a small panel that stays out of the way and
 - Customize nearly everything like icon sizes, coloring and application behaviour.
 - Runs without administrator rights and stores its settings per user.
 - Free and open source, with no Windows patches or shell extensions required.
-- Implemented in C#/.NET as well as in Rust: Choose the implementation which fits your needs best.
 
 *_the app intentionally uses a lower update frequency to limit CPU usage but a faster <br>
 or real-time update can be enforced by the user in the settings_ 
